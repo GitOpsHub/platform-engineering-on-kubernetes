@@ -1,0 +1,20 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRepos
+metadata:
+  name: allowed-registries
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces: ["policy-test-gatekeeper"]
+  parameters:
+    # Keep this list identical across Gatekeeper, Kyverno and CEL so the
+    # shared fixtures in ../../tests/fixtures behave the same for every engine.
+    repos:
+      - "registry.k8s.io/"
+      - "ghcr.io/mycompany/"
+      - "ghcr.io/kyverno/"

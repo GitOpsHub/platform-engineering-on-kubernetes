@@ -1,0 +1,8 @@
+# cert-manager: installs CRDs with the chart (crds.enabled replaces the old installCRDs flag).
+crds:
+  enabled: true
+  keep: true
+prometheus:
+  enabled: true
+webhook:
+  timeoutSeconds: 10

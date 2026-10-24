@@ -1,0 +1,33 @@
+# Kyverno CEL-based policy (policies.kyverno.io/v1, Kyverno >= 1.15).
+# This is the successor to kyverno.io/v1 ClusterPolicy validate rules and uses
+# the same shape as a Kubernetes ValidatingAdmissionPolicy, plus Kyverno
+# extras (reports, autogen for Pod controllers, exceptions, CEL libraries).
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: disallow-privileged-containers
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+spec:
+  validationActions: ["Deny"]
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: policy-test-kyverno
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  variables:
+    - name: allContainers
+      expression: >-
+        object.spec.containers +
+        (has(object.spec.initContainers) ? object.spec.initContainers : [])
+  validations:
+    - expression: >-
+        variables.allContainers.all(c,
+          !has(c.securityContext) ||
+          !has(c.securityContext.privileged) ||
+          c.securityContext.privileged == false)
+      message: "[kyverno-cel] privileged containers are not allowed."

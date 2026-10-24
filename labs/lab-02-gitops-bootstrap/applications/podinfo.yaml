@@ -1,0 +1,45 @@
+# Wave 0: a Helm chart from an upstream chart repository, with inline values.
+# UI: http://podinfo.localtest.me:8080
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: podinfo
+  namespace: argocd
+  labels:
+    platform.mycompany.io/managed: "true"
+    platform.mycompany.io/layer: apps
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: apps
+  source:
+    repoURL: https://stefanprodan.github.io/podinfo
+    chart: podinfo
+    targetRevision: 6.15.0
+    helm:
+      releaseName: podinfo
+      valuesObject:
+        replicaCount: 2
+        ui:
+          message: "Deployed by Argo CD from Lab 02"
+          color: "#326ce5"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+        ingress:
+          enabled: true
+          className: traefik
+          hosts:
+            - host: podinfo.localtest.me
+              paths:
+                - path: /
+                  pathType: Prefix
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: podinfo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+  # Namespace "podinfo" is created by team-namespaces (wave -1).

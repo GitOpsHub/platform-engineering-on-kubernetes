@@ -1,0 +1,8 @@
+platform-api is installed.
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "platform-api.fullname" . }} 8080:{{ .Values.service.port }}
+  curl http://localhost:8080/version
+{{- if not .Values.auth.existingSecret }}
+
+WARNING: authentication is DISABLED (auth.existingSecret is empty). Do not expose this service.
+{{- end }}

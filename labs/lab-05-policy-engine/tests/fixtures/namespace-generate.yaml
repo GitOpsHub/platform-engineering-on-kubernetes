@@ -1,0 +1,10 @@
+# Trigger for the Kyverno generate policy (generate-tenant-defaults).
+# Creating this namespace should make Kyverno generate a default-deny
+# NetworkPolicy and a ResourceQuota inside it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: policy-test-generated
+  labels:
+    platform.mycompany.io/policy-lab: generate
+    platform.mycompany.io/team: payments

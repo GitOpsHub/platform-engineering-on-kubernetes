@@ -1,0 +1,42 @@
+# Kyverno VERIFY IMAGES: require a valid Sigstore keyless signature.
+# Kyverno's own release images are signed from GitHub Actions, which makes
+# them a convenient public example. For your own images, set the subject to
+# your CI workflow identity (or use a cosign public key attestor).
+#
+# NOT applied by default: it needs outbound internet access to ghcr.io and the
+# public Sigstore services. Apply it with:  ./setup.sh --with-verify-images
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+  annotations:
+    policies.kyverno.io/title: Verify Image Signatures
+    policies.kyverno.io/category: Supply Chain
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+spec:
+  webhookTimeoutSeconds: 30
+  rules:
+    - name: verify-kyverno-images
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["policy-test-kyverno"]
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/kyverno/*"
+          failureAction: Enforce
+          mutateDigest: true
+          verifyDigest: true
+          required: true
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    issuer: "https://token.actions.githubusercontent.com"
+                    subject: "https://github.com/kyverno/kyverno/.github/workflows/*"
+                    rekor:
+                      url: https://rekor.sigstore.dev

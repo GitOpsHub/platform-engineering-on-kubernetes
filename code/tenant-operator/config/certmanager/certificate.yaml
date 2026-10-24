@@ -1,0 +1,28 @@
+# Self-signed issuer + serving certificate for the webhook server.
+# dnsNames use the final (prefixed) service name and namespace; keep them in
+# sync with config/default/kustomization.yaml.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/name: tenant-operator
+  name: selfsigned-issuer
+  namespace: system
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/name: tenant-operator
+  name: serving-cert
+  namespace: system
+spec:
+  dnsNames:
+  - tenant-operator-webhook-service.tenant-operator-system.svc
+  - tenant-operator-webhook-service.tenant-operator-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: webhook-server-cert

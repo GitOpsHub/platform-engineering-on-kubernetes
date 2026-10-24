@@ -1,0 +1,196 @@
+# platform-components.yaml
+# Cluster-wide platform baseline, applied by setup.sh AFTER the Helm charts
+# (it needs the cert-manager CRDs to exist).
+#
+#   kubectl apply -f platform-components.yaml
+#
+# Contents:
+#   1. Standard platform namespaces (with Pod Security Admission labels)
+#   2. A self-signed root CA and a "platform-ca" ClusterIssuer for internal TLS
+#   3. A smoke-test app (Deployment + Service + Ingress) at http://hello.localtest.me:8080
+#      (*.localtest.me resolves to 127.0.0.1 via public DNS)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-system
+  labels:
+    platform.mycompany.io/managed: "true"
+    platform.mycompany.io/tier: core
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-monitoring
+  labels:
+    platform.mycompany.io/managed: "true"
+    platform.mycompany.io/tier: observability
+    # node-exporter & friends need host access
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-security
+  labels:
+    platform.mycompany.io/managed: "true"
+    platform.mycompany.io/tier: security
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: developer-platform
+  labels:
+    platform.mycompany.io/managed: "true"
+    platform.mycompany.io/tier: portal
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-smoke-test
+  labels:
+    platform.mycompany.io/managed: "true"
+    platform.mycompany.io/tier: test
+    pod-security.kubernetes.io/enforce: restricted
+---
+# --- Internal PKI ----------------------------------------------------------
+# Step 1: a self-signed issuer used only to mint the root CA certificate.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-bootstrap
+  labels:
+    platform.mycompany.io/managed: "true"
+spec:
+  selfSigned: {}
+---
+# Step 2: the root CA (stored as Secret cert-manager/platform-root-ca).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: platform-root-ca
+  namespace: cert-manager
+  labels:
+    platform.mycompany.io/managed: "true"
+spec:
+  isCA: true
+  commonName: platform-root-ca
+  secretName: platform-root-ca
+  duration: 8760h # 1 year
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-bootstrap
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+# Step 3: the issuer workloads actually use.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: platform-ca
+  labels:
+    platform.mycompany.io/managed: "true"
+spec:
+  ca:
+    secretName: platform-root-ca
+---
+# --- Smoke test -------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+  namespace: platform-smoke-test
+  labels:
+    app.kubernetes.io/name: hello
+    platform.mycompany.io/managed: "true"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hello
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hello
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: hello
+          image: registry.k8s.io/e2e-test-images/agnhost:2.66.1
+          args: ["netexec", "--http-port=8080"]
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /hostname
+              port: http
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            runAsUser: 65532
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello
+  namespace: platform-smoke-test
+spec:
+  selector:
+    app.kubernetes.io/name: hello
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hello
+  namespace: platform-smoke-test
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: hello.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hello
+                port:
+                  name: http
+---
+# A TLS certificate issued by the platform CA - proves the PKI chain works.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: hello-tls
+  namespace: platform-smoke-test
+spec:
+  secretName: hello-tls
+  dnsNames:
+    - hello.localtest.me
+  issuerRef:
+    name: platform-ca
+    kind: ClusterIssuer
+    group: cert-manager.io

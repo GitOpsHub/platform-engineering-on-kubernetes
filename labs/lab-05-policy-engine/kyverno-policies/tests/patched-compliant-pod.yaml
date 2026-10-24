@@ -1,0 +1,23 @@
+# Expected result of add-default-labels applied to compliant-pod.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: compliant-pod
+  namespace: policy-test-kyverno
+  labels:
+    app.kubernetes.io/name: demo
+    platform.mycompany.io/team: payments
+    platform.mycompany.io/environment: dev
+    platform.mycompany.io/policy-mutated: "true"
+spec:
+  containers:
+    - name: app
+      image: registry.k8s.io/pause:3.10
+      imagePullPolicy: IfNotPresent
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi

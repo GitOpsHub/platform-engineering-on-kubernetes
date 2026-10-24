@@ -1,0 +1,463 @@
+openapi: 3.0.3
+info:
+  title: Platform API
+  version: v1alpha1
+  description: |
+    REST front door for the Internal Developer Platform. Each resource maps 1:1 onto a
+    `platform.mycompany.io/v1alpha1` custom resource reconciled by the platform operators
+    (tenant-operator, environment-operator, workload-operator).
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+tags:
+  - name: operations
+  - name: tenants
+  - name: environments
+  - name: workloads
+
+paths:
+  /healthz:
+    get:
+      tags: [operations]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200": { description: Alive }
+  /readyz:
+    get:
+      tags: [operations]
+      summary: Readiness probe (checks Kubernetes API connectivity)
+      security: []
+      responses:
+        "200": { description: Ready }
+        "503": { $ref: "#/components/responses/Error" }
+  /version:
+    get:
+      tags: [operations]
+      summary: Build information
+      security: []
+      responses:
+        "200":
+          description: Version info
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VersionInfo" }
+  /api/v1alpha1/platform:
+    get:
+      tags: [operations]
+      summary: Platform metadata and backing cluster version
+      responses:
+        "200":
+          description: Platform info
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformInfo" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /api/v1alpha1/tenants:
+    get:
+      tags: [tenants]
+      summary: List tenants
+      parameters:
+        - $ref: "#/components/parameters/labelSelector"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/continue"
+      responses:
+        "200":
+          description: Tenant list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [tenants]
+      summary: Create a tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Tenant" }
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1alpha1/tenants/{name}:
+    parameters:
+      - $ref: "#/components/parameters/name"
+    get:
+      tags: [tenants]
+      summary: Get a tenant
+      responses:
+        "200":
+          description: Tenant
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [tenants]
+      summary: Delete a tenant (foreground propagation)
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/v1alpha1/environments:
+    get:
+      tags: [environments]
+      summary: List environments across all namespaces
+      parameters:
+        - $ref: "#/components/parameters/labelSelector"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/continue"
+      responses:
+        "200":
+          description: Environment list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnvironmentList" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1alpha1/namespaces/{namespace}/environments:
+    parameters:
+      - $ref: "#/components/parameters/namespace"
+    get:
+      tags: [environments]
+      summary: List environments in a namespace
+      parameters:
+        - $ref: "#/components/parameters/labelSelector"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/continue"
+      responses:
+        "200":
+          description: Environment list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnvironmentList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [environments]
+      summary: Create an environment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Environment" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Environment" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1alpha1/namespaces/{namespace}/environments/{name}:
+    parameters:
+      - $ref: "#/components/parameters/namespace"
+      - $ref: "#/components/parameters/name"
+    get:
+      tags: [environments]
+      summary: Get an environment
+      responses:
+        "200":
+          description: Environment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Environment" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [environments]
+      summary: Delete an environment
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/v1alpha1/workloads:
+    get:
+      tags: [workloads]
+      summary: List workloads across all namespaces
+      parameters:
+        - $ref: "#/components/parameters/labelSelector"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/continue"
+      responses:
+        "200":
+          description: Workload list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkloadList" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1alpha1/namespaces/{namespace}/workloads:
+    parameters:
+      - $ref: "#/components/parameters/namespace"
+    get:
+      tags: [workloads]
+      summary: List workloads in a namespace
+      parameters:
+        - $ref: "#/components/parameters/labelSelector"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/continue"
+      responses:
+        "200":
+          description: Workload list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkloadList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [workloads]
+      summary: Create a workload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Workload" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Workload" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1alpha1/namespaces/{namespace}/workloads/{name}:
+    parameters:
+      - $ref: "#/components/parameters/namespace"
+      - $ref: "#/components/parameters/name"
+    get:
+      tags: [workloads]
+      summary: Get a workload
+      responses:
+        "200":
+          description: Workload
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Workload" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [workloads]
+      summary: Delete a workload
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Static token (labs) or OIDC ID token (production).
+
+  parameters:
+    name:
+      name: name
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/DNSLabel" }
+    namespace:
+      name: namespace
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/DNSLabel" }
+    labelSelector:
+      name: labelSelector
+      in: query
+      schema: { type: string, example: "tier=gold" }
+    limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 500 }
+    continue:
+      name: continue
+      in: query
+      schema: { type: string }
+
+  responses:
+    Error:
+      description: Error envelope
+      headers:
+        X-Request-ID: { schema: { type: string } }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+
+  schemas:
+    DNSLabel:
+      type: string
+      pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      maxLength: 63
+    Quantity:
+      type: string
+      example: 500m
+    ObjectMeta:
+      type: object
+      required: [name]
+      properties:
+        name: { $ref: "#/components/schemas/DNSLabel" }
+        namespace: { type: string, description: "Taken from the URL for namespaced kinds." }
+        labels: { type: object, additionalProperties: { type: string } }
+        annotations: { type: object, additionalProperties: { type: string } }
+        uid: { type: string, readOnly: true }
+        resourceVersion: { type: string, readOnly: true }
+        generation: { type: integer, format: int64, readOnly: true }
+        creationTimestamp: { type: string, format: date-time, readOnly: true }
+    Condition:
+      type: object
+      properties:
+        type: { type: string }
+        status: { type: string, enum: ["True", "False", "Unknown"] }
+        reason: { type: string }
+        message: { type: string }
+        lastTransitionTime: { type: string, format: date-time }
+        observedGeneration: { type: integer, format: int64 }
+
+    Tenant:
+      type: object
+      required: [metadata, spec]
+      properties:
+        apiVersion: { type: string, example: platform.mycompany.io/v1alpha1, readOnly: true }
+        kind: { type: string, example: Tenant, readOnly: true }
+        metadata: { $ref: "#/components/schemas/ObjectMeta" }
+        spec:
+          type: object
+          required: [displayName, owners]
+          properties:
+            displayName: { type: string }
+            owners: { type: array, minItems: 1, items: { type: string } }
+            namespaces: { type: array, items: { $ref: "#/components/schemas/DNSLabel" } }
+            quota:
+              type: object
+              properties:
+                cpu: { $ref: "#/components/schemas/Quantity" }
+                memory: { $ref: "#/components/schemas/Quantity" }
+                storage: { $ref: "#/components/schemas/Quantity" }
+                pods: { type: integer, minimum: 0 }
+            networkIsolation: { type: boolean }
+        status:
+          type: object
+          readOnly: true
+          properties:
+            phase: { type: string }
+            conditions: { type: array, items: { $ref: "#/components/schemas/Condition" } }
+            namespaces: { type: array, items: { type: string } }
+    TenantList:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Tenant" } }
+        continue: { type: string }
+
+    Environment:
+      type: object
+      required: [metadata, spec]
+      properties:
+        apiVersion: { type: string, readOnly: true }
+        kind: { type: string, example: Environment, readOnly: true }
+        metadata: { $ref: "#/components/schemas/ObjectMeta" }
+        spec:
+          type: object
+          required: [tenant, type]
+          properties:
+            tenant: { $ref: "#/components/schemas/DNSLabel" }
+            type: { type: string, enum: [dev, staging, prod, preview] }
+            ttl: { type: string, example: 72h, description: "Go duration; not allowed for prod." }
+            template: { type: string }
+            cluster: { type: string }
+        status:
+          type: object
+          readOnly: true
+          properties:
+            phase: { type: string }
+            namespace: { type: string }
+            url: { type: string }
+            expiresAt: { type: string, format: date-time }
+            conditions: { type: array, items: { $ref: "#/components/schemas/Condition" } }
+    EnvironmentList:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Environment" } }
+        continue: { type: string }
+
+    Workload:
+      type: object
+      required: [metadata, spec]
+      properties:
+        apiVersion: { type: string, readOnly: true }
+        kind: { type: string, example: Workload, readOnly: true }
+        metadata: { $ref: "#/components/schemas/ObjectMeta" }
+        spec:
+          type: object
+          required: [image]
+          properties:
+            image: { type: string, example: ghcr.io/acme/checkout:1.4.2 }
+            replicas: { type: integer, format: int32, minimum: 0 }
+            port: { type: integer, format: int32, minimum: 1, maximum: 65535 }
+            env:
+              type: array
+              items:
+                type: object
+                required: [name]
+                properties:
+                  name: { type: string }
+                  value: { type: string }
+            resources:
+              type: object
+              properties:
+                requests: { type: object, additionalProperties: { $ref: "#/components/schemas/Quantity" } }
+                limits: { type: object, additionalProperties: { $ref: "#/components/schemas/Quantity" } }
+            traits:
+              type: array
+              items:
+                type: object
+                required: [type]
+                properties:
+                  type: { type: string, enum: [ingress, autoscaling, pdb] }
+                  config: { type: object, additionalProperties: true }
+        status:
+          type: object
+          readOnly: true
+          properties:
+            phase: { type: string }
+            availableReplicas: { type: integer, format: int32 }
+            url: { type: string }
+            conditions: { type: array, items: { $ref: "#/components/schemas/Condition" } }
+    WorkloadList:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Workload" } }
+        continue: { type: string }
+
+    VersionInfo:
+      type: object
+      properties:
+        version: { type: string }
+        commit: { type: string }
+        buildTime: { type: string }
+        goVersion: { type: string, description: "runtime.Version() of the running binary" }
+        platform: { type: string, example: linux/amd64 }
+    PlatformInfo:
+      type: object
+      properties:
+        name: { type: string }
+        version: { type: string }
+        description: { type: string }
+        apiVersion: { type: string }
+        kubernetes:
+          type: object
+          properties:
+            version: { type: string }
+            platform: { type: string }
+            error: { type: string, description: "Set when the cluster version is unavailable." }
+        capabilities: { type: array, items: { type: string } }
+    ErrorBody:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: integer }
+            reason: { type: string, example: NotFound }
+            message: { type: string }
+            details: { type: array, items: { type: string } }
+            requestId: { type: string }

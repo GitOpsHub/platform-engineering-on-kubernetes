@@ -1,0 +1,7 @@
+apiVersion: v2
+name: platform-api
+description: REST API for the Internal Developer Platform (Tenants, Environments, Workloads)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.28.0-0"

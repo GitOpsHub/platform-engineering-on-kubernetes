@@ -1,0 +1,40 @@
+# Native Kubernetes CEL admission (admissionregistration.k8s.io/v1, GA in 1.30).
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: lab05-require-team-label
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments"]
+  validations:
+    - expression: >-
+        has(object.metadata.labels) &&
+        'platform.mycompany.io/team' in object.metadata.labels &&
+        object.metadata.labels['platform.mycompany.io/team'].matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
+      message: "[cel] the label 'platform.mycompany.io/team' is required (lowercase DNS label)."
+      reason: Invalid
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: lab05-require-team-label
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+spec:
+  policyName: lab05-require-team-label
+  validationActions: ["Deny"]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: policy-test-cel

@@ -1,0 +1,4 @@
+resources:
+# manifests.yaml is generated from +kubebuilder:webhook markers by `make manifests`.
+- manifests.yaml
+- service.yaml

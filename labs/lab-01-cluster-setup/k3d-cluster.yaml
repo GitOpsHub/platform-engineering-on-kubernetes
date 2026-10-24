@@ -1,0 +1,64 @@
+# k3d-cluster.yaml
+# One server + two agents running k3s in Docker, plus a local image registry.
+#
+# Differences from the kind cluster (on purpose, to keep k3d the "fast" path):
+# - Uses the k3s built-in CNI (flannel) and kube-proxy. k3s also ships an
+#   embedded NetworkPolicy controller, so NetworkPolicies are enforced.
+# - Keeps the k3s built-in local-path StorageClass.
+# - Disables the bundled Traefik, ServiceLB and metrics-server so setup.sh can
+#   install the same versions/config as on kind.
+#
+# Usage: k3d cluster create --config k3d-cluster.yaml
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: platform-engineering
+servers: 1
+agents: 2
+image: rancher/k3s:v1.35.5-k3s1
+kubeAPI:
+  hostIP: "127.0.0.1"
+ports:
+  # The k3d load balancer forwards host 8080/8443 to the Traefik NodePorts on
+  # every node.
+  - port: 127.0.0.1:8080:30080
+    nodeFilters:
+      - loadbalancer
+  - port: 127.0.0.1:8443:30443
+    nodeFilters:
+      - loadbalancer
+registries:
+  # Creates a registry container reachable as localhost:5001 from your laptop
+  # and as platform-registry.localhost:5000 from inside the cluster.
+  create:
+    name: platform-registry.localhost
+    host: "127.0.0.1"
+    hostPort: "5001"
+options:
+  k3d:
+    wait: true
+    timeout: "180s"
+  k3s:
+    extraArgs:
+      - arg: "--disable=traefik,servicelb,metrics-server"
+        nodeFilters:
+          - server:*
+      - arg: "--cluster-cidr=10.244.0.0/16"
+        nodeFilters:
+          - server:*
+      - arg: "--service-cidr=10.96.0.0/16"
+        nodeFilters:
+          - server:*
+    nodeLabels:
+      - label: platform.mycompany.io/role=control-plane
+        nodeFilters:
+          - server:*
+      - label: platform.mycompany.io/role=worker
+        nodeFilters:
+          - agent:*
+      - label: platform.mycompany.io/pool=workload
+        nodeFilters:
+          - agent:*
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: true

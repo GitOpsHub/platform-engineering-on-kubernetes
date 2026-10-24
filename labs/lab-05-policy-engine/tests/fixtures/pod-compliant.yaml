@@ -1,0 +1,19 @@
+# COMPLIANT: has team label, pinned tag, approved registry. Expected: ALLOWED by every engine.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: compliant-pod
+  labels:
+    app.kubernetes.io/name: demo
+    platform.mycompany.io/team: payments
+spec:
+  containers:
+    - name: app
+      image: registry.k8s.io/pause:3.10
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi

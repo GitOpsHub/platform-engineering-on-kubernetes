@@ -1,0 +1,19 @@
+# Argo CD UI at http://argocd.localtest.me:8080 via the Lab 01 Traefik ingress.
+# CLI: argocd login argocd.localtest.me:8080 --plaintext --grpc-web
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: argocd.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  name: http

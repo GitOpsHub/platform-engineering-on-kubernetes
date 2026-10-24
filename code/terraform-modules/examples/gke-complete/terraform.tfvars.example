@@ -1,0 +1,10 @@
+project_id   = "my-platform-project"
+region       = "europe-west1"
+cluster_name = "platform-dev"
+
+master_authorized_networks = [
+  { cidr_block = "203.0.113.0/24", display_name = "office-vpn" },
+]
+
+# Labs only: allow `terraform destroy`.
+deletion_protection = false

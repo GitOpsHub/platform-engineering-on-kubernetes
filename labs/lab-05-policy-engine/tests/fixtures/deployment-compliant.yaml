@@ -1,0 +1,22 @@
+# COMPLIANT (CEL ValidatingAdmissionPolicy): replicas within the limit.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compliant-deployment
+  labels:
+    app.kubernetes.io/name: demo
+    platform.mycompany.io/team: payments
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: demo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: demo
+        platform.mycompany.io/team: payments
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.10

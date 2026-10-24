@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels:
+    platform.mycompany.io/managed: "true"
+    platform.mycompany.io/tier: gitops

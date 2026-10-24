@@ -1,0 +1,22 @@
+# Platform-owned namespaces for application teams. App teams deploy INTO these
+# (project "apps") but cannot change the quota or limits (project blacklist).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: guestbook
+  labels:
+    platform.mycompany.io/managed: "true"
+    platform.mycompany.io/team: team-a
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: podinfo
+  labels:
+    platform.mycompany.io/managed: "true"
+    platform.mycompany.io/team: team-b
+    # The upstream podinfo chart doesn't set a fully "restricted" security
+    # context, so enforce baseline and only warn on restricted violations.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted

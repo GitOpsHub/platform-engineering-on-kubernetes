@@ -1,0 +1,42 @@
+# Cilium values for the kind cluster (kube-proxy replacement mode).
+# setup.sh passes these with: helm upgrade --install cilium cilium/cilium -f values/cilium.yaml
+#
+# kind runs with kubeProxyMode: none, so Cilium must reach the API server
+# directly (not via the kubernetes Service ClusterIP, which nothing would
+# implement yet). Inside the kind Docker network the control-plane container
+# is resolvable by name, which works on Linux and on macOS Docker Desktop.
+kubeProxyReplacement: true
+k8sServiceHost: platform-engineering-control-plane
+k8sServicePort: 6443
+
+# kind assigns PodCIDRs per node; let Cilium use them.
+ipam:
+  mode: kubernetes
+
+# Images are pulled once into the kind nodes; don't re-pull on every restart.
+image:
+  pullPolicy: IfNotPresent
+
+operator:
+  replicas: 1 # one is enough on a laptop
+  prometheus:
+    enabled: true
+
+prometheus:
+  enabled: true
+
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+  metrics:
+    enabled:
+      - dns
+      - drop
+      - tcp
+      - flow
+      - port-distribution
+      - icmp
+      - httpV2

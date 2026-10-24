@@ -1,0 +1,22 @@
+# Kyverno verifyImages: Kyverno's own release images are signed keyless with
+# Sigstore from GitHub Actions. Expected: ALLOWED (signature verified) and the
+# image reference mutated to a digest. Requires internet access to ghcr.io and
+# the public Sigstore infrastructure (Rekor/Fulcio).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: signed-image
+  labels:
+    app.kubernetes.io/name: demo
+    platform.mycompany.io/team: payments
+spec:
+  containers:
+    - name: app
+      image: ghcr.io/kyverno/kyverno:v1.19.2
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi

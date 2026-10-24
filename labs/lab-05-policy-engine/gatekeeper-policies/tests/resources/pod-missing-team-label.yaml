@@ -1,0 +1,19 @@
+# Generated from ../../../tests/fixtures/pod-missing-team-label.yaml with the namespace set (gator needs it to evaluate match.namespaces).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: missing-team-label
+  namespace: policy-test-gatekeeper
+  labels:
+    app.kubernetes.io/name: demo
+spec:
+  containers:
+    - name: app
+      image: registry.k8s.io/pause:3.10
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi

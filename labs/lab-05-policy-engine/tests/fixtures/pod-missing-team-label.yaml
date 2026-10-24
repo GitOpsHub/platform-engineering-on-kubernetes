@@ -1,0 +1,18 @@
+# VIOLATION: missing platform.mycompany.io/team label. Expected: DENIED.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: missing-team-label
+  labels:
+    app.kubernetes.io/name: demo
+spec:
+  containers:
+    - name: app
+      image: registry.k8s.io/pause:3.10
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi

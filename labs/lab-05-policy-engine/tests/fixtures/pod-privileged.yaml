@@ -1,0 +1,21 @@
+# VIOLATION (Kyverno ValidatingPolicy only): privileged container. Expected: DENIED in policy-test-kyverno.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: privileged-pod
+  labels:
+    app.kubernetes.io/name: demo
+    platform.mycompany.io/team: payments
+spec:
+  containers:
+    - name: app
+      image: registry.k8s.io/pause:3.10
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi
+      securityContext:
+        privileged: true

@@ -1,0 +1,100 @@
+# app-of-apps.yaml - the ONLY manifest you apply by hand.
+#
+#   kubectl apply -f app-of-apps.yaml      (bootstrap.sh does this for you)
+#
+# It creates two AppProjects (guard rails) and the root Application, which
+# points at ./applications. Every *.yaml there is itself an Application or
+# ApplicationSet, so from here on Git is the source of truth.
+#
+# Using a fork? bootstrap.sh --repo-url <your-fork> rewrites the repoURL
+# values below (and in applications/*.yaml) - see README "Use your own fork".
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  labels:
+    platform.mycompany.io/managed: "true"
+  # Don't let the project be deleted while Applications still reference it.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Platform-team owned components (cluster-scoped access)
+  sourceRepos:
+    - https://github.com/GitOpsHub/platform-engineering-on-kubernetes
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: apps
+  namespace: argocd
+  labels:
+    platform.mycompany.io/managed: "true"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Application-team workloads (namespaced resources only)
+  sourceRepos:
+    - https://github.com/GitOpsHub/platform-engineering-on-kubernetes
+    - https://stefanprodan.github.io/podinfo
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: guestbook
+    - server: https://kubernetes.default.svc
+      namespace: podinfo
+    - server: https://kubernetes.default.svc
+      namespace: sample-app-*
+  # Only Namespaces may be created cluster-wide (for CreateNamespace=true).
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  # App teams may not create RBAC or quotas - the platform team owns those.
+  namespaceResourceBlacklist:
+    - group: rbac.authorization.k8s.io
+      kind: "*"
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: LimitRange
+  roles:
+    - name: developer
+      description: Read-only access plus sync for application teams
+      policies:
+        - p, proj:apps:developer, applications, get, apps/*, allow
+        - p, proj:apps:developer, applications, sync, apps/*, allow
+      groups:
+        - platform-developers
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-root
+  namespace: argocd
+  labels:
+    platform.mycompany.io/managed: "true"
+  # Deleting the root app cascades to every child Application and its resources.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/GitOpsHub/platform-engineering-on-kubernetes
+    targetRevision: main
+    path: labs/lab-02-gitops-bootstrap/applications
+    directory:
+      recurse: false   # only the Application CRs, not applications/workloads/**
+      include: "*.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

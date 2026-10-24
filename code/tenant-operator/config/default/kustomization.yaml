@@ -1,0 +1,26 @@
+# Adds namespace to all resources.
+namespace: tenant-operator-system
+# Prefixes all resource names, e.g. "controller-manager" -> "tenant-operator-controller-manager".
+namePrefix: tenant-operator-
+
+resources:
+- ../crd
+- ../rbac
+- ../manager
+- metrics_service.yaml
+# Validating webhook + cert-manager issued serving certificate.
+# Requires cert-manager (https://cert-manager.io) to be installed in the cluster.
+- ../webhook
+- ../certmanager
+
+patches:
+# Mount the cert-manager issued certificate into the manager and expose the webhook port.
+- path: manager_webhook_patch.yaml
+  target:
+    kind: Deployment
+    name: controller-manager
+# Ask cert-manager's CA injector to populate caBundle on the webhook configuration.
+- path: webhook_cainjection_patch.yaml
+  target:
+    kind: ValidatingWebhookConfiguration
+

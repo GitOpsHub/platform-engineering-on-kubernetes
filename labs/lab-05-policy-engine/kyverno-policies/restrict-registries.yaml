@@ -1,0 +1,31 @@
+# Kyverno VALIDATE: images must come from approved registries.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-image-registries
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+  annotations:
+    policies.kyverno.io/title: Restrict Image Registries
+    policies.kyverno.io/category: Supply Chain
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+spec:
+  background: true
+  rules:
+    - name: validate-registries
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["policy-test-kyverno"]
+      validate:
+        failureAction: Enforce
+        message: >-
+          [kyverno] images must come from registry.k8s.io/, ghcr.io/mycompany/ or ghcr.io/kyverno/.
+        pattern:
+          spec:
+            containers:
+              - image: "registry.k8s.io/* | ghcr.io/mycompany/* | ghcr.io/kyverno/*"
+            =(initContainers):
+              - image: "registry.k8s.io/* | ghcr.io/mycompany/* | ghcr.io/kyverno/*"

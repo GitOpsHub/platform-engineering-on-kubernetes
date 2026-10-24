@@ -1,0 +1,19 @@
+# VIOLATION: image from a registry that is not on the allow-list. Expected: DENIED.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: untrusted-registry
+  labels:
+    app.kubernetes.io/name: demo
+    platform.mycompany.io/team: payments
+spec:
+  containers:
+    - name: app
+      image: quay.io/untrusted/miner:1.0.0
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi

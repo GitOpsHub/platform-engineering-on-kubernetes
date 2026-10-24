@@ -1,0 +1,3 @@
+## Sample custom resources. Apply with: kubectl apply -k config/samples/
+resources:
+- platform_v1alpha1_tenant.yaml

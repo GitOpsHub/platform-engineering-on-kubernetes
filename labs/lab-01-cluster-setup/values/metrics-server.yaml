@@ -1,0 +1,5 @@
+# metrics-server for kubectl top / HPA. kind and k3d kubelets use self-signed
+# serving certs, so TLS verification against kubelets is skipped (lab only!).
+args:
+  - --kubelet-insecure-tls
+  - --kubelet-preferred-address-types=InternalIP

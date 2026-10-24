@@ -1,0 +1,27 @@
+# Wave 0: a plain-YAML application (directory source).
+# UI: http://guestbook.localtest.me:8080
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: guestbook
+  namespace: argocd
+  labels:
+    platform.mycompany.io/managed: "true"
+    platform.mycompany.io/layer: apps
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: apps
+  source:
+    repoURL: https://github.com/GitOpsHub/platform-engineering-on-kubernetes
+    targetRevision: main
+    path: labs/lab-02-gitops-bootstrap/applications/workloads/guestbook
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: guestbook
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true   # manual drift (kubectl scale/edit) is reverted
+  # No CreateNamespace here: the "guestbook" namespace (with its quota) is
+  # owned by the platform team's team-namespaces Application (wave -1).

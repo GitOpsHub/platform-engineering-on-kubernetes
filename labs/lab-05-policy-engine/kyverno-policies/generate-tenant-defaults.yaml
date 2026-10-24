@@ -1,0 +1,65 @@
+# Kyverno GENERATE: bootstrap guardrails into every namespace that opts in via
+# the label platform.mycompany.io/policy-lab=generate.
+# synchronize: true makes Kyverno re-create/restore the generated resources if
+# someone deletes or edits them, and delete them when the trigger is removed.
+#
+# Kyverno's background controller needs RBAC to create these kinds; see
+# rbac-generate.yaml (applied by setup.sh before this policy).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: generate-tenant-defaults
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+  annotations:
+    policies.kyverno.io/title: Generate Namespace Defaults
+    policies.kyverno.io/category: Multi-Tenancy
+    policies.kyverno.io/subject: Namespace
+spec:
+  rules:
+    - name: default-deny-networkpolicy
+      match:
+        any:
+          - resources:
+              kinds: ["Namespace"]
+              selector:
+                matchLabels:
+                  platform.mycompany.io/policy-lab: generate
+      generate:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: default-deny-all
+        namespace: "{{ request.object.metadata.name }}"
+        synchronize: true
+        data:
+          metadata:
+            labels:
+              platform.mycompany.io/generated-by: kyverno
+          spec:
+            podSelector: {}
+            policyTypes: ["Ingress", "Egress"]
+    - name: default-resourcequota
+      match:
+        any:
+          - resources:
+              kinds: ["Namespace"]
+              selector:
+                matchLabels:
+                  platform.mycompany.io/policy-lab: generate
+      generate:
+        apiVersion: v1
+        kind: ResourceQuota
+        name: default-quota
+        namespace: "{{ request.object.metadata.name }}"
+        synchronize: true
+        data:
+          metadata:
+            labels:
+              platform.mycompany.io/generated-by: kyverno
+          spec:
+            hard:
+              requests.cpu: "2"
+              requests.memory: 4Gi
+              limits.cpu: "4"
+              limits.memory: 8Gi
+              pods: "20"

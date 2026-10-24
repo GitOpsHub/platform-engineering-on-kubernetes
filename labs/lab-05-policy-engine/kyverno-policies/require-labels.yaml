@@ -1,0 +1,34 @@
+# Kyverno VALIDATE: Pods must carry a team label.
+# kyverno.io/v1 ClusterPolicy is still served by Kyverno 1.19 but is deprecated
+# in favour of the CEL-based policies.kyverno.io types; see
+# validatingpolicy-disallow-privileged.yaml for the new style.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-team-label
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+  annotations:
+    policies.kyverno.io/title: Require Team Label
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Every Pod must declare the owning team via the platform.mycompany.io/team
+      label so costs, alerts and incidents can be routed.
+spec:
+  background: true
+  rules:
+    - name: check-team-label
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["policy-test-kyverno"]
+      validate:
+        failureAction: Enforce
+        message: "[kyverno] the label 'platform.mycompany.io/team' is required."
+        pattern:
+          metadata:
+            labels:
+              platform.mycompany.io/team: "?*"

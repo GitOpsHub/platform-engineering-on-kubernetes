@@ -1,0 +1,53 @@
+# ConstraintTemplate: require a set of labels (optionally matching a regex).
+# Adapted from the OPA Gatekeeper library (k8srequiredlabels).
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+  annotations:
+    description: >-
+      Requires resources to carry the specified labels, with values matching
+      an optional regular expression.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            labels:
+              type: array
+              description: Labels that must be present on the object.
+              items:
+                type: object
+                properties:
+                  key:
+                    type: string
+                  allowedRegex:
+                    type: string
+                    description: Optional regex the label value must match.
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_].key}
+          missing := required - provided
+          count(missing) > 0
+          msg := sprintf("[gatekeeper] missing required labels: %v", [missing])
+        }
+
+        violation[{"msg": msg}] {
+          value := input.review.object.metadata.labels[key]
+          expected := input.parameters.labels[_]
+          expected.key == key
+          expected.allowedRegex != ""
+          not regex.match(expected.allowedRegex, value)
+          msg := sprintf("[gatekeeper] label <%v: %v> does not match regex %v", [key, value, expected.allowedRegex])
+        }

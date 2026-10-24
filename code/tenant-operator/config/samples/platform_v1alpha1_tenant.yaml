@@ -1,0 +1,19 @@
+apiVersion: platform.mycompany.io/v1alpha1
+kind: Tenant
+metadata:
+  name: team-payments
+spec:
+  displayName: Payments Team
+  owners:
+  - alice@mycompany.io
+  - group:payments-admins
+  namespaces:
+  - payments-dev
+  - payments-staging
+  - payments-prod
+  quota:
+    cpu: "8"
+    memory: 16Gi
+    storage: 100Gi
+    pods: 50
+  networkIsolation: true

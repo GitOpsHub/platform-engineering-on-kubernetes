@@ -1,0 +1,63 @@
+# Per-namespace guard rails. LimitRange defaults mean pods without explicit
+# resources still satisfy the ResourceQuota.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: team-quota
+  namespace: guestbook
+  labels:
+    platform.mycompany.io/managed: "true"
+spec:
+  hard:
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    limits.memory: 2Gi
+    pods: "20"
+    services: "10"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: guestbook
+  labels:
+    platform.mycompany.io/managed: "true"
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        cpu: 25m
+        memory: 32Mi
+      default:
+        memory: 128Mi
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: team-quota
+  namespace: podinfo
+  labels:
+    platform.mycompany.io/managed: "true"
+spec:
+  hard:
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    limits.memory: 2Gi
+    pods: "20"
+    services: "10"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: podinfo
+  labels:
+    platform.mycompany.io/managed: "true"
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        cpu: 25m
+        memory: 32Mi
+      default:
+        memory: 128Mi

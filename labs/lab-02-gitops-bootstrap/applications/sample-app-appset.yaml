@@ -1,0 +1,49 @@
+# ApplicationSet: one Application per environment overlay.
+#
+# The Git directory generator lists applications/workloads/sample-app/overlays/*
+# and stamps out "sample-app-<dir>" for each. Add a new overlay directory
+# (e.g. overlays/prod), push, and a new Application appears automatically.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: sample-app
+  namespace: argocd
+  labels:
+    platform.mycompany.io/managed: "true"
+    platform.mycompany.io/layer: apps
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/GitOpsHub/platform-engineering-on-kubernetes
+        revision: main
+        directories:
+          - path: labs/lab-02-gitops-bootstrap/applications/workloads/sample-app/overlays/*
+  template:
+    metadata:
+      name: "sample-app-{{ .path.basename }}"
+      labels:
+        platform.mycompany.io/managed: "true"
+        platform.mycompany.io/environment: "{{ .path.basename }}"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: apps
+      source:
+        repoURL: https://github.com/GitOpsHub/platform-engineering-on-kubernetes
+        targetRevision: main
+        path: "{{ .path.path }}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "sample-app-{{ .path.basename }}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+        managedNamespaceMetadata:
+          labels:
+            platform.mycompany.io/managed: "true"
+            platform.mycompany.io/environment: "{{ .path.basename }}"

@@ -1,0 +1,65 @@
+# Offline tests for the Kyverno policies.
+#   kyverno test ./kyverno-policies/tests      (from the lab directory)
+# Docs: https://kyverno.io/docs/kyverno-cli/usage/test/
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: lab-05-kyverno
+policies:
+  - ../require-labels.yaml
+  - ../disallow-latest-tag.yaml
+  - ../restrict-registries.yaml
+  - ../add-default-labels.yaml
+resources:
+  - resources.yaml
+results:
+  # require-team-label
+  - policy: require-team-label
+    rule: check-team-label
+    kind: Pod
+    resources: [compliant-pod, latest-tag, untagged-image, untrusted-registry]
+    result: pass
+  - policy: require-team-label
+    rule: check-team-label
+    kind: Pod
+    resources: [missing-team-label]
+    result: fail
+  # disallow-latest-tag
+  - policy: disallow-latest-tag
+    rule: require-image-tag
+    kind: Pod
+    resources: [compliant-pod, latest-tag, untrusted-registry]
+    result: pass
+  - policy: disallow-latest-tag
+    rule: require-image-tag
+    kind: Pod
+    resources: [untagged-image]
+    result: fail
+  - policy: disallow-latest-tag
+    rule: validate-image-tag
+    kind: Pod
+    resources: [compliant-pod, untagged-image, untrusted-registry]
+    result: pass
+  - policy: disallow-latest-tag
+    rule: validate-image-tag
+    kind: Pod
+    resources: [latest-tag]
+    result: fail
+  # restrict-image-registries
+  - policy: restrict-image-registries
+    rule: validate-registries
+    kind: Pod
+    resources: [compliant-pod, latest-tag, untagged-image]
+    result: pass
+  - policy: restrict-image-registries
+    rule: validate-registries
+    kind: Pod
+    resources: [untrusted-registry]
+    result: fail
+  # add-default-labels (mutation): compare against the expected patched Pod
+  - policy: add-default-labels
+    rule: add-environment-and-managed-by
+    kind: Pod
+    resources: [compliant-pod]
+    patchedResources: patched-compliant-pod.yaml
+    result: pass

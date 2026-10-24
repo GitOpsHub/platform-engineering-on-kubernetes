@@ -1,0 +1,50 @@
+# ConstraintTemplate: only allow images from approved registries/repositories.
+# Adapted from the OPA Gatekeeper library (k8sallowedrepos).
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sallowedrepos
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+  annotations:
+    description: >-
+      Container images must start with one of the allowed repository prefixes.
+      Include a trailing "/" in prefixes so "ghcr.io/mycompany" does not also
+      match "ghcr.io/mycompany-evil".
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sAllowedRepos
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            repos:
+              type: array
+              description: Allowed image prefixes.
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sallowedrepos
+
+        violation[{"msg": msg}] {
+          container := input_containers[_]
+          satisfied := [good | repo := input.parameters.repos[_]; good := startswith(container.image, repo)]
+          not any(satisfied)
+          msg := sprintf("[gatekeeper] container <%v> image <%v> is not from an allowed registry: %v", [container.name, container.image, input.parameters.repos])
+        }
+
+        input_containers[c] {
+          c := input.review.object.spec.containers[_]
+        }
+
+        input_containers[c] {
+          c := input.review.object.spec.initContainers[_]
+        }
+
+        input_containers[c] {
+          c := input.review.object.spec.ephemeralContainers[_]
+        }

@@ -1,0 +1,52 @@
+# Offline tests for the Gatekeeper policies using the `gator` CLI.
+#   gator verify ./gatekeeper-policies/tests/...      (from the lab directory)
+# Docs: https://open-policy-agent.github.io/gatekeeper/website/docs/gator
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+metadata:
+  name: lab-05-gatekeeper
+tests:
+  - name: required-labels
+    template: ../templates/k8srequiredlabels.yaml
+    constraint: ../constraints/require-team-label.yaml
+    cases:
+      - name: compliant-pod-allowed
+        object: resources/pod-compliant.yaml
+        assertions:
+          - violations: no
+      - name: missing-team-label-denied
+        object: resources/pod-missing-team-label.yaml
+        assertions:
+          - violations: yes
+            message: missing required labels
+  - name: disallowed-tags
+    template: ../templates/k8sdisallowedtags.yaml
+    constraint: ../constraints/disallow-latest-tag.yaml
+    cases:
+      - name: pinned-tag-allowed
+        object: resources/pod-compliant.yaml
+        assertions:
+          - violations: no
+      - name: latest-tag-denied
+        object: resources/pod-latest-tag.yaml
+        assertions:
+          - violations: 1
+            message: disallowed tag
+      - name: untagged-image-denied
+        object: resources/pod-untagged.yaml
+        assertions:
+          - violations: 1
+            message: must specify a tag or digest
+  - name: allowed-registries
+    template: ../templates/k8sallowedrepos.yaml
+    constraint: ../constraints/allowed-registries.yaml
+    cases:
+      - name: approved-registry-allowed
+        object: resources/pod-compliant.yaml
+        assertions:
+          - violations: no
+      - name: untrusted-registry-denied
+        object: resources/pod-untrusted-registry.yaml
+        assertions:
+          - violations: yes
+            message: not from an allowed registry

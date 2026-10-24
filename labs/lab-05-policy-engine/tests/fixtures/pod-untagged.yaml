@@ -1,0 +1,19 @@
+# VIOLATION: image has no tag or digest (implicitly :latest). Expected: DENIED.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: untagged-image
+  labels:
+    app.kubernetes.io/name: demo
+    platform.mycompany.io/team: payments
+spec:
+  containers:
+    - name: app
+      image: registry.k8s.io/pause
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi

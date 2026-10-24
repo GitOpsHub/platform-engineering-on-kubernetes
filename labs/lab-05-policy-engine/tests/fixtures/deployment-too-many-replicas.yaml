@@ -1,0 +1,23 @@
+# VIOLATION (CEL ValidatingAdmissionPolicy): replicas above the limit stored in
+# the policy parameter ConfigMap (max 5). Expected: DENIED in policy-test-cel.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: too-many-replicas
+  labels:
+    app.kubernetes.io/name: demo
+    platform.mycompany.io/team: payments
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: demo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: demo
+        platform.mycompany.io/team: payments
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.10

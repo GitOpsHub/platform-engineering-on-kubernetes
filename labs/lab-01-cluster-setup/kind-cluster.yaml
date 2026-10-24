@@ -1,0 +1,46 @@
+# kind-cluster.yaml
+# Three-node kind cluster for the platform-engineering labs.
+#
+# - Default CNI (kindnet) and kube-proxy are disabled: setup.sh installs Cilium
+#   with kube-proxy replacement instead.
+# - Host ports 8080/8443 map to NodePorts 30080/30443, where the Traefik ingress
+#   controller listens (see values/traefik.yaml).
+# - The API server port is left random so it never collides with something
+#   already listening on 6443 on your laptop.
+#
+# Usage: kind create cluster --config kind-cluster.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: platform-engineering
+networking:
+  apiServerAddress: "127.0.0.1"
+  podSubnet: "10.244.0.0/16"
+  serviceSubnet: "10.96.0.0/16"
+  disableDefaultCNI: true # Cilium is installed by setup.sh
+  kubeProxyMode: "none"   # Cilium replaces kube-proxy
+nodes:
+  - role: control-plane
+    # Pinned node image (from the kind v0.33.0 release notes). Bump together
+    # with the kind binary; see https://github.com/kubernetes-sigs/kind/releases
+    image: kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0
+    labels:
+      platform.mycompany.io/role: control-plane
+    extraPortMappings:
+      - containerPort: 30080 # Traefik "web" NodePort
+        hostPort: 8080
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      - containerPort: 30443 # Traefik "websecure" NodePort
+        hostPort: 8443
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+  - role: worker
+    image: kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0
+    labels:
+      platform.mycompany.io/role: worker
+      platform.mycompany.io/pool: workload
+  - role: worker
+    image: kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0
+    labels:
+      platform.mycompany.io/role: worker
+      platform.mycompany.io/pool: workload

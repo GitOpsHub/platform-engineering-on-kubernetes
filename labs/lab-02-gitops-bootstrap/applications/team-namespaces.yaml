@@ -1,0 +1,25 @@
+# Wave -1: platform-owned namespaces + quotas, created before any workload.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: team-namespaces
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    platform.mycompany.io/managed: "true"
+    platform.mycompany.io/layer: platform
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/GitOpsHub/platform-engineering-on-kubernetes
+    targetRevision: main
+    path: labs/lab-02-gitops-bootstrap/applications/workloads/team-namespaces
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

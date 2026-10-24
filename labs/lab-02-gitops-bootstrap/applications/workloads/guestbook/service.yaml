@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: guestbook
+  labels:
+    app.kubernetes.io/name: guestbook
+spec:
+  selector:
+    app.kubernetes.io/name: guestbook
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: guestbook
+  labels:
+    app.kubernetes.io/name: guestbook
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: guestbook.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: guestbook
+                port:
+                  name: http

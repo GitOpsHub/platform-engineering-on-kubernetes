@@ -1,0 +1,8 @@
+# NOTE: the value is "<namespace>/<namePrefix>serving-cert". Keep it in sync if
+# you change `namespace` or `namePrefix` in kustomization.yaml.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: tenant-operator-system/tenant-operator-serving-cert

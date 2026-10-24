@@ -1,0 +1,61 @@
+# Parameterised policy: the allow-list lives in a ConfigMap referenced by the
+# binding, so platform teams can change it without touching the CEL.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: lab05-allowed-registries
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+spec:
+  failurePolicy: Fail
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  variables:
+    - name: registries
+      expression: "params.data['registries'].split(',').map(r, r.trim())"
+    - name: containers
+      expression: >-
+        object.spec.containers +
+        (has(object.spec.initContainers) ? object.spec.initContainers : [])
+  validations:
+    - expression: >-
+        variables.containers.all(c,
+          variables.registries.exists(r, c.image.startsWith(r)))
+      messageExpression: >-
+        '[cel] images must come from one of: ' + variables.registries.join(', ')
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: allowed-registries
+  namespace: policy-test-cel
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+data:
+  registries: "registry.k8s.io/,ghcr.io/mycompany/,ghcr.io/kyverno/"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: lab05-allowed-registries
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+spec:
+  policyName: lab05-allowed-registries
+  validationActions: ["Deny"]
+  paramRef:
+    name: allowed-registries
+    namespace: policy-test-cel
+    # Required in v1: what to do when the ConfigMap does not exist.
+    parameterNotFoundAction: Deny
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: policy-test-cel

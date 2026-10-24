@@ -1,0 +1,51 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/gitopshub/platform-api
+  tag: ""            # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+logLevel: info
+profiling: false
+
+# Comma-separated list of browser origins allowed via CORS (empty = same-origin only).
+cors:
+  origins: ""
+  credentials: false
+
+auth:
+  # Name of an existing Secret with a key "tokens" in 'token,subject[,groups]' lines.
+  # Leave empty to DISABLE authentication (labs only).
+  existingSecret: ""
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

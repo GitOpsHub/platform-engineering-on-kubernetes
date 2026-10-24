@@ -1,0 +1,24 @@
+# Argo CD installation, pinned to an exact upstream release.
+#
+#   kubectl apply --server-side --force-conflicts -k argocd-install/
+#
+# Server-side apply is required: the ApplicationSet CRD is larger than the
+# 256 KiB limit of the last-applied-configuration annotation used by
+# client-side apply.
+#
+# To upgrade, bump the version in the URL below (and ARGOCD_VERSION in
+# bootstrap.sh), then re-apply.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+resources:
+  - namespace.yaml
+  - https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.6/manifests/install.yaml
+  - ingress.yaml
+patches:
+  - path: argocd-cm-patch.yaml
+  - path: argocd-cmd-params-cm-patch.yaml
+labels:
+  - pairs:
+      platform.mycompany.io/component: gitops
+    includeSelectors: false

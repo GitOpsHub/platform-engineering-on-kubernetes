@@ -1,0 +1,46 @@
+# Kyverno VALIDATE: images must be pinned and must not use ":latest".
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+  annotations:
+    policies.kyverno.io/title: Disallow Latest Tag
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+spec:
+  background: true
+  rules:
+    - name: require-image-tag
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["policy-test-kyverno"]
+      validate:
+        failureAction: Enforce
+        message: "[kyverno] an image tag or digest is required."
+        # "*:*" requires a ":" somewhere in the reference (a tag or a digest).
+        pattern:
+          spec:
+            containers:
+              - image: "*:*"
+            =(initContainers):
+              - image: "*:*"
+    - name: validate-image-tag
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["policy-test-kyverno"]
+      validate:
+        failureAction: Enforce
+        message: "[kyverno] using a mutable image tag such as 'latest' is not allowed."
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest"
+            =(initContainers):
+              - image: "!*:latest"

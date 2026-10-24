@@ -1,0 +1,69 @@
+# ConstraintTemplate: forbid mutable image tags (e.g. ":latest") and untagged images.
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdisallowedtags
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+  annotations:
+    description: >-
+      Container images must not use a disallowed tag (such as "latest") and
+      must be pinned to an explicit tag or digest.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDisallowedTags
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            tags:
+              type: array
+              description: Disallowed tags, e.g. ["latest"].
+              items:
+                type: string
+            exemptImages:
+              type: array
+              description: Image prefixes exempt from this policy.
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdisallowedtags
+
+        violation[{"msg": msg}] {
+          container := input_containers[_]
+          not is_exempt(container.image)
+          tag := input.parameters.tags[_]
+          endswith(container.image, sprintf(":%v", [tag]))
+          msg := sprintf("[gatekeeper] container <%v> uses disallowed tag <%v> (image %v)", [container.name, tag, container.image])
+        }
+
+        violation[{"msg": msg}] {
+          container := input_containers[_]
+          not is_exempt(container.image)
+          not contains(container.image, "@")
+          parts := split(container.image, "/")
+          last := parts[count(parts) - 1]
+          not contains(last, ":")
+          msg := sprintf("[gatekeeper] container <%v> image <%v> must specify a tag or digest", [container.name, container.image])
+        }
+
+        is_exempt(image) {
+          prefix := input.parameters.exemptImages[_]
+          startswith(image, prefix)
+        }
+
+        input_containers[c] {
+          c := input.review.object.spec.containers[_]
+        }
+
+        input_containers[c] {
+          c := input.review.object.spec.initContainers[_]
+        }
+
+        input_containers[c] {
+          c := input.review.object.spec.ephemeralContainers[_]
+        }

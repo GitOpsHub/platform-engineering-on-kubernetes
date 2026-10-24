@@ -1,0 +1,17 @@
+# dev overlay - picked up automatically by the sample-app ApplicationSet.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+labels:
+  - pairs:
+      platform.mycompany.io/environment: dev
+    includeSelectors: false
+replicas:
+  - name: sample-app
+    count: 1
+configMapGenerator:
+  - name: sample-app-config
+    behavior: merge
+    literals:
+      - GREETING=hello from dev

@@ -1,0 +1,25 @@
+# Traefik ingress controller exposed on fixed NodePorts.
+# kind/k3d map host 127.0.0.1:8080 -> NodePort 30080 and 127.0.0.1:8443 -> 30443.
+#
+# Why Traefik and not ingress-nginx? The community ingress-nginx project was
+# retired in March 2026 (no further releases or security fixes). Traefik
+# supports the Ingress API and (optionally) Gateway API. The Gateway provider
+# is off here because it requires the Gateway API CRDs, which this lab does
+# not install.
+deployment:
+  replicas: 1
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+service:
+  type: NodePort
+ports:
+  web:
+    nodePort: 30080
+  websecure:
+    nodePort: 30443
+providers:
+  kubernetesIngress:
+    enabled: true
+  kubernetesGateway:
+    enabled: false

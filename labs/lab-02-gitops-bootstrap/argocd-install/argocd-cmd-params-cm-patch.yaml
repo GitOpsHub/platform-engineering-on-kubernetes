@@ -1,0 +1,8 @@
+# Serve the Argo CD UI/API over plain HTTP inside the cluster; TLS is not
+# needed on a laptop and this lets Traefik (Lab 01) route to it directly.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cmd-params-cm
+data:
+  server.insecure: "true"

@@ -1,0 +1,19 @@
+# VIOLATION: uses the mutable :latest tag. Expected: DENIED.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: latest-tag
+  labels:
+    app.kubernetes.io/name: demo
+    platform.mycompany.io/team: payments
+spec:
+  containers:
+    - name: app
+      image: registry.k8s.io/pause:latest
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi

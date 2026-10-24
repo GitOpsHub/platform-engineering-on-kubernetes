@@ -1,0 +1,21 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: pods-must-have-team-label
+  labels:
+    platform.mycompany.io/lab: lab-05-policy-engine
+spec:
+  # deny | warn | dryrun. Start with "dryrun" or "warn" in real clusters and
+  # review audit results (kubectl get k8srequiredlabels -o yaml) before denying.
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    # Scoped to the lab namespace so Gatekeeper does not interfere with the
+    # Kyverno and CEL exercises running in the same cluster.
+    namespaces: ["policy-test-gatekeeper"]
+  parameters:
+    labels:
+      - key: platform.mycompany.io/team
+        allowedRegex: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
