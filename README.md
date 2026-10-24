@@ -47,20 +47,20 @@ A comprehensive learning platform for Platform Engineering concepts, patterns, a
 ## 📦 Code Examples
 
 ### Platform Components
-- [platform-api](code/platform-api/) - Reference platform API implementation
-- [service-catalog](code/service-catalog/) - Service catalog with templating
-- [policy-engine](code/policy-engine/) - Custom policy controller
-- [platform-cli](code/platform-cli/) - Developer CLI for platform interaction
+- [platform-api](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/platform-api/) - Reference platform API implementation
+- [service-catalog](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/service-catalog/) - Service catalog with templating
+- [policy-engine](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/policy-engine/) - Custom policy controller
+- [platform-cli](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/platform-cli/) - Developer CLI for platform interaction
 
 ### Infrastructure
-- [terraform-modules](code/terraform-modules/) - Reusable Terraform modules
-- [crossplane-compositions](code/crossplane-compositions/) - Crossplane XR definitions
-- [helm-charts](code/helm-charts/) - Platform Helm charts
+- [terraform-modules](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/terraform-modules/) - Reusable Terraform modules
+- [crossplane-compositions](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/crossplane-compositions/) - Crossplane XR definitions
+- [helm-charts](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/helm-charts/) - Platform Helm charts
 
 ### Operators & Controllers
-- [tenant-operator](code/tenant-operator/) - Multi-tenancy operator
-- [environment-operator](code/environment-operator/) - Environment lifecycle operator
-- [workload-operator](code/workload-operator/) - Workload abstraction operator
+- [tenant-operator](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/) - Multi-tenancy operator
+- [environment-operator](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/environment-operator/) - Environment lifecycle operator
+- [workload-operator](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/workload-operator/) - Workload abstraction operator
 
 ## 🚀 Quick Start
 

@@ -21,8 +21,8 @@ stronger isolation is added when shared-kernel containers are not enough for a m
 
 ## Related Code
 
-- [`code/policy-engine/`](../../code/policy-engine/) — admission policies that consume image signatures and SBOM attestations
-- [`code/workload-operator/`](../../code/workload-operator/) — the `Workload` API that selects a RuntimeClass per workload
+- [`code/policy-engine/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/policy-engine/) — admission policies that consume image signatures and SBOM attestations
+- [`code/workload-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/workload-operator/) — the `Workload` API that selects a RuntimeClass per workload
 
 ## Where This Leads
 

@@ -22,10 +22,10 @@ A `CustomResourceDefinition` (CRD) teaches the API server a new kind of object. 
 
 ```mermaid
 graph LR
-    Dev[Developer / CI / GitOps] -->|apply Environment| API[API server]
-    API --> Schema[Structural schema<br/>defaults, types, enums]
-    Schema --> CEL[CEL rules<br/>cross-field, transitions]
-    CEL --> Webhook{Validating / mutating<br/>webhooks, optional}
+    Dev["Developer / CI / GitOps"] -->|apply Environment| API[API server]
+    API --> Schema["Structural schema<br/>defaults, types, enums"]
+    Schema --> CEL["CEL rules<br/>cross-field, transitions"]
+    CEL --> Webhook{"Validating / mutating<br/>webhooks, optional"}
     Webhook --> Store[(etcd: storage version)]
     Store --> Ctrl[Controller watch]
     Ctrl -->|update status| API
@@ -481,33 +481,117 @@ A webhook that fails closed (`failurePolicy: Fail`) makes the whole API unavaila
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-Goal: add a validated, versioned field to the `Environment` CRD and prove the old and new versions round-trip.
+### Exercise 1: Add a validated, versioned field and prove it round-trips
 
-1. **Install the CRD** on a test cluster (kind or k3d, see [Lab 01](../../labs/lab-01-cluster-setup/README.md)) and confirm `kubectl explain environment.spec` shows the fields.
-2. **Test strict validation.** Apply an environment with `tpye: preview` (typo). Confirm `--field-validation=Strict` rejects it and the default mode silently prunes it. Write down the difference.
-3. **Test CEL.** Apply a `type: prod` environment with a `ttl`. Confirm the transition and root rules reject it with your messages.
-4. **Test immutability.** Create a `preview` environment, then patch `spec.type` to `dev`. Confirm the transition rule rejects it.
-5. **Add a field.** Add an optional `spec.autoExtend` boolean with `default: false`. Confirm old objects read back with `autoExtend: false` after applying the new schema.
-6. **Stretch:** add `v1beta1` with a renamed field (`ttl` becomes `lifetime`) and a conversion webhook. Write a round-trip test that converts `v1alpha1 → v1beta1 → v1alpha1` and asserts the object is unchanged.
+**Goal:** Install the `Environment` CRD, test its validation, add a defaulted field, and (as a stretch) add a second version.
 
-**Success criteria:** every rule rejects with the intended message; the typo is caught in strict mode; the round-trip test passes.
+**Before you start:** the kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md).
+
+1. **Install the CRD** and inspect it:
+
+   ```bash
+   kubectl config use-context kind-platform-engineering
+   make -C code/environment-operator install
+   kubectl explain environment.spec
+   ```
+
+   Expected output: the `spec` fields (`tenant`, `type`, `ttl`, and the rest) are listed.
+2. **Test strict validation.** Save the manifest below as `typo.yaml` and apply it twice:
+
+   ```yaml
+   apiVersion: platform.mycompany.io/v1alpha1
+   kind: Environment
+   metadata:
+     name: typo-test
+     namespace: default
+   spec:
+     tenant: payments
+     tpye: preview   # typo for "type"
+   ```
+
+   ```bash
+   kubectl apply -f typo.yaml --dry-run=server --field-validation=Strict
+   kubectl apply -f typo.yaml --dry-run=server --field-validation=Ignore
+   ```
+
+   Expected output: the first command fails with `unknown field "spec.tpye"`; the second succeeds and silently prunes the field. Write down the difference.
+3. **Test CEL.** The reference CRD in `code/` has no CEL rules yet. Add the Environment rules from "The Environment Spec" and the transition rule from "Transition Rules" above as `+kubebuilder:validation:XValidation` markers on the Go types, then run `make -C code/environment-operator manifests install`. Apply a `type: prod` environment with a `ttl`; the root rule rejects it with your message.
+4. **Test immutability.** Create a `preview` environment, then patch `spec.type` to `dev`:
+
+   ```bash
+   kubectl patch environment <name> --type=merge -p '{"spec":{"type":"dev"}}'
+   ```
+
+   Replace `<name>` with your environment's name. Expected: the transition rule rejects the patch.
+5. **Add a field.** Add an optional `spec.autoExtend` boolean with `default: false`, run `make -C code/environment-operator manifests install`, and read back an old object:
+
+   ```bash
+   kubectl get environment <name> -o jsonpath='{.spec.autoExtend}{"\n"}'
+   ```
+
+   Expected output: `false`.
+6. **Stretch.** Add `v1beta1` with a renamed field (`ttl` becomes `lifetime`) and a conversion webhook. Write a round-trip test that converts `v1alpha1` to `v1beta1` and back, and asserts the object is unchanged.
+
+**Check:**
+
+- [ ] Every rule rejects with the intended message.
+- [ ] The typo is caught in strict mode.
+- [ ] The round-trip test passes.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| `CustomResourceDefinition ... is invalid: spec.validation.openAPIV3Schema ... must be structural` | Schema uses `oneOf`/`anyOf` at the field level or lacks `type` | Make it structural; use `x-kubernetes-*` or split into fields |
-| Field silently disappears after apply | Not in the schema, so it was pruned | Add it to the schema; apply with `--field-validation=Strict` to catch it |
-| `Forbidden: ... Rule ... cost` at CRD install | CEL rule iterates a large list or is too expensive | Bound `maxItems`; simplify the rule; move the check to the controller |
-| Rule passes on create but not on update | Transition rule referencing `oldSelf` runs only on update | Add a guard `self == oldSelf || ...` or write the rule so create passes |
-| Conversion errors listing old objects | Webhook not reachable, CA bundle wrong, or not lossless | Check the service endpoint and `caBundle`; test round trips |
-| `kubectl wait` times out but the resource looks fine | Condition `Ready` never set to `True`, or `observedGeneration` lags | Read `status.conditions` with JSONPath; check the controller logs |
-| Status update returns conflict | Stale `resourceVersion` | Re-read and retry; use `Status().Update` with a fresh object |
-| Editing an old version returns the new schema's errors | Storage and served versions disagree on validation | Keep validation equivalent across served versions, or document the difference |
+### `CustomResourceDefinition ... is invalid: spec.validation.openAPIV3Schema ... must be structural`
+
+**Cause:** Schema uses `oneOf`/`anyOf` at the field level or lacks `type`
+
+**Fix:** Make it structural; use `x-kubernetes-*` or split into fields
+
+### Field silently disappears after apply
+
+**Cause:** Not in the schema, so it was pruned
+
+**Fix:** Add it to the schema; apply with `--field-validation=Strict` to catch it
+
+### `Forbidden: ... Rule ... cost` at CRD install
+
+**Cause:** CEL rule iterates a large list or is too expensive
+
+**Fix:** Bound `maxItems`; simplify the rule; move the check to the controller
+
+### Rule passes on create but not on update
+
+**Cause:** A transition rule referencing `oldSelf` runs only on update.
+
+**Fix:** Add a guard such as `self == oldSelf || <condition>`, or write the rule so create passes.
+
+### Conversion errors listing old objects
+
+**Cause:** Webhook not reachable, CA bundle wrong, or not lossless
+
+**Fix:** Check the service endpoint and `caBundle`; test round trips
+
+### `kubectl wait` times out but the resource looks fine
+
+**Cause:** Condition `Ready` never set to `True`, or `observedGeneration` lags
+
+**Fix:** Read `status.conditions` with JSONPath; check the controller logs
+
+### Status update returns conflict
+
+**Cause:** Stale `resourceVersion`
+
+**Fix:** Re-read and retry; use `Status().Update` with a fresh object
+
+### Editing an old version returns the new schema's errors
+
+**Cause:** Storage and served versions disagree on validation
+
+**Fix:** Keep validation equivalent across served versions, or document the difference
+
 
 ---
 
@@ -529,4 +613,4 @@ Goal: add a validated, versioned field to the `Environment` CRD and prove the ol
 1. **Write the controllers**: [Controller Runtime](controller-runtime.md) — kubebuilder, reconcile loops, owner references, finalizers, envtest
 2. **Expose them consistently**: [Platform API Design](platform-api-design.md) — the REST facade over these resources
 3. **Route traffic to what they create**: [API Gateway](api-gateway.md)
-4. **Apply the CRDs**: [Lab 03: Platform API](../../labs/lab-03-platform-api/README.md)
+4. **Build a CRD and controller end to end**: [Lab 03: Platform API](../../labs/lab-03-platform-api/README.md)

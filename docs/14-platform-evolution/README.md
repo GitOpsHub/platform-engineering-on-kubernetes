@@ -30,11 +30,11 @@ A platform is not finished when the clusters are running. It matures along sever
 
 ```mermaid
 graph TB
-    T[Technology<br/>clusters, GitOps, APIs] --> M[Maturity]
-    O[Organization<br/>team shape, ownership] --> M
-    P[Product practice<br/>users, roadmap, contracts] --> M
-    ME[Measurement<br/>DORA, SLOs, adoption] --> M
-    M --> R[Better outcomes<br/>for product teams]
+    T["Technology<br/>clusters, GitOps, APIs"] --> M[Maturity]
+    O["Organization<br/>team shape, ownership"] --> M
+    P["Product practice<br/>users, roadmap, contracts"] --> M
+    ME["Measurement<br/>DORA, SLOs, adoption"] --> M
+    M --> R["Better outcomes<br/>for product teams"]
 ```
 
 ## Prerequisites

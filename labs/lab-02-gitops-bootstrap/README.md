@@ -12,12 +12,13 @@ By the end of this lab you will be able to:
 
 ## Prerequisites
 
-| Requirement | Notes |
+| Requirement | Version / notes |
 |-------------|-------|
 | [Lab 01](../lab-01-cluster-setup/README.md) cluster | Context `kind-platform-engineering` (or `k3d-platform-engineering`), with Traefik running on `localhost:8080` |
-| kubectl | 1.33+ |
+| kubectl | 1.33+ (also needs `kubectl kustomize`, built in) |
 | Network access to `github.com` | Argo CD pulls manifests from Git, not from your laptop |
 | `argocd` CLI | Optional, v3.5.x. Every step also works with `kubectl` |
+| Ports 8080 and 8081 | 8080 is used by the Lab 01 Traefik ingress; 8081 is used by the optional port-forward |
 | `git` and a GitHub account | Only needed for the "use your own fork" exercise |
 
 Background reading:
@@ -25,39 +26,15 @@ Background reading:
 [Argo CD Deep Dive](../../docs/05-gitops/argocd-deep-dive.md),
 [Multi-cluster GitOps](../../docs/05-gitops/multi-cluster-gitops.md).
 
-## Estimated Time: 30-40 minutes
+## Estimated Time
 
-(About 5 minutes of that is image pulls the first time Argo CD starts.)
+30-40 minutes (about 5 minutes of that is image pulls the first time Argo CD starts).
+
+**Difficulty:** Intermediate
 
 ---
 
-## How it fits together
-
-```mermaid
-flowchart LR
-  you([You]) -- "./bootstrap.sh" --> cluster
-  subgraph cluster[Lab 01 cluster]
-    root[platform-root<br/>Application] -- syncs ./applications --> children
-    subgraph children[Child Applications]
-      tn[team-namespaces<br/>wave -1]
-      gb[guestbook]
-      pi[podinfo<br/>Helm chart]
-      as[sample-app<br/>ApplicationSet]
-    end
-    as --> dev[sample-app-dev]
-    as --> staging[sample-app-staging]
-  end
-  git[(GitHub repo<br/>labs/lab-02-gitops-bootstrap)] -- pulled by --> root
-  git -- pulled by --> children
-```
-
-The only thing you apply by hand is [`app-of-apps.yaml`](app-of-apps.yaml). It
-creates two AppProjects and one **root Application**. The root Application
-watches the [`applications/`](applications/) directory in Git, and every YAML
-file there is itself an `Application` or `ApplicationSet`. From then on, Git is
-the source of truth.
-
-### Files in this lab
+## Files in this lab
 
 | Path | Purpose |
 |------|---------|
@@ -68,7 +45,38 @@ the source of truth.
 | [`bootstrap.sh`](bootstrap.sh) | Installs Argo CD, applies the root app, waits for sync |
 | [`teardown.sh`](teardown.sh) | Removes everything in reverse order |
 
+---
+
+## How it fits together
+
+```mermaid
+flowchart LR
+  you([You]) -- "./bootstrap.sh" --> cluster
+  subgraph cluster[Lab 01 cluster]
+    root[platform-root<br/>Application] -- "syncs ./applications" --> children
+    subgraph children[Child Applications]
+      tn[team-namespaces<br/>wave -1]
+      gb[guestbook]
+      pi[podinfo<br/>Helm chart]
+      as[sample-app<br/>ApplicationSet]
+    end
+    as --> dev[sample-app-dev]
+    as --> staging[sample-app-staging]
+  end
+  git[("GitHub repo<br/>labs/lab-02-gitops-bootstrap")] -- "pulled by" --> root
+  git -- "pulled by" --> children
+```
+
+The only thing you apply by hand is [`app-of-apps.yaml`](app-of-apps.yaml). It
+creates two AppProjects and one **root Application**. The root Application
+watches the [`applications/`](applications/) directory in Git, and every YAML
+file there is itself an `Application` or `ApplicationSet`. From then on, Git is
+the source of truth.
+
 ### What gets deployed
+
+These are the workloads you should see once the bootstrap finishes.
+
 
 | Application | Source | Namespace | Sync wave | Access |
 |-------------|--------|-----------|-----------|--------|
@@ -80,7 +88,9 @@ the source of truth.
 
 ---
 
-## Step 1 - Check the cluster
+## Steps
+
+### Step 1 - Check the cluster
 
 ```bash
 kubectl config current-context        # kind-platform-engineering
@@ -88,9 +98,11 @@ kubectl get nodes                     # 3 nodes, all Ready
 kubectl -n traefik get svc traefik    # NodePorts 30080 / 30443
 ```
 
+Expected: the context name is printed, three nodes are `Ready`, and the Traefik service lists `30080` and `30443`. If any of these fail, go back to [Lab 01](../lab-01-cluster-setup/README.md).
+
 If the context is wrong, run `kubectl config use-context kind-platform-engineering`.
 
-## Step 2 - Review what you are about to install
+### Step 2 - Review what you are about to install
 
 Argo CD is pinned to one release in
 [`argocd-install/kustomization.yaml`](argocd-install/kustomization.yaml):
@@ -111,15 +123,22 @@ Render it without applying anything:
 kubectl kustomize argocd-install | grep -E '^kind: (Deployment|StatefulSet)$' | wc -l
 ```
 
+This needs network access because the Kustomization downloads the pinned `install.yaml`. Expected: a number greater than 0 (a count of the Deployments and StatefulSets that would be created).
+
 > **Why server-side apply?** The ApplicationSet CRD is larger than the 256 KiB
 > limit on the `last-applied-configuration` annotation that client-side apply
 > writes. `bootstrap.sh` uses `--server-side --force-conflicts` for that reason.
 
-## Step 3 - Bootstrap
+### Step 3 - Bootstrap
+
+Run the commands from `labs/lab-02-gitops-bootstrap`.
 
 ```bash
+cd labs/lab-02-gitops-bootstrap   # from the repository root
 ./bootstrap.sh
 ```
+
+The script creates the `argocd` namespace with Argo CD `v3.5.6`, the `platform` and `apps` AppProjects, and the `platform-root` Application. That Application then creates the child Applications listed in [What gets deployed](#what-gets-deployed).
 
 The script:
 
@@ -131,7 +150,11 @@ The script:
 
 It is idempotent: running it again re-applies the same pinned manifests.
 
-## Step 4 - Open the Argo CD UI
+Expected: the script ends with a `kubectl get applications` table, then `Argo CD is up.` with the UI address, username `admin` and the initial password. If `platform-root` is not `Synced`/`Healthy` yet, the table shows that; continue to Step 5 and wait.
+
+If you want to use your own fork, do it now: see [Use your own fork](#use-your-own-fork) and run `./bootstrap.sh` with `--repo-url` and `--rewrite` instead.
+
+### Step 4 - Open the Argo CD UI
 
 Open **http://argocd.localtest.me:8080** and log in as `admin`. Get the password with:
 
@@ -142,12 +165,16 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 argocd admin initial-password -n argocd
 ```
 
-No ingress? Use a port-forward instead. It uses local port **8081**, because host port 8080 is taken by the Lab 01 Traefik ingress (`localhost:8080`, `localhost:8443`):
+Expected: the UI login page loads and `admin` plus the printed password signs in.
+
+If the page does not load, use a port-forward instead. It uses local port **8081**, because host port 8080 is taken by the Lab 01 Traefik ingress (`localhost:8080`, `localhost:8443`):
 
 ```bash
 kubectl -n argocd port-forward svc/argocd-server 8081:80
 # then open http://localhost:8081
 ```
+
+Press Ctrl+C to stop the port-forward when you are done.
 
 CLI login (optional):
 
@@ -155,7 +182,7 @@ CLI login (optional):
 argocd login argocd.localtest.me:8080 --plaintext --grpc-web --username admin
 ```
 
-## Step 5 - Watch the App of Apps converge
+### Step 5 - Watch the App of Apps converge
 
 ```bash
 kubectl -n argocd get applications -w
@@ -163,7 +190,7 @@ kubectl -n argocd get applications -w
 
 Expected final state (give it 2-3 minutes on the first run):
 
-```
+```text
 NAME               SYNC STATUS   HEALTH STATUS
 guestbook          Synced        Healthy
 platform-root      Synced        Healthy
@@ -184,16 +211,18 @@ Inspect the tree of the root Application in the UI, or:
 kubectl -n argocd get application platform-root -o jsonpath='{.spec.source.path}{"\n"}'
 ```
 
-## Step 6 - Use the workloads
+### Step 6 - Use the workloads
 
 ```bash
 curl -s -H 'Host: guestbook.localtest.me' http://127.0.0.1:8080/ | grep -o '<h1>.*</h1>'
-curl -s http://podinfo.localtest.me:8080/        # JSON with the UI message from the Helm values
+curl -s -H 'Host: podinfo.localtest.me' http://127.0.0.1:8080/        # JSON with the UI message from the Helm values
 kubectl -n sample-app-dev get deploy sample-app   # 1 replica (dev overlay)
 kubectl -n sample-app-staging get deploy sample-app   # 2 replicas (staging overlay)
 ```
 
-## Step 7 - Prove drift is corrected
+Expected: `<h1>Hello from GitOps!</h1>`; JSON containing `"message": "Deployed by Argo CD from Lab 02"`; `1/1` ready for dev and `2/2` for staging.
+
+### Step 7 - Prove drift is corrected
 
 Change the cluster by hand, bypassing Git:
 
@@ -202,11 +231,13 @@ kubectl -n guestbook scale deployment/guestbook --replicas=5
 kubectl -n guestbook get deploy guestbook -w     # back to 2 within about a minute
 ```
 
+Expected: READY briefly shows more than 2 replicas, then returns to `2/2`. Press Ctrl+C to stop watching.
+
 `selfHeal: true` in [`applications/guestbook.yaml`](applications/guestbook.yaml)
 means Argo CD treats Git as the desired state and reverts manual edits. The
 Argo CD UI shows the `OutOfSync` state briefly before the correction.
 
-## Step 8 - Make a change through Git (needs a fork)
+### Step 8 - Make a change through Git (needs a fork)
 
 Argo CD reads the repository on GitHub, not your laptop. To change the lab
 through Git you must push to a repository you control. See
@@ -214,7 +245,7 @@ through Git you must push to a repository you control. See
 
 1. Edit the message in [`applications/workloads/guestbook/configmap.yaml`](applications/workloads/guestbook/configmap.yaml)
 2. Commit and push to your fork's `main` branch
-3. Watch `guestbook` go `OutOfSync` and then back to `Synced` (about 60 seconds, the polling interval set in `argocd-cm-patch.yaml`)
+3. Watch `guestbook` go `OutOfSync` and then back to `Synced` (about 60 seconds, the polling interval set in `argocd-cm-patch.yaml`; if you did not bootstrap with `--rewrite`, re-run `./bootstrap.sh --repo-url <your fork URL> --rewrite` first and push the result)
 4. `curl -s -H 'Host: guestbook.localtest.me' http://127.0.0.1:8080/` shows the new text. The nginx pod picks up the updated ConfigMap volume after the kubelet refreshes it, which can take up to a minute.
 
 ---
@@ -280,10 +311,10 @@ curl -fsS -H 'Host: guestbook.localtest.me' http://127.0.0.1:8080/ >/dev/null &&
 curl -fsS -H 'Host: podinfo.localtest.me' http://127.0.0.1:8080/ >/dev/null && echo "podinfo OK"
 ```
 
-Expected: six Applications, all `Synced` / `Healthy`, and both `OK` lines.
+Expected: six Applications, all `Synced` / `Healthy`; `appprojects` lists `platform` and `apps`; the root app prints your repo URL and `labs/lab-02-gitops-bootstrap/applications`; each Deployment is available; and both `OK` lines print.
 
 **Check the guard rails.** The `apps` project must refuse things it should not
-allow. Try to create a RoleBinding through an app team's project:
+allow. Try to create an Application whose destination the `apps` project does not allow:
 
 ```bash
 cat <<'EOF' | kubectl apply -n argocd -f - 2>&1 || true
@@ -312,16 +343,20 @@ The condition message says the destination is not permitted in project `apps`.
 
 ## Cleanup
 
+> **Warning:** The teardown deletes Argo CD and the workload namespaces `guestbook`, `podinfo`, `sample-app-dev` and `sample-app-staging`, with everything in them.
+
 ```bash
 ./teardown.sh                  # deletes the root app first (cascades), then Argo CD
 ./teardown.sh --keep-argocd    # keep Argo CD, remove only the lab workloads
 ```
 
+Expected: lines starting `==>` ending with `==> Lab 02 teardown complete`. Check with `kubectl get ns argocd guestbook podinfo` (NotFound, or `Terminating` for a moment).
+
 The teardown deletes the root Application first, so its finalizer removes the
 child Applications and their workloads. Argo CD is removed only after that,
 because nothing would be left to process the finalizers otherwise.
 
-Lab 03 uses the same cluster, so you can keep the cluster itself. To delete it,
+What is left running: the Lab 01 cluster and its platform components (Traefik, cert-manager and the rest). Lab 03 uses the same cluster, so you can keep it. To delete it,
 run `../lab-01-cluster-setup/teardown.sh`.
 
 ---

@@ -23,7 +23,7 @@ Multi-cluster scheduling is a **two-level** problem. The fleet scheduler decides
 
 ```mermaid
 graph TB
-    Intent[Workload intent<br/>replicas, regions, tier, residency] --> FS[Fleet scheduler<br/>Karmada / OCM / GitOps rules]
+    Intent["Workload intent<br/>replicas, regions, tier, residency"] --> FS["Fleet scheduler<br/>Karmada / OCM / GitOps rules"]
     FS -->|7 replicas| C1[prod-eu-1]
     FS -->|5 replicas| C2[prod-eu-2]
     C1 --> KS1[kube-scheduler] --> N1[nodes]
@@ -47,12 +47,12 @@ The fleet scheduler works with coarser, staler information (cluster-level capaci
 ```mermaid
 graph LR
     subgraph AA["Active-Active"]
-        U1((users)) --> G1[GSLB] --> A1[cluster A: full]
-        G1 --> B1[cluster B: full]
+        U1((users)) --> G1[GSLB] --> A1["cluster A: full"]
+        G1 --> B1["cluster B: full"]
     end
     subgraph AP["Active-Passive"]
-        U2((users)) --> G2[GSLB] --> A2[cluster A: active]
-        G2 -.failover.-> B2[cluster B: standby]
+        U2((users)) --> G2[GSLB] --> A2["cluster A: active"]
+        G2 -.failover.-> B2["cluster B: standby"]
     end
     subgraph CELL["Cell-based"]
         U3((users)) --> R[cell router] -->|tenants 1-500| CA[cell 1]
@@ -68,7 +68,7 @@ A **cell** is a complete, independent copy of a service stack (often a whole clu
 
 ## Express Intent Once: a Platform-Level Placement API
 
-Developers shouldn't write Karmada policies or ApplicationSet selectors. Let them declare *intent* in the platform's `Workload` API, and have the platform translate it. A sketch extending the repo's `Workload` CRD (see [`code/workload-operator/`](../../code/workload-operator/)):
+Developers shouldn't write Karmada policies or ApplicationSet selectors. Let them declare *intent* in the platform's `Workload` API, and have the platform translate it. A sketch extending the repo's `Workload` CRD (see [`code/workload-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/workload-operator/)):
 
 ```yaml
 # tenants/payments/checkout-api.yaml
@@ -98,10 +98,10 @@ The workload operator (or a Crossplane composition / KRO-style composition) rend
 
 ```mermaid
 graph LR
-    W[Workload CR<br/>placement intent] --> OP[workload-operator]
+    W["Workload CR<br/>placement intent"] --> OP[workload-operator]
     OP --> PP[Karmada PropagationPolicy]
     OP --> OV[Karmada OverridePolicy]
-    OP --> DNS[DNS / GSLB records]
+    OP --> DNS["DNS / GSLB records"]
     OP --> NP[Network & mesh policy]
 ```
 
@@ -300,16 +300,16 @@ Placing replicas is half the job; users must reach the right cluster.
 
 ```mermaid
 graph TB
-    User((User)) --> DNS{Global DNS / GSLB<br/>latency / geo / health}
-    DNS -->|EU users| GWA[Gateway: prod-eu-1]
-    DNS -->|EU users, failover| GWB[Gateway: prod-eu-2]
-    DNS -->|US users| GWC[Gateway: prod-us-1]
+    User((User)) --> DNS{"Global DNS / GSLB<br/>latency / geo / health"}
+    DNS -->|EU users| GWA["Gateway: prod-eu-1"]
+    DNS -->|EU users, failover| GWB["Gateway: prod-eu-2"]
+    DNS -->|US users| GWC["Gateway: prod-us-1"]
     HC[Health checks] -.-> GWA & GWB & GWC
 ```
 
 | Mechanism | How it works | Failover speed | Notes |
 |-----------|--------------|----------------|-------|
-| DNS-based GSLB (Route 53, Cloud DNS, NS1, etc.) | Health-checked records with latency/geo/weighted routing | Bounded by TTL + client caching | Most common; keep TTLs short (e.g. 30–60 s) |
+| DNS-based GSLB (Route 53, Cloud DNS, NS1) | Health-checked records with latency/geo/weighted routing | Bounded by TTL + client caching | Most common; keep TTLs short (e.g. 30–60 s) |
 | Anycast / global cloud LB | Single IP announced globally; provider routes to healthy backend | Fast | Cloud-specific; e.g. GKE multi-cluster Gateway |
 | CDN / edge proxy | Edge routes to origins with health checks | Fast | Good for HTTP; adds an edge layer |
 | Client-side / mesh | Mesh or client libraries pick endpoints | Fast | East-west primarily |
@@ -372,17 +372,17 @@ Rules of thumb:
 ## Capacity, Cost, and Fairness
 
 - **N+1 at the cluster level:** in active-active across N clusters, each must absorb `1/(N-1)` extra load on a cluster loss. Two clusters → each must handle 100% of traffic.
-- **Fleet-level quotas:** Karmada's `FederatedResourceQuota` or platform-level quota on the `Tenant` CRD ([`code/tenant-operator/`](../../code/tenant-operator/)) prevent a single tenant from consuming fleet capacity.
+- **Fleet-level quotas:** Karmada's `FederatedResourceQuota` or platform-level quota on the `Tenant` CRD ([`code/tenant-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/)) prevent a single tenant from consuming fleet capacity.
 - **Cost-aware placement:** label clusters with cost tiers (spot-heavy, on-demand, reserved) and let batch workloads prefer cheap tiers.
 - **GPU and specialty hardware:** keep a separate `tier: gpu` cluster set; schedule ML jobs there via placement rules. Queueing systems such as Kueue (with its MultiKueue feature for dispatching jobs to worker clusters) are increasingly used for multi-cluster batch.
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Lab: Migrate a workload between clusters by shifting weights, then simulate failover
 
-**Prerequisites:** the Karmada environment from the [Cluster Federation lab](./cluster-federation.md#hands-on-exercise) (members `member-a`, `member-b`).
+**Prerequisites:** the Karmada environment from the [Cluster Federation lab](./cluster-federation.md#hands-on-exercises) (members `member-a`, `member-b`).
 
 ```bash
 export KARMADA=/etc/karmada/karmada-apiserver.config

@@ -27,16 +27,16 @@ Most organizations should **not** build a portal from scratch. A custom portal i
 | Platform is already API-first (CRDs + platform API); portal needs ~5 screens | **Custom** |
 | Air-gapped / strict data residency / very small footprint | **Custom** or self-hosted Backstage |
 | Unique workflow (e.g., regulated change approval) dominates UX | **Custom**, or a custom Backstage plugin |
-| No frontend skills on the team | Port, or a CLI-first platform ([platform-cli](../../code/platform-cli/)) |
+| No frontend skills on the team | Port, or a CLI-first platform ([platform-cli](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/platform-cli/)) |
 
 ```mermaid
 graph TD
-    Q1{Do you already have a<br/>platform API / CRDs?} -->|No| Fix[Build the API first<br/>portal comes later]
-    Q1 -->|Yes| Q2{Need a broad catalog +<br/>plugin ecosystem?}
+    Q1{"Do you already have a<br/>platform API / CRDs?"} -->|No| Fix["Build the API first<br/>portal comes later"]
+    Q1 -->|Yes| Q2{"Need a broad catalog +<br/>plugin ecosystem?"}
     Q2 -->|Yes| BS[Backstage]
-    Q2 -->|No| Q3{SaaS acceptable?}
-    Q3 -->|Yes| Port[Port / SaaS portal]
-    Q3 -->|No| Q4{Fewer than ~10 screens<br/>and a team that can own a web app?}
+    Q2 -->|No| Q3{"SaaS acceptable?"}
+    Q3 -->|Yes| Port["Port / SaaS portal"]
+    Q3 -->|No| Q4{"Fewer than ~10 screens<br/>and a team that can own a web app?"}
     Q4 -->|Yes| Custom[Custom portal]
     Q4 -->|No| BS
 ```
@@ -50,16 +50,16 @@ graph TD
 ```mermaid
 graph TB
     subgraph Browser
-        UI[Portal UI<br/>server-rendered HTML + htmx<br/>or React SPA]
+        UI["Portal UI<br/>server-rendered HTML + htmx<br/>or React SPA"]
     end
     subgraph Portal["portal (Go BFF)"]
-        AuthN[OIDC login<br/>session cookie]
-        Views[View handlers<br/>aggregate + shape data]
-        Forms[Schema-driven forms<br/>from CRD OpenAPI]
-        SSE[SSE stream<br/>status updates]
+        AuthN["OIDC login<br/>session cookie"]
+        Views["View handlers<br/>aggregate + shape data"]
+        Forms["Schema-driven forms<br/>from CRD OpenAPI"]
+        SSE["SSE stream<br/>status updates"]
     end
     IdP[OIDC IdP]
-    PAPI[platform-api<br/>/api/v1]
+    PAPI["platform-api<br/>/api/v1"]
     Prom[(Prometheus)]
     Git[(GitOps repo)]
 
@@ -615,51 +615,123 @@ spec:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: A Minimal Portal over the Workload API
+### Exercise 1: A minimal portal over the Workload API
 
-**Goal:** Build a two-page portal (workload list + create form) with impersonation and live status.
+**Goal:** Build a two-page portal (workload list and create form) that calls the cluster as the signed-in user and shows live status.
 
-1. **Prepare the cluster** using [Lab 03](../../labs/lab-03-platform-api/README.md) so the `Workload` CRD and operator are running.
-2. **Create test identities** (no IdP needed for the lab — hardcode a dev session):
-   ```bash
-   kubectl create namespace payments-dev
-   kubectl create rolebinding alice-dev -n payments-dev \
-     --clusterrole=edit --user=alice@mycompany.io
-   ```
-3. **Verify the cluster RBAC the user will get** before writing code (run as an admin who can impersonate):
-   ```bash
-   kubectl get workloads -n payments-dev --as=alice@mycompany.io     # allowed
-   kubectl get workloads -n search-dev   --as=alice@mycompany.io     # Forbidden
-   kubectl auth can-i create workloads.platform.mycompany.io -n payments-dev --as=alice@mycompany.io
-   ```
-4. **Implement** `PlatformClient`, `ListWorkloads`, and the `/events` SSE handler from this doc. Run platform-api locally against your kubeconfig, and point the portal at it with a test user's bearer token.
-5. **Watch updates:** in another terminal, scale a workload and confirm the browser row updates:
-   ```bash
-   kubectl patch workload payments-api -n payments-dev --type=merge -p '{"spec":{"replicas":3}}'
-   ```
-6. **Dry-run validation:** submit an invalid size (e.g. `xl`) and display the API server's error message beside the field.
+**Before you start:** the kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md), and Go 1.22 or later.
 
-#### Verification
-- [ ] Alice sees `payments-dev` workloads and gets a clear "no access" message for `search-dev`
-- [ ] Status updates appear without page reload
-- [ ] Invalid input shows the CRD's CEL/enum error message
+**Step 1: Install the Workload CRD.** Lab 03 builds a different API (`WebApp`), so install the `Workload` CRD from its operator project instead:
+
+```bash
+kubectl config use-context kind-platform-engineering
+make -C code/workload-operator install
+kubectl get crd workloads.platform.mycompany.io
+```
+
+Expected output:
+
+```text
+NAME                                CREATED AT
+workloads.platform.mycompany.io     2026-10-24T09:12:41Z
+```
+
+**Step 2: Create a test identity.** The lab needs no IdP; hardcode a dev session for `alice@mycompany.io`:
+
+```bash
+kubectl create namespace payments-dev
+kubectl create namespace search-dev
+kubectl create rolebinding alice-dev -n payments-dev --clusterrole=edit --user=alice@mycompany.io
+```
+
+**Step 3: Verify the RBAC the user will get** before writing code. Run these as an admin who can impersonate:
+
+```bash
+kubectl get workloads -n payments-dev --as=alice@mycompany.io
+kubectl get workloads -n search-dev --as=alice@mycompany.io
+kubectl auth can-i create workloads.platform.mycompany.io -n payments-dev --as=alice@mycompany.io
+```
+
+Expected output:
+
+```text
+No resources found in payments-dev namespace.
+Error from server (Forbidden): workloads.platform.mycompany.io is forbidden: User "alice@mycompany.io" cannot list resource "workloads" in API group "platform.mycompany.io" in the namespace "search-dev"
+yes
+```
+
+**Step 4: Implement** `PlatformClient`, `ListWorkloads`, and the `/events` SSE handler from this page. Run platform-api locally against your kubeconfig (see [`code/platform-api`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/platform-api/)) and point the portal at it.
+
+**Step 5: Watch live updates.** Create a workload, open the list page, then scale it from a second terminal:
+
+```bash
+kubectl patch workload payments-api -n payments-dev --type=merge -p '{"spec":{"replicas":3}}'
+```
+
+Expected output: `workload.platform.mycompany.io/payments-api patched`, and the replica count in the browser row changes without a page reload.
+
+**Step 6: Check server-side validation.** Submit an invalid size such as `xl` in the create form. The form shows the API server's error beside the field.
+
+**Check:**
+
+- [ ] Alice sees `payments-dev` workloads and gets a clear "no access" message for `search-dev`.
+- [ ] Status updates appear without a page reload.
+- [ ] Invalid input shows the CRD's CEL or enum error message.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| platform-api returns `500` and logs `cannot impersonate` | platform-api ServiceAccount lacks the impersonate rule, or the group is missing from `resourceNames` | Check `platform-api-impersonator` ClusterRole; add the group to the allowlist only after the tenant-operator creates it |
-| Requests for a user's group are silently missing | Group is not in the platform-api allowlist (filtered on purpose) | Confirm the group is a tenant group in the allowlist; do not add `system:*` groups |
-| User sees nothing despite group membership | IdP `groups` claim absent or differently named | Inspect the ID token; map claim names; check RoleBinding subject names |
-| SSE connection closes every 60s | Proxy/gateway idle timeout | Send heartbeat comments; raise timeout on the route |
-| Events arrive in bursts | Response buffering | `X-Accel-Buffering: no`, flush after each event, disable compression on `/events` |
-| High API server load | Per-request LIST calls from many tabs | Coalesce and cache lists in platform-api per user for a few seconds; use watches for live views |
-| Form missing new CRD field | Schema cached at startup | Re-read CRD on change (watch CRDs) or on a short interval |
-| `no matches for kind "Workload"` | Scheme not registered / CRD not installed | `platformv1alpha1.AddToScheme(scheme)`; `kubectl get crd workloads.platform.mycompany.io` |
+### platform-api returns `500` and logs `cannot impersonate`
+
+**Cause:** platform-api ServiceAccount lacks the impersonate rule, or the group is missing from `resourceNames`
+
+**Fix:** Check `platform-api-impersonator` ClusterRole; add the group to the allowlist only after the tenant-operator creates it
+
+### Requests for a user's group are silently missing
+
+**Cause:** Group is not in the platform-api allowlist (filtered on purpose)
+
+**Fix:** Confirm the group is a tenant group in the allowlist; do not add `system:*` groups
+
+### User sees nothing despite group membership
+
+**Cause:** IdP `groups` claim absent or differently named
+
+**Fix:** Inspect the ID token; map claim names; check RoleBinding subject names
+
+### SSE connection closes every 60s
+
+**Cause:** Proxy/gateway idle timeout
+
+**Fix:** Send heartbeat comments; raise timeout on the route
+
+### Events arrive in bursts
+
+**Cause:** Response buffering
+
+**Fix:** `X-Accel-Buffering: no`, flush after each event, disable compression on `/events`
+
+### High API server load
+
+**Cause:** Per-request LIST calls from many tabs
+
+**Fix:** Coalesce and cache lists in platform-api per user for a few seconds; use watches for live views
+
+### Form missing new CRD field
+
+**Cause:** Schema cached at startup
+
+**Fix:** Re-read CRD on change (watch CRDs) or on a short interval
+
+### `no matches for kind "Workload"`
+
+**Cause:** Scheme not registered / CRD not installed
+
+**Fix:** `platformv1alpha1.AddToScheme(scheme)`; `kubectl get crd workloads.platform.mycompany.io`
+
 
 ---
 

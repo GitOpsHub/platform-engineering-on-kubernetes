@@ -1,12 +1,12 @@
 # Tenant Operator (optional)
 
-The operator source lives in [`code/tenant-operator`](../../../code/tenant-operator/). This directory holds only the sample `Tenant` objects the lab applies.
+The operator source lives in [`code/tenant-operator`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/). This directory holds only the sample `Tenant` objects the lab applies.
 
 **The lab works without the operator.** [`setup.sh`](../setup.sh) creates every tenant object with plain manifests. When the operator is installed, `setup.sh` applies the same tenants as `Tenant` CRs and lets the operator create the child objects. The two modes are described below.
 
 ## The Tenant model
 
-`Tenant` is a cluster-scoped custom resource in the group `platform.mycompany.io`, version `v1alpha1`, short name `tn`. Its source of truth is [`tenant_types.go`](../../../code/tenant-operator/api/v1alpha1/tenant_types.go).
+`Tenant` is a cluster-scoped custom resource in the group `platform.mycompany.io`, version `v1alpha1`, short name `tn`. Its source of truth is [`tenant_types.go`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/api/v1alpha1/tenant_types.go).
 
 ```yaml
 apiVersion: platform.mycompany.io/v1alpha1
@@ -63,9 +63,11 @@ These are the differences that are left after the lab's manifests were aligned w
 
 ## Using the operator (optional)
 
-The operator is not installed by Lab 01, and this lab does not install it. To try it, build and deploy it from `code/tenant-operator` (see its [README](../../../code/tenant-operator/README.md) and `config/`), then run `teardown.sh` if you have already run the lab in manifest mode, and run `setup.sh` again.
+The operator is not installed by Lab 01, and this lab does not install it. To try it, build and deploy it from `code/tenant-operator` (see its [README](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/README.md) and `config/`), then run `teardown.sh` if you have already run the lab in manifest mode, and run `setup.sh` again. The
+quickest route is `make install run` from `code/tenant-operator`, as described in the
+[Lab 07 operator mode section](../README.md#operator-mode-optional).
 
-The operator's CRD is generated at [`config/crd/bases/platform.mycompany.io_tenants.yaml`](../../../code/tenant-operator/config/crd/bases/platform.mycompany.io_tenants.yaml). Its `spec` fields match the sample files in this directory.
+The operator's CRD is generated at [`config/crd/bases/platform.mycompany.io_tenants.yaml`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/config/crd/bases/platform.mycompany.io_tenants.yaml). Its `spec` fields match the sample files in this directory.
 
 ## Further reading
 

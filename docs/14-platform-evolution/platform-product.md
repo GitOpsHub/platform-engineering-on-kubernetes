@@ -36,7 +36,7 @@ A platform built as a project is handed over at launch and decays. A platform bu
 
 ```mermaid
 graph LR
-    U[Users<br/>stream-aligned teams] -->|feedback, requests| PO[Platform product owner]
+    U["Users<br/>stream-aligned teams"] -->|feedback, requests| PO[Platform product owner]
     PO -->|prioritized roadmap| PE[Platform engineers]
     PE -->|capabilities, APIs, docs| U
     PE -->|telemetry| M[Measurement]
@@ -133,7 +133,7 @@ Intake is how requests enter the platform team. A good intake process:
 
 ```mermaid
 graph LR
-    R[Request] --> T{Triage<br/>weekly}
+    R[Request] --> T{"Triage<br/>weekly"}
     T -->|self-service exists| D[Point to docs or template]
     T -->|bug| B[Bug queue with SLO]
     T -->|needs discovery| DI[Discovery brief]
@@ -260,7 +260,7 @@ The contract is only useful if it is reviewed. Put it in the repository next to 
 
 ---
 
-## Self-Service Is a Product Feature, Not Just an Automation Goal
+## Self-Service Is a Product Feature, Not an Automation Goal
 
 Self-service is often presented as "automate all the tickets". Product thinking adds that self-service must be **discoverable**, **safe**, and **understandable when it fails**.
 
@@ -347,9 +347,11 @@ Build what differentiates, adopt what is commodity, and document the reasons eit
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Exercise: Write a one-quarter product plan for your platform
+
+**Goal:** finish a one-quarter plan that a user has reviewed and that you revised once.
 
 **Time:** 90–120 minutes. **Materials:** the Workload and Tenant examples above, a sample of recent support requests (real or composite), a document editor.
 
@@ -366,6 +368,9 @@ Review with a sample user (a colleague who does not work on the platform). Ask t
 - What is missing that you expected to see?
 
 Record their answers and revise the roadmap once.
+
+Check: your plan contains two personas, a categorized request count, one problem brief, three scored
+initiatives, a Now / Next / Later roadmap, one service contract, and the reviewer's three answers.
 
 **Discussion questions:**
 - Which of your roadmap items would you still do if the users did not ask for them? Should you?

@@ -8,13 +8,13 @@ says where the rule applies and what it does on failure. Both are in
 
 ```mermaid
 flowchart LR
-  REQ[kubectl apply] --> API[kube-apiserver]
-  API --> M{Binding matches<br/>namespace / resource?}
+  REQ["kubectl apply"] --> API["kube-apiserver"]
+  API --> M{"Binding matches<br/>namespace / resource?"}
   M -- no --> OK[Admit]
-  M -- yes --> P[ValidatingAdmissionPolicy<br/>CEL expressions]
-  PC[(ConfigMap<br/>paramRef)] -. params .-> P
-  P -- all true --> OK
-  P -- false --> ACT{validationActions}
+  M -- yes --> P["ValidatingAdmissionPolicy<br/>CEL expressions"]
+  PC[("ConfigMap<br/>paramRef")] -. params .-> P
+  P -- "all true" --> OK
+  P -- "false" --> ACT{"validationActions"}
   ACT -- Deny --> DENY[Reject request]
   ACT -- Warn --> WARN[Admit with warning]
   ACT -- Audit --> AUD[Record in audit log]

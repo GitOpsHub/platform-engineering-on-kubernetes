@@ -63,11 +63,11 @@ Clients connect to `localhost`, and the local proxy handles routing, retries and
 ```mermaid
 graph LR
     subgraph Service host
-        S[Service instance] --- N[Nerve<br/>health check and register]
+        S[Service instance] --- N["Nerve<br/>health check and register"]
     end
     N --> R[(ZooKeeper registry)]
     subgraph Client host
-        C[Client app] --> L[Local HAProxy<br/>configured by Synapse]
+        C[Client app] --> L["Local HAProxy<br/>configured by Synapse"]
         SY[Synapse] --> L
     end
     R --> SY
@@ -155,7 +155,7 @@ The inventory phase is consistently the most underestimated. Use the [Service Ca
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Exercise: Plan a batch migration
 

@@ -16,7 +16,7 @@
 
 ## Overview
 
-Rotation is the process of replacing a credential before it is compromised or simply because it is old. A
+Rotation is the process of replacing a credential before it is compromised or because it is old. A
 platform that rotates secrets by hand will eventually skip a step, so the goal is to make rotation a
 property of the system rather than an event someone remembers.
 
@@ -32,8 +32,8 @@ all three steps.
 
 ```mermaid
 graph LR
-    Source[Source of truth<br/>Vault, cloud IAM, CA] -->|1. issue new value| Deliver[Delivery<br/>ESO, Vault Agent, CSI, cert-manager]
-    Deliver -->|2. Secret or file updated| Consume[Consumption<br/>app re-read or restart]
+    Source["Source of truth<br/>Vault, cloud IAM, CA"] -->|1. issue new value| Deliver["Delivery<br/>ESO, Vault Agent, CSI, cert-manager"]
+    Deliver -->|2. Secret or file updated| Consume["Consumption<br/>app re-read or restart"]
     Consume -->|3. old credential unused| Revoke[Revoke or expire old value]
     Revoke -.->|next cycle| Source
 ```
@@ -376,9 +376,9 @@ Use **dual-credential overlap**:
 
 ```mermaid
 graph TD
-    A[Step 1: create credential B<br/>while A is still valid] --> B[Step 2: update store object to use B]
-    B --> C[Step 3: wait for one full refresh cycle<br/>and confirm all ExternalSecrets are Ready]
-    C --> D[Step 4: revoke credential A]
+    A["Step 1: create credential B<br/>while A is still valid"] --> B["Step 2: update store object to use B"]
+    B --> C["Step 3: wait for one full refresh cycle<br/>and confirm all ExternalSecrets are Ready"]
+    C --> D["Step 4: revoke credential A"]
 ```
 
 The procedure for a Kubernetes-auth ESO store does not need a stored credential at all, which is one reason

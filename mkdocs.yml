@@ -1,0 +1,188 @@
+site_name: Platform Engineering on Kubernetes
+site_description: A hands-on learning path for platform engineering on Kubernetes
+site_url: https://gitopshub.github.io/platform-engineering-on-kubernetes/
+repo_url: https://github.com/GitOpsHub/platform-engineering-on-kubernetes
+repo_name: platform-engineering-on-kubernetes
+edit_uri: edit/main/
+
+# scripts/build-docs.sh copies the published files into site-src/ and keeps their relative
+# layout, so links such as ../../docs/... still resolve. Run it instead of `mkdocs build`.
+docs_dir: site-src
+site_dir: site
+
+# Lab 04 service templates are scaffolding copied by Backstage, not reading material.
+exclude_docs: |
+  labs/lab-04-service-catalog/templates/
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+    absolute_links: warn
+  links:
+    not_found: warn
+    anchors: warn
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - navigation.path
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+nav:
+  - Home: README.md
+  - Start Here: START-HERE.md
+  - Contributing: CONTRIBUTING.md
+  - Documentation:
+      - 01-kubernetes-fundamentals:
+          - docs/01-kubernetes-fundamentals/README.md
+          - docs/01-kubernetes-fundamentals/api-primer.md
+          - docs/01-kubernetes-fundamentals/controllers-operators.md
+          - docs/01-kubernetes-fundamentals/kubernetes-architecture.md
+          - docs/01-kubernetes-fundamentals/rbac.md
+          - docs/01-kubernetes-fundamentals/scheduling.md
+          - docs/01-kubernetes-fundamentals/storage.md
+      - 02-container-runtime:
+          - docs/02-container-runtime/README.md
+          - docs/02-container-runtime/container-runtimes.md
+          - docs/02-container-runtime/image-security.md
+          - docs/02-container-runtime/image-spec.md
+          - docs/02-container-runtime/runtime-classes.md
+      - 03-networking-fundamentals:
+          - docs/03-networking-fundamentals/README.md
+          - docs/03-networking-fundamentals/cni-overview.md
+          - docs/03-networking-fundamentals/ingress-controllers.md
+          - docs/03-networking-fundamentals/network-policies.md
+          - docs/03-networking-fundamentals/service-mesh.md
+      - 04-infrastructure-as-code:
+          - docs/04-infrastructure-as-code/README.md
+          - docs/04-infrastructure-as-code/crossplane.md
+          - docs/04-infrastructure-as-code/drift-detection.md
+          - docs/04-infrastructure-as-code/gitops-tool-comparison.md
+          - docs/04-infrastructure-as-code/terraform-kubernetes.md
+      - 05-gitops:
+          - docs/05-gitops/README.md
+          - docs/05-gitops/argocd-deep-dive.md
+          - docs/05-gitops/flux-deep-dive.md
+          - docs/05-gitops/gitops-principles.md
+          - docs/05-gitops/multi-cluster-gitops.md
+      - 06-secrets-management:
+          - docs/06-secrets-management/README.md
+          - docs/06-secrets-management/external-secrets.md
+          - docs/06-secrets-management/sealed-secrets.md
+          - docs/06-secrets-management/secrets-rotation.md
+          - docs/06-secrets-management/vault-integration.md
+      - 07-internal-developer-platform:
+          - docs/07-internal-developer-platform/README.md
+          - docs/07-internal-developer-platform/backstage.md
+          - docs/07-internal-developer-platform/custom-portal.md
+          - docs/07-internal-developer-platform/platform-capabilities.md
+          - docs/07-internal-developer-platform/port.md
+      - 08-self-service:
+          - docs/08-self-service/README.md
+          - docs/08-self-service/developer-experience.md
+          - docs/08-self-service/environment-provisioning.md
+          - docs/08-self-service/scaffolding.md
+          - docs/08-self-service/service-catalog.md
+      - 09-platform-apis:
+          - docs/09-platform-apis/README.md
+          - docs/09-platform-apis/api-gateway.md
+          - docs/09-platform-apis/controller-runtime.md
+          - docs/09-platform-apis/kubernetes-crds.md
+          - docs/09-platform-apis/platform-api-design.md
+      - 10-observability:
+          - docs/10-observability/README.md
+          - docs/10-observability/alerting.md
+          - docs/10-observability/logging-stack.md
+          - docs/10-observability/metrics-stack.md
+          - docs/10-observability/profiling.md
+          - docs/10-observability/tracing-stack.md
+      - 11-reliability:
+          - docs/11-reliability/README.md
+          - docs/11-reliability/capacity-planning.md
+          - docs/11-reliability/chaos-engineering.md
+          - docs/11-reliability/disaster-recovery.md
+          - docs/11-reliability/slos-slis.md
+      - 12-security-compliance:
+          - docs/12-security-compliance/README.md
+          - docs/12-security-compliance/compliance.md
+          - docs/12-security-compliance/pod-security.md
+          - docs/12-security-compliance/policy-engine.md
+          - docs/12-security-compliance/supply-chain.md
+      - 13-multi-cluster:
+          - docs/13-multi-cluster/README.md
+          - docs/13-multi-cluster/cluster-federation.md
+          - docs/13-multi-cluster/multi-cluster-gitops.md
+          - docs/13-multi-cluster/multi-cluster-networking.md
+          - docs/13-multi-cluster/workload-distribution.md
+      - 14-platform-evolution:
+          - docs/14-platform-evolution/README.md
+          - docs/14-platform-evolution/maturity-model.md
+          - docs/14-platform-evolution/measuring-success.md
+          - docs/14-platform-evolution/platform-product.md
+          - docs/14-platform-evolution/team-topologies.md
+      - 15-case-studies:
+          - docs/15-case-studies/README.md
+          - docs/15-case-studies/airbnb.md
+          - docs/15-case-studies/generic-enterprise.md
+          - docs/15-case-studies/netflix.md
+          - docs/15-case-studies/spotify.md
+  - Labs:
+      - lab-01-cluster-setup:
+          - labs/lab-01-cluster-setup/README.md
+      - lab-02-gitops-bootstrap:
+          - labs/lab-02-gitops-bootstrap/README.md
+      - lab-03-platform-api:
+          - labs/lab-03-platform-api/README.md
+      - lab-04-service-catalog:
+          - labs/lab-04-service-catalog/README.md
+      - lab-05-policy-engine:
+          - labs/lab-05-policy-engine/README.md
+          - labs/lab-05-policy-engine/cel-expressions.md
+      - lab-06-observability-stack:
+          - labs/lab-06-observability-stack/README.md
+      - lab-07-multi-tenancy:
+          - labs/lab-07-multi-tenancy/README.md
+          - labs/lab-07-multi-tenancy/tenant-operator/README.md
+      - lab-08-platform-upgrade:
+          - labs/lab-08-platform-upgrade/README.md
+          - labs/lab-08-platform-upgrade/blue-green-deploy.md
+          - labs/lab-08-platform-upgrade/canary-upgrade.md
+          - labs/lab-08-platform-upgrade/rollback-procedures.md

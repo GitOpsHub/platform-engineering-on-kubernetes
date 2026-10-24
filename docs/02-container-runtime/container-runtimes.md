@@ -39,10 +39,10 @@ The runtime is also where **images become processes**. Everything in [Image Spec
 
 ```mermaid
 graph TB
-    Kubelet[kubelet] -->|CRI gRPC over unix socket| HL[High-level runtime<br/>containerd / CRI-O]
+    Kubelet[kubelet] -->|CRI gRPC over unix socket| HL["High-level runtime<br/>containerd / CRI-O"]
     HL -->|pull, unpack, snapshot| Store[(Content store +<br/>snapshotter)]
-    HL -->|spawn| Shim[Shim process<br/>containerd-shim-runc-v2 / conmon]
-    Shim -->|OCI runtime spec<br/>config.json + rootfs| LL[Low-level OCI runtime<br/>runc / crun / runsc / kata]
+    HL -->|spawn| Shim["Shim process<br/>containerd-shim-runc-v2 / conmon"]
+    Shim -->|OCI runtime spec<br/>config.json + rootfs| LL["Low-level OCI runtime<br/>runc / crun / runsc / kata"]
     LL -->|clone, namespaces,<br/>cgroups, seccomp| Proc[Container process]
     Kubelet -->|CNI via runtime| CNI[CNI plugins]
     HL -->|RunPodSandbox calls| CNI
@@ -510,7 +510,7 @@ For fleets, prefer replacing nodes over in-place upgrades — see [Lab 08: Platf
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Explore the Runtime Inside a kind Node
 
@@ -697,6 +697,6 @@ Tune `imageGCHighThresholdPercent`/`imageGCLowThresholdPercent`, and consider `i
 ## Next Steps
 
 1. **Read**: [OCI Image Spec](image-spec.md) — what the runtime actually pulls and unpacks
-2. **Read**: [Runtime Classes](runtime-classes.md) — add gVisor or Kata handlers to the containerd config you just learned
+2. **Read**: [Runtime Classes](runtime-classes.md) — add gVisor or Kata handlers to the containerd config you learned above
 3. **Practice**: Complete the registry-mirror exercise against your [Lab 01](../../labs/lab-01-cluster-setup/README.md) cluster
 4. **Explore**: [CNI Overview](../03-networking-fundamentals/cni-overview.md) — the other half of `RunPodSandbox`

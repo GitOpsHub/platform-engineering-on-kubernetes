@@ -21,16 +21,16 @@
 ```mermaid
 graph LR
     Src[Source code] --> Build[CI build]
-    Deps[Base images +<br/>dependencies] --> Build
+    Deps["Base images +<br/>dependencies"] --> Build
     Build --> Reg[(Registry)]
     Reg --> Adm[Admission control]
-    Adm --> Node[Node / runtime]
+    Adm --> Node["Node / runtime"]
 
-    T1[Malicious or<br/>vulnerable dependency]:::threat -.-> Deps
-    T2[Compromised CI /<br/>tampered build]:::threat -.-> Build
-    T3[Tag overwritten /<br/>registry compromise]:::threat -.-> Reg
-    T4[Unapproved image<br/>deployed directly]:::threat -.-> Adm
-    T5[Container escape /<br/>runtime exploit]:::threat -.-> Node
+    T1["Malicious or<br/>vulnerable dependency"]:::threat -.-> Deps
+    T2["Compromised CI /<br/>tampered build"]:::threat -.-> Build
+    T3["Tag overwritten /<br/>registry compromise"]:::threat -.-> Reg
+    T4["Unapproved image<br/>deployed directly"]:::threat -.-> Adm
+    T5["Container escape /<br/>runtime exploit"]:::threat -.-> Node
     classDef threat fill:#fdd,stroke:#c00
 ```
 
@@ -164,7 +164,7 @@ A scanner reports what *could* matter. Platform teams should define a policy tha
 | Gate on | Fixable `CRITICAL` (and `HIGH` for internet-facing services) |
 | Unfixed CVEs | Report, don't block; track until a fix ships |
 | Exceptions | Time-boxed, reviewed, recorded in Git (`.trivyignore.yaml` or VEX) |
-| Rescanning | Continuously, not just at build time — new CVEs appear daily |
+| Rescanning | Continuously, not only at build time — new CVEs appear daily |
 | SLA | e.g. Critical: 7 days, High: 30 days, tracked per team |
 
 ```yaml
@@ -236,12 +236,12 @@ Scanning tells you *what* is in an image; signing tells you *who produced it* an
 
 ```mermaid
 graph LR
-    CI[CI job / developer] -->|1. OIDC token| Fulcio[Fulcio<br/>certificate authority]
+    CI["CI job / developer"] -->|1. OIDC token| Fulcio["Fulcio<br/>certificate authority"]
     Fulcio -->|2. short-lived cert<br/>identity = workflow or email| CI
     CI -->|3. sign digest| Sig[Signature + cert]
     Sig -->|4. record| Rekor[(Rekor<br/>transparency log)]
     Sig -->|5. push alongside image| Reg[(OCI registry)]
-    Verifier[cosign verify /<br/>Kyverno] -->|6. fetch sig| Reg
+    Verifier["cosign verify /<br/>Kyverno"] -->|6. fetch sig| Reg
     Verifier -->|7. check inclusion| Rekor
     Verifier -->|8. check identity + issuer| Policy{Expected<br/>identity?}
 ```
@@ -258,7 +258,7 @@ graph LR
 | Aspect | Keyless (OIDC) | Key pair / KMS |
 |--------|----------------|----------------|
 | Secrets to manage | None | Private key or KMS key |
-| Identity in signature | Workflow URL, email, SPIFFE ID | Just "holder of this key" |
+| Identity in signature | Workflow URL, email, SPIFFE ID | Only "holder of this key" |
 | Works offline / air-gapped | Needs Fulcio + Rekor (public or private instance) | Yes (`--tlog-upload=false` possible) |
 | Rotation | Automatic (certs expire in minutes) | Manual |
 | Best for | CI on GitHub/GitLab/cloud with OIDC | Air-gapped, regulated, or legacy CI |
@@ -415,7 +415,7 @@ spec:
 ```
 
 Key behaviors:
-- Policies on `Pod` are auto-generated for Deployments, StatefulSets, Jobs, etc. (Kyverno autogen), so failures surface when the *controller* is created, not later.
+- Policies on `Pod` are auto-generated for Deployments, StatefulSets, and Jobs (Kyverno autogen), so failures surface when the *controller* is created, not later.
 - `mutateDigest` makes the running image immutable even if the tag is later overwritten.
 - Kyverno caches verification results; tune `webhookTimeoutSeconds` for slow registries.
 - Newer Kyverno releases also offer the CEL-based `ImageValidatingPolicy` kind for the same purpose; the `ClusterPolicy` form above remains supported. See [Policy Engine](../12-security-compliance/policy-engine.md) for choosing between them.
@@ -566,7 +566,7 @@ gh attestation verify oci://ghcr.io/mycompany/api@sha256:aaa... --owner mycompan
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Goal
 Sign an image, attach an SBOM attestation, and have Kyverno block unsigned images in a tenant namespace. We use [ttl.sh](https://ttl.sh), an anonymous ephemeral registry, so no credentials are needed, and a key pair so no OIDC provider is needed.

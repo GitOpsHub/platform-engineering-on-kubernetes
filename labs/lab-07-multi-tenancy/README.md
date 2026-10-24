@@ -24,8 +24,10 @@ Background reading:
 [Network Policies](../../docs/03-networking-fundamentals/network-policies.md),
 [Platform API design](../../docs/09-platform-apis/platform-api-design.md).
 
-## Estimated Time: 30-40 minutes
-(About 5 minutes of that is pulling the demo images on the first run.)
+## Estimated Time
+
+30-40 minutes, about 5 of which are pulling the demo images on the first run.
+Difficulty: Intermediate.
 
 ---
 
@@ -40,7 +42,9 @@ kubectl config get-contexts -o name | grep kind-platform-engineering
 kubectl --context kind-platform-engineering get namespace platform-system
 ```
 
-If the context is missing, run Lab 01 first. Nothing here creates or deletes clusters.
+Expected result: the first command prints `kind-platform-engineering`, and the second shows
+`platform-system` as `Active`. If the context is missing, run Lab 01 first. Nothing here creates or
+deletes clusters.
 
 ### Step 2 - Read the tenant building blocks
 
@@ -72,6 +76,11 @@ cd labs/lab-07-multi-tenancy
 ./setup.sh
 ```
 
+Expected result: `==>` lines for each tenant, a warning `Tenant CRD not installed: manifest mode`
+(this is normal without the operator), and a final `==> Done. Run ./tests/verify-isolation.sh to check
+isolation.` The script creates, for each of `acme` and `globex`, the namespace `tenant-<tenant>-dev`,
+its quota, LimitRange, four NetworkPolicies, owner RoleBinding, and the `echo` and `client` demo workloads.
+
 `setup.sh` checks whether the `tenants.platform.mycompany.io` CRD exists and chooses a mode:
 
 **Manifest mode (no operator, the default).** For each tenant, `setup.sh`:
@@ -88,7 +97,9 @@ Both modes are safe to re-run.
 
 ### Step 4 - Do it by hand (optional)
 
-This is what `setup.sh` does in manifest mode for `acme`, so you can see every object:
+This is what `setup.sh` does in manifest mode for `acme`, so you can see every object. Skip it if
+you already ran `setup.sh`. Run it from `labs/lab-07-multi-tenancy`. To build the second tenant, run
+the block again with `T=globex`, which the Verification step needs.
 
 ```bash
 CTX=kind-platform-engineering
@@ -103,6 +114,10 @@ sed -e 's|__ECHO_IMAGE__|nginxinc/nginx-unprivileged:1.27-alpine|' -e 's|__CLIEN
   | kubectl --context $CTX -n $NS apply -f -
 ```
 
+Expected result: each `apply` prints `created` (or `configured` on a re-run) for the namespace, quota,
+LimitRange, NetworkPolicies, RoleBinding, Deployment and Service. The `client` pod only becomes Ready
+after the image is pulled, so wait with `kubectl --context $CTX -n $NS wait --for=condition=Ready pod/client --timeout=180s`.
+
 The rendered RoleBinding for `acme` is in [`rbac/examples/tenant-acme-owner.yaml`](rbac/examples/tenant-acme-owner.yaml).
 
 ### Step 5 - Look at the result
@@ -115,6 +130,15 @@ kubectl --context kind-platform-engineering -n tenant-acme-dev get rolebinding t
 kubectl --context kind-platform-engineering -n tenant-acme-dev get pods
 ```
 
+Expected result:
+
+- Two namespaces, `tenant-acme-dev` and `tenant-globex-dev`, with the `platform.mycompany.io/tenant` label.
+- `tenant-quota` shows used and hard limits for cpu, memory, storage and pods.
+- Four NetworkPolicies: `tenant-default-deny`, `tenant-allow-same-tenant`, `tenant-allow-dns` and
+  `tenant-allow-ingress-from-traefik`.
+- RoleBinding `tenant-owners` with the group `tenant:acme:owners`.
+- Pods `client` and `echo-<hash>` both `Running` and `1/1` ready.
+
 ---
 
 ## Verification
@@ -123,7 +147,7 @@ kubectl --context kind-platform-engineering -n tenant-acme-dev get pods
 ./tests/verify-isolation.sh
 ```
 
-The script runs five checks:
+Run it from `labs/lab-07-multi-tenancy`, after both tenants exist. The script runs five checks:
 
 | Check | What it proves | How |
 |-------|----------------|-----|
@@ -133,7 +157,16 @@ The script runs five checks:
 | (d) quota | The quota rejects an oversized pod | Server-side dry run of a pod requesting `cpu: 4` on top of the 100m already used. The error must contain `exceeded quota` |
 | (e) RBAC scope | The owner group is admin only inside its namespace | `kubectl auth can-i --as-group tenant:acme:owners`: `no` for `list nodes`, `yes` for `create deployments` in the namespace |
 
-Expected end of output: `=== 6 passed, 0 failed ===`. Check (e) runs two assertions, so there are six in total.
+Expected output (abridged):
+
+```text
+  [PASS] (a) same-tenant HTTP succeeds (tenant-acme-dev client -> echo)
+  [PASS] (b) cross-tenant HTTP blocked (tenant-acme-dev client -> tenant-globex-dev echo, curl exit 28)
+  ...
+=== 6 passed, 0 failed ===
+```
+
+The final line is `=== 6 passed, 0 failed ===`. Check (e) runs two assertions, so there are six in total.
 
 > **Check (b) depends on the CNI.** NetworkPolicy is only enforced because Lab 01 uses Cilium. On a CNI that ignores NetworkPolicy (kindnet, flannel without policy) the cross-tenant `curl` succeeds and (b) fails. That is a real isolation gap, not a test bug.
 
@@ -152,11 +185,24 @@ kubectl --context kind-platform-engineering -n tenant-acme-dev exec client -- \
 
 Use this mode only if you have built and installed `tenant-operator` from `code/tenant-operator`. Do not run the manifest mode and operator mode on the same tenant at the same time.
 
+To try it, install the CRD and run the operator locally against the lab cluster. This needs Go and
+`make`, and `make` uses your current kubectl context, so switch to the lab cluster first:
+
+```bash
+kubectl config use-context kind-platform-engineering
+cd ../../code/tenant-operator
+make install run    # installs the CRD, then runs the controller in the foreground (Ctrl+C to stop)
+```
+
+Leave that terminal running and open a second one for the commands below. See the
+[operator README](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/README.md)
+for other deployment options.
+
 The operator adopts a namespace that carries its labels, but it never adopts an existing ResourceQuota, LimitRange, NetworkPolicy or RoleBinding that it did not create. If those already exist, it reports `ObjectConflict`. So to switch a cluster that ran the lab in manifest mode:
 
 ```bash
 ./teardown.sh          # delete the manifest-mode tenants
-# install the operator (see tenant-operator/README.md)
+# install the operator (see above)
 ./setup.sh             # now runs in operator mode
 kubectl --context kind-platform-engineering get tenants
 ```
@@ -168,15 +214,24 @@ kubectl --context kind-platform-engineering -n tenant-acme-dev get resourcequota
 # expect: Tenant
 ```
 
+Expected result: `kubectl get tenants` lists `acme` and `globex` with phase `Ready`.
+
 ---
 
 ## Cleanup
+
+> **Warning:** `teardown.sh` deletes the tenant namespaces and everything in them.
 
 ```bash
 ./teardown.sh
 ```
 
-This deletes the `Tenant` CRs (if the CRD exists) and the namespaces `tenant-acme-dev` and `tenant-globex-dev`. Everything in a tenant namespace goes with it. The Lab 01 cluster and its platform namespaces are untouched. Re-running `teardown.sh` is safe because every delete uses `--ignore-not-found`.
+Expected result: `namespace "tenant-acme-dev" deleted` and `namespace "tenant-globex-dev" deleted`,
+then `==> Done. Lab 01 cluster left in place.` This deletes the `Tenant` CRs (if the CRD exists) and the namespaces `tenant-acme-dev` and `tenant-globex-dev`. Everything in a tenant namespace goes with it. The Lab 01 cluster and its platform namespaces are untouched. Re-running `teardown.sh` is safe because every delete uses `--ignore-not-found`.
+
+Still running: the kind cluster, Cilium, Traefik, cert-manager and the Lab 01 namespaces. If you
+started the operator with `make run`, stop it with Ctrl+C. The `Tenant` CRD stays installed; remove
+it with `make uninstall` in `code/tenant-operator` if you no longer need it.
 
 ---
 
@@ -231,7 +286,7 @@ The CRD is not installed, so `setup.sh` is in manifest mode. That is expected wi
 
 ## Next Steps
 
-1. **Read**: [Platform API design](../../docs/09-platform-apis/platform-api-design.md) for why tenants are an API object and not just a namespace convention
+1. **Read**: [Platform API design](../../docs/09-platform-apis/platform-api-design.md) for why tenants are an API object and not only a namespace convention
 2. **Explore**: [`tenant-operator/`](tenant-operator/README.md) for the `Tenant` model, the remaining differences from this lab, and what the operator reconciles
 3. **Lab 08**: [Platform Upgrade](../lab-08-platform-upgrade/README.md). The tenant policies in this lab must survive a platform upgrade intact
 

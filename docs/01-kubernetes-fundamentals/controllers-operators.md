@@ -18,7 +18,7 @@
 
 ## Why Controllers Matter to Platform Engineers
 
-Everything in Kubernetes that *does* something is a controller. A Deployment is just a record in etcd; the
+Everything in Kubernetes that *does* something is a controller. A Deployment is a record in etcd; the
 Deployment controller is what turns it into ReplicaSets, and the ReplicaSet controller is what turns those into
 Pods. The platform you build on top of Kubernetes works the same way: a `Tenant` object is inert until a
 controller reconciles it into Namespaces, RBAC, quotas, and network policies.
@@ -43,11 +43,11 @@ the API server, and reports what it observed back into `status`.
 
 ```mermaid
 graph LR
-    User[User / GitOps agent] -->|writes spec| API[(API Server / etcd)]
+    User["User / GitOps agent"] -->|writes spec| API[(API Server / etcd)]
     API -->|watch events| Ctrl[Controller]
     Ctrl -->|read desired state| API
     Ctrl -->|create/update/delete children| API
-    Ctrl -->|act on external systems| Ext[Cloud APIs / DNS / Vault]
+    Ctrl -->|act on external systems| Ext["Cloud APIs / DNS / Vault"]
     Ctrl -->|write status + conditions| API
 ```
 
@@ -173,10 +173,10 @@ flowchart TD
     A[Need to automate something on Kubernetes] --> B{Is there a maintained<br/>operator / Helm chart already?}
     B -->|Yes| C[Use it; contribute upstream]
     B -->|No| D{Is it pure templating<br/>of existing resources?}
-    D -->|Yes| E[Helm / Kustomize / Crossplane Composition<br/>or kro / Kyverno generate]
+    D -->|Yes| E["Helm / Kustomize / Crossplane Composition<br/>or kro / Kyverno generate"]
     D -->|No| F{Needs continuous reconciliation,<br/>external APIs, or day-2 logic?}
     F -->|No| E
-    F -->|Yes| G[Write a controller with<br/>controller-runtime / Kubebuilder]
+    F -->|Yes| G["Write a controller with<br/>controller-runtime / Kubebuilder"]
 ```
 
 Write an operator when the logic needs **continuous** convergence, multi-step workflows, external side effects,
@@ -304,7 +304,7 @@ kubectl get lease -n tenant-operator-system
 
 [controller-runtime](https://github.com/kubernetes-sigs/controller-runtime) (v0.17+) wraps informers, caches,
 queues, and leader election behind a `Manager` and a `Reconciler` interface. [Kubebuilder](https://book.kubebuilder.io/)
-scaffolds projects on top of it. The full implementation lives in [`code/tenant-operator/`](../../code/tenant-operator/);
+scaffolds projects on top of it. The full implementation lives in [`code/tenant-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/);
 the platform API design is covered in [Kubernetes CRDs](../09-platform-apis/kubernetes-crds.md) and
 [controller-runtime deep dive](../09-platform-apis/controller-runtime.md).
 
@@ -587,7 +587,7 @@ See [Metrics Stack](../10-observability/metrics-stack.md) for scraping and dashb
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Exercise 1: Watch the Built-in Controllers Work
 
@@ -778,4 +778,4 @@ kubectl get events -A --field-selector reason=OwnerRefInvalidNamespace
 2. **Read**: [RBAC](./rbac.md) — give your operator least-privilege permissions
 3. **Go deeper**: [Kubernetes CRDs](../09-platform-apis/kubernetes-crds.md) and [controller-runtime](../09-platform-apis/controller-runtime.md)
 4. **Build**: [Lab 03: Platform API](../../labs/lab-03-platform-api/) — implement `Tenant`, `Environment`, and `Workload` controllers
-5. **Explore**: [`code/tenant-operator/`](../../code/tenant-operator/) for a complete reference implementation
+5. **Explore**: [`code/tenant-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/) for a complete reference implementation

@@ -20,11 +20,11 @@
 
 ```mermaid
 graph LR
-    Dev[Developer] -->|creates| PVC[PersistentVolumeClaim<br/>namespaced, 'I need 20Gi RWO fast']
-    PVC -->|references| SC[StorageClass<br/>cluster-scoped, 'how to provision fast']
+    Dev[Developer] -->|creates| PVC["PersistentVolumeClaim<br/>namespaced, 'I need 20Gi RWO fast'"]
+    PVC -->|references| SC["StorageClass<br/>cluster-scoped, 'how to provision fast'"]
     SC -->|provisioner| CSI[CSI Driver]
     CSI -->|creates disk via cloud API| Disk[(Cloud Disk / LUN / NFS share)]
-    CSI -->|creates| PV[PersistentVolume<br/>cluster-scoped, 'this specific disk']
+    CSI -->|creates| PV["PersistentVolume<br/>cluster-scoped, 'this specific disk'"]
     PV <-->|bound 1:1| PVC
     Pod -->|mounts| PVC
 ```
@@ -275,20 +275,20 @@ migrated to CSI and removed; on modern clusters, **all dynamic provisioning goes
 ```mermaid
 graph TB
     subgraph Control plane side - Deployment/StatefulSet
-        EP[external-provisioner] -->|CreateVolume / DeleteVolume| CD[CSI driver<br/>Controller service]
+        EP[external-provisioner] -->|CreateVolume / DeleteVolume| CD["CSI driver<br/>Controller service"]
         EA[external-attacher] -->|ControllerPublishVolume| CD
         ER[external-resizer] -->|ControllerExpandVolume| CD
         ES[external-snapshotter] -->|CreateSnapshot| CD
     end
     subgraph Every node - DaemonSet
         NDR[node-driver-registrar] -->|registers socket| KL[kubelet]
-        KL -->|NodeStageVolume / NodePublishVolume| ND[CSI driver<br/>Node service]
+        KL -->|NodeStageVolume / NodePublishVolume| ND["CSI driver<br/>Node service"]
         LP[livenessprobe] --> ND
     end
     API[(API Server)] <--> EP & EA & ER & ES
     API <--> KL
     CD --> Backend[(Storage backend API)]
-    ND --> Dev[/dev/nvme1n1 → mount/]
+    ND --> Dev["/dev/nvme1n1 → mount/"]
 ```
 
 | Sidecar | Watches | Calls (CSI RPC) |
@@ -455,7 +455,7 @@ The `Environment` CRD in this repo stamps quotas like this per environment — s
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 Uses kind's built-in `standard` StorageClass (rancher local-path-provisioner, `WaitForFirstConsumer`).
 
@@ -618,4 +618,4 @@ kubectl patch pv <pv> --type=json -p '[{"op":"remove","path":"/spec/claimRef"}]'
 1. **Read**: [RBAC](./rbac.md) — control who can create StorageClasses and PVs
 2. **Read**: [Disaster Recovery](../11-reliability/disaster-recovery.md) — Velero and snapshot-based backups
 3. **Practice**: [Lab 01: Cluster Setup](../../labs/lab-01-cluster-setup/README.md) — install CSI components on your local cluster
-4. **Explore**: [Terraform modules — addons](../../code/terraform-modules/) for installing cloud CSI drivers with IAM
+4. **Explore**: [Terraform modules — addons](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/terraform-modules/) for installing cloud CSI drivers with IAM

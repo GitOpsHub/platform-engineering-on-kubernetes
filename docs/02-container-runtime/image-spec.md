@@ -496,7 +496,7 @@ providers:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Part 1: Dissect a Public Multi-Arch Image
 
@@ -639,7 +639,7 @@ Look for package caches, build toolchains in the final stage, and files deleted 
 
 ## Next Steps
 
-1. **Read**: [Image Security](image-security.md) — sign the digests and scan the layers you just inspected
+1. **Read**: [Image Security](image-security.md) — sign the digests and scan the layers you inspected
 2. **Read**: [Supply Chain Security](../12-security-compliance/supply-chain.md) — SLSA provenance built on these attestations
 3. **Practice**: Add OCI annotations and `--provenance=mode=max` to a service build in your CI
 4. **Explore**: [Flux Deep Dive](../05-gitops/flux-deep-dive.md) — `OCIRepository` for GitOps from registries

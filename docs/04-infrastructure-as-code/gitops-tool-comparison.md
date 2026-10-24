@@ -21,7 +21,7 @@
 ```mermaid
 graph LR
     subgraph Imperative_run["Run-to-converge (push)"]
-        TF[Terraform / OpenTofu]
+        TF["Terraform / OpenTofu"]
         Pulumi[Pulumi]
     end
     subgraph Continuous["Continuously reconciling (pull)"]
@@ -60,7 +60,7 @@ The rest of this document compares the three GitOps controllers.
 graph TB
     subgraph ArgoCD["Argo CD (hub)"]
         AS[API Server + UI]
-        RS[Repo Server<br/>renders Helm/Kustomize]
+        RS["Repo Server<br/>renders Helm/Kustomize"]
         AC[Application Controller]
         ASC[ApplicationSet Controller]
         AS --> AC
@@ -72,15 +72,15 @@ graph TB
         KC[kustomize-controller]
         HC[helm-controller]
         NC[notification-controller]
-        IC[image-reflector/automation]
+        IC["image-reflector/automation"]
         SC --> KC
         SC --> HC
     end
     subgraph FleetArch["Fleet (manager + agents)"]
-        FM[fleet-controller<br/>on manager cluster]
+        FM["fleet-controller<br/>on manager cluster"]
         GJ[gitjob]
-        FA1[fleet-agent<br/>downstream 1]
-        FA2[fleet-agent<br/>downstream 2]
+        FA1["fleet-agent<br/>downstream 1"]
+        FA2["fleet-agent<br/>downstream 2"]
         GJ --> FM
         FA1 -->|pull Bundles| FM
         FA2 -->|pull Bundles| FM
@@ -268,7 +268,7 @@ targetCustomizations:
 | Human access | SSO + Argo RBAC (`argocd-rbac-cm`) | Kubernetes RBAC on Flux CRDs | Rancher RBAC |
 | Lockdown flags | `applicationsetcontroller.policy`, `server.rbac` | `--no-cross-namespace-refs`, `--default-service-account`, `--no-remote-bases` | — |
 
-For this repo's `Tenant` model, both Argo CD and Flux work well. Argo CD maps a `Tenant` to an `AppProject`; Flux maps it to a namespace, a ServiceAccount, and a `Kustomization` with `serviceAccountName`. The [tenant operator](../../code/tenant-operator/) can generate either.
+For this repo's `Tenant` model, both Argo CD and Flux work well. Argo CD maps a `Tenant` to an `AppProject`; Flux maps it to a namespace, a ServiceAccount, and a `Kustomization` with `serviceAccountName`. The [tenant operator](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/) can generate either.
 
 ### Scale
 
@@ -290,7 +290,7 @@ For this repo's `Tenant` model, both Argo CD and Flux work well. Argo CD maps a 
 ### Developer Experience
 
 - **Argo CD** wins on visibility: the resource tree, diff view, and sync buttons are why many teams choose it. Developers can self-serve within their `AppProject`.
-- **Flux** is "just Kubernetes": status lives in CR conditions, works with any Kubernetes UI, and fits teams that drive everything through PRs and alerts.
+- **Flux** is "plain Kubernetes": status lives in CR conditions, works with any Kubernetes UI, and fits teams that drive everything through PRs and alerts.
 - **Fleet** is best when you already run Rancher: cluster registration, grouping, and UI come for free.
 
 ---

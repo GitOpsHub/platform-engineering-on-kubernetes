@@ -34,7 +34,7 @@ graph TB
     subgraph Interfaces["Interfaces (how developers consume)"]
         Portal[Portal]
         CLI[platform-cli]
-        API[Platform API / CRDs]
+        API["Platform API / CRDs"]
         GitOps[GitOps repo]
     end
     subgraph Capabilities["Capabilities (what developers get)"]
@@ -46,8 +46,8 @@ graph TB
     end
     subgraph Implementations["Implementations (how platform delivers)"]
         I1[workload-operator + Deployments + Gateway API]
-        I2[environment-operator + vcluster/namespaces]
-        I3[Crossplane + CloudNativePG / RDS]
+        I2["environment-operator + vcluster/namespaces"]
+        I3["Crossplane + CloudNativePG / RDS"]
         I4[OTel + Prometheus + Loki + Tempo]
         I5[External Secrets + Vault]
     end
@@ -275,12 +275,12 @@ A **golden path** is an opinionated, supported sequence of capabilities for a co
 
 ```mermaid
 graph LR
-    T[Template:<br/>go-grpc-service] --> R[Repo + CI]
+    T["Template:<br/>go-grpc-service"] --> R[Repo + CI]
     R --> W[Workload in dev]
     W --> DB[Postgres claim]
     W --> O[Dashboards + alerts]
-    W --> E[Preview Environments<br/>per PR]
-    W --> P[Promotion to prod<br/>via GitOps PR]
+    W --> E["Preview Environments<br/>per PR"]
+    W --> P["Promotion to prod<br/>via GitOps PR"]
 ```
 
 | Golden path | Capabilities composed | Time-to-value target |
@@ -318,46 +318,83 @@ Score candidate capabilities to choose what's next:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Write a Capability Map for Your Platform
+### Exercise 1: Write a capability map for your platform
 
-1. **List journeys.** Interview (or role-play) three developers and write their top three journeys (e.g., "ship a hotfix", "add a queue").
-2. **Map capabilities.** For each journey step, identify the capability, its interface, and its implementation. Mark gaps.
+**Goal:** Produce a capability map, two capability specs, and one measurable SLO for a platform you know. You need a text editor; step 4 needs the cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md) and the `Workload` CRD (`make -C code/workload-operator install`).
+
+1. **List journeys.** Interview (or role-play) three developers and write their top three journeys, for example "ship a hotfix" or "add a queue".
+2. **Map capabilities.** For each journey step, name the capability, its interface, and its implementation. Mark the gaps.
 3. **Write two capability specs** using the `CapabilitySpec` format above: one existing (`run-a-service`) and one gap (`get-an-environment`).
-4. **Verify parity.** For `run-a-service`, confirm every interface works:
+4. **Verify interface parity.** For `run-a-service`, confirm each interface works. Replace `<workload-file>` with the path of any `Workload` manifest, for example the one you rendered in [Scaffolding](../08-self-service/scaffolding.md):
+
    ```bash
-   # API
-   kubectl apply --dry-run=server -f tenants/payments/workloads/payments-api/workload.yaml
-   # CLI
-   platform-cli -n payments-dev workload list
-   # GitOps
-   ls platform-gitops/tenants/payments/workloads/
+   kubectl apply --dry-run=server -f <workload-file>
    ```
-5. **Define an SLO** for one capability and write the PromQL that measures it, e.g. reconcile latency from controller-runtime metrics:
+
+   Expected output:
+
+   ```text
+   workload.platform.mycompany.io/payments-api created (server dry run)
+   ```
+
+   Then repeat for the other interfaces your platform offers (CLI through [`platform-cli`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/platform-cli/), and a GitOps repository path).
+5. **Define an SLO** for one capability and write the PromQL that measures it. This example uses reconcile latency from controller-runtime metrics:
+
    ```promql
    histogram_quantile(0.99,
      sum by (le) (rate(controller_runtime_reconcile_time_seconds_bucket{controller="workload"}[30m])))
    ```
+
 6. **Prioritize** your gaps with the scoring table and pick the next capability.
 
-#### Verification
-- [ ] Each capability has exactly one owning team
-- [ ] Every GA capability is reachable through API *and* at least one of CLI/portal/GitOps
-- [ ] At least one capability has a measurable SLO
+**Check:**
+
+- [ ] Each capability has exactly one owning team.
+- [ ] Every GA capability is reachable through the API and at least one of CLI, portal, or GitOps.
+- [ ] At least one capability has an SLO with a query that returns a value.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| Teams bypass the platform | Capability doesn't fit real needs, or no escape hatch | Interview bypassing teams; add overrides or a new capability |
-| Portal and CLI behave differently | Interfaces implemented separately | Make portal and CLI thin clients of the same API |
-| Capability list keeps growing, nothing is GA | No lifecycle discipline | Cap alpha capabilities; require SLO + docs for GA |
-| "Platform" is a list of tools | Capabilities defined bottom-up | Rewrite from journeys: "developer can ___ without ___" |
-| Breaking changes anger users | No versioning/deprecation policy | Adopt alpha/beta/GA semantics with conversion webhooks |
-| Ownership disputes | Capability spans teams | Split into smaller capabilities or name a single DRI |
+### Teams bypass the platform
+
+**Cause:** Capability doesn't fit real needs, or no escape hatch
+
+**Fix:** Interview bypassing teams; add overrides or a new capability
+
+### Portal and CLI behave differently
+
+**Cause:** Interfaces implemented separately
+
+**Fix:** Make portal and CLI thin clients of the same API
+
+### Capability list keeps growing, nothing is GA
+
+**Cause:** No lifecycle discipline
+
+**Fix:** Cap alpha capabilities; require SLO + docs for GA
+
+### "Platform" is a list of tools
+
+**Cause:** Capabilities defined bottom-up
+
+**Fix:** Rewrite from journeys: "developer can ___ without ___"
+
+### Breaking changes anger users
+
+**Cause:** No versioning/deprecation policy
+
+**Fix:** Adopt alpha/beta/GA semantics with conversion webhooks
+
+### Ownership disputes
+
+**Cause:** Capability spans teams
+
+**Fix:** Split into smaller capabilities or name a single DRI
+
 
 ---
 

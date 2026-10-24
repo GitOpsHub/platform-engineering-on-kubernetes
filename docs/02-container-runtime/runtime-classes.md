@@ -22,14 +22,14 @@ With runc, every container on a node shares **one Linux kernel**. Namespaces, cg
 ```mermaid
 graph TB
     subgraph runc["runc: shared kernel"]
-        A1[Tenant A] --> K1[Host kernel<br/>~350+ syscalls exposed]
+        A1[Tenant A] --> K1["Host kernel<br/>~350+ syscalls exposed"]
         B1[Tenant B] --> K1
     end
     subgraph gvisor["gVisor: user-space kernel"]
-        A2[Tenant A] --> S2[Sentry<br/>reimplements Linux ABI] --> K2[Host kernel<br/>small syscall subset]
+        A2[Tenant A] --> S2["Sentry<br/>reimplements Linux ABI"] --> K2["Host kernel<br/>small syscall subset"]
     end
     subgraph kata["Kata: lightweight VM"]
-        A3[Tenant A] --> G3[Guest kernel] --> H3[Hypervisor<br/>QEMU / Cloud Hypervisor / Firecracker] --> K3[Host kernel + KVM]
+        A3[Tenant A] --> G3[Guest kernel] --> H3["Hypervisor<br/>QEMU / Cloud Hypervisor / Firecracker"] --> K3[Host kernel + KVM]
     end
 ```
 
@@ -270,7 +270,7 @@ Compare `uname -r` inside the Pod with `kubectl get node -o jsonpath='{.items[0]
 
 ### Pattern 1: Tenant-Tier Isolation by Policy
 
-Developers shouldn't need to remember `runtimeClassName`. The platform decides based on the tenant's isolation tier, recorded as a namespace label by the [tenant operator](../../code/tenant-operator/):
+Developers shouldn't need to remember `runtimeClassName`. The platform decides based on the tenant's isolation tier, recorded as a namespace label by the [tenant operator](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/):
 
 ```yaml
 # tenant namespace (managed by the tenant-operator from a Tenant resource)
@@ -343,7 +343,7 @@ VM-backed Pods cost more. Use a `ValidatingAdmissionPolicy` or Kyverno rule so o
 
 ### Pattern 3: Wasm Workloads
 
-With a runwasi shim installed (e.g. via the [SpinKube](https://www.spinkube.dev/) `runtime-class-manager`), a RuntimeClass exposes Wasm as just another runtime:
+With a runwasi shim installed (e.g. via the [SpinKube](https://www.spinkube.dev/) `runtime-class-manager`), a RuntimeClass exposes Wasm as another runtime:
 
 ```yaml
 # runtimeclass-wasmtime.yaml
@@ -366,13 +366,13 @@ graph TD
     Q2 -->|No| G[gVisor]
     Q2 -->|Yes| Q3{Nodes have KVM?}
     Q3 -->|Yes| K[Kata Containers]
-    Q3 -->|No| Iso[Dedicated nodes / clusters per tenant]
+    Q3 -->|No| Iso["Dedicated nodes / clusters per tenant"]
     Q1 -->|Compiled to Wasm| W[Wasm runtime]
 ```
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Goal
 Install gVisor into one kind worker node, expose it via a RuntimeClass, and observe the differences from runc. gVisor's `systrap` platform works inside a kind node container (on Linux hosts and in Docker Desktop's Linux VM); Kata is not covered here because it needs `/dev/kvm`.

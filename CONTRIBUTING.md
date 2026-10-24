@@ -22,12 +22,33 @@ Each document should include:
 - **Further Reading** - Links to official docs, books, articles
 - **Troubleshooting** - Common issues and solutions
 
+#### Topic Page Template
+Every file in `docs/NN-section/` (other than the section `README.md`) follows this order:
+
+1. `# Title` (one H1, title case, names the tools in it)
+2. `## Learning Objectives`: 3 to 5 bullets starting with a verb
+3. `## Prerequisites`: bullets that link to the earlier doc or lab that covers each one
+4. Concept sections (`##`/`###`): short paragraphs, a Mermaid diagram for any architecture or flow
+5. `## Hands-On Exercises`: numbered exercises. Each one states the goal, gives the commands,
+   shows the expected output, and ends with a check the reader can run
+6. `## Troubleshooting`: `### Symptom` headings, each with the cause and the fix
+7. `## Further Reading`: official docs and primary sources only
+
+#### Section README Template
+`docs/NN-section/README.md` has: a one-paragraph introduction, a table of the section's docs
+(file, what it covers), a suggested reading order, and the labs that use the section.
+
 #### Formatting Guidelines
-- Use clear, concise language
-- Include code blocks with language annotations
-- Use Mermaid diagrams for architecture
-- Use tables for comparisons
-- Keep line length reasonable (~100 chars)
+- Title Case headings below the H1, matching the template headings (for example, "Learning Objectives", "Hands-On Exercises"). Do not skip heading levels.
+- Every code block has a language (`bash`, `yaml`, `go`, `mermaid`, `text`, and so on).
+- Commands are copy-pasteable. Put placeholders in `<angle-brackets>` and say what to replace them with.
+- Show expected output for any command the reader is meant to check.
+- Link a term the first time a reader needs it, to the doc or lab that teaches it.
+- Use tables for comparisons, bullets for lists of steps only when order does not matter.
+- Write for a reader who has finished the previous doc: define acronyms once, then use them.
+- Keep paragraphs short (three to five sentences) and wrap prose near 100 characters.
+- Do not use "simply", "just", or "obviously". Do not use "etc." in a list of steps.
+- Link only to docs that exist in this repo, or to official project documentation. Link to code under `code/` through its GitHub URL.
 
 ### 2. Lab Contributions
 
@@ -38,11 +59,32 @@ Each document should include:
 4. Include cleanup instructions
 5. Add troubleshooting section
 
+#### Lab README Template
+1. `# Lab NN: Title`, then a one-line summary
+2. `## Objectives`
+3. `## Prerequisites`: a table with the requirement, the version, and a note
+4. `## Estimated Time`
+5. `## Files in this lab`: a table of every file and what it does
+6. `## Steps`: numbered. Each step gives the command, then the expected result
+7. `## Verification`: commands with the expected output
+8. `## Cleanup`: the exact commands, and what they leave running
+9. `## Troubleshooting`: `### Symptom` headings
+10. `## Next Steps`
+
 #### Lab Standards
 - Test on clean cluster (Kind/k3d)
-- Provide automated setup scripts (`setup.sh`, `bootstrap.sh`)
+- Provide automated setup scripts (`setup.sh`, `bootstrap.sh`) and a `teardown.sh` when the lab creates cluster state
 - Include expected time to complete
 - Tag difficulty: Beginner/Intermediate/Advanced
+- Every path, file name, and version in a step must exist in the lab or in a file the lab links to
+
+#### Checking the Docs Site Locally
+```bash
+./scripts/build-docs.sh serve    # live preview at http://127.0.0.1:8000
+./scripts/build-docs.sh          # strict build; fails on broken links or nav problems
+```
+The site is built with MkDocs Material from `pyproject.toml` (`uv` group `docs`) and deployed by
+`.github/workflows/docs.yml` on pushes to `main`.
 
 ### 3. Code Contributions
 

@@ -49,7 +49,7 @@ sequenceDiagram
 | **Sampling** | Deciding which traces to keep. *Head* sampling decides at the root; *tail* sampling decides after the trace completes |
 | **Exemplar** | A trace ID attached to a metric sample, linking a latency spike to an example trace |
 
-```
+```text
 traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
              │  └────────── trace-id ──────────┘ └─ parent-id ──┘ └ flags (01 = sampled)
              version
@@ -79,7 +79,7 @@ graph LR
     TS --> T
     T --> OS[(Object Storage)]
     T --> MG
-    MG -- remote_write --> P[Prometheus/Mimir]
+    MG -- remote_write --> P["Prometheus/Mimir"]
     G[Grafana] --> T
     G --> P
     G --> L[Loki]
@@ -479,7 +479,7 @@ global_overrides:
 ```mermaid
 graph LR
     M[Metric panel<br/>p99 spike] -- exemplar trace_id --> T[Tempo trace view]
-    T -- "Logs for this span" --> L[Loki: {namespace=...} |= trace_id]
+    T -- "Logs for this span" --> L["Loki: {namespace=...} |= trace_id"]
     T -- "Related metrics" --> M
     L -- derived field trace_id --> T
     T -- "Profiles for this span" --> PR[Pyroscope]
@@ -523,9 +523,13 @@ The log side of this needs services to emit `trace_id` in structured logs. The O
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: End-to-End Traces with Auto-Instrumentation
+### Exercise 1: End-to-end traces with auto-instrumentation
+
+Goal: add tracing to an unmodified Java app by annotating its Deployment, and find its traces in
+Tempo. Expect about 30 minutes on a kind or k3d cluster with Grafana from
+[Metrics Stack](./metrics-stack.md); add Tempo as a Grafana data source if the chart did not.
 
 ```bash
 # 1. Prereqs: cert-manager + kube-prometheus-stack from metrics-stack.md
@@ -589,6 +593,18 @@ kubectl -n observability logs deploy/simple-collector | grep -c "Traces"
 # 8. In Grafana → Explore → Tempo, run:
 #    { resource.service.name = "petclinic" && duration > 50ms }
 ```
+
+Expected output:
+
+```text
+# step 6
+opentelemetry-auto-instrumentation-java
+# step 7 (a count of 1 or more)
+12
+```
+
+Check: the TraceQL query in step 8 returns at least one trace whose root span is a
+`GET` request. Clean up with `kubectl delete ns petclinic; kill %1`.
 
 **Stretch goals:**
 1. Replace the single collector with the agent → gateway → sampler layout and confirm errors are always kept.

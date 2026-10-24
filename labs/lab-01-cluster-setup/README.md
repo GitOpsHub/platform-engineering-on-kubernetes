@@ -21,8 +21,11 @@ Background reading: [Kubernetes Architecture](../../docs/01-kubernetes-fundament
 [CNI Overview](../../docs/03-networking-fundamentals/cni-overview.md),
 [Ingress Controllers](../../docs/03-networking-fundamentals/ingress-controllers.md).
 
-## Estimated Time: 30-45 minutes
-(About 10 minutes of that is image pulls on the first run.)
+## Estimated Time
+
+30-45 minutes (about 10 minutes of that is image pulls on the first run).
+
+**Difficulty:** Beginner
 
 ---
 
@@ -60,7 +63,14 @@ All versions live at the top of `setup.sh`; change them there.
 
 ---
 
-## Quick start
+## Steps
+
+### Quick start
+
+Run these commands from the repository root. `setup.sh` creates a 3-node cluster named
+`platform-engineering` (kubectl context `kind-platform-engineering` or
+`k3d-platform-engineering`), then installs the components listed in
+[Pinned versions](#pinned-versions) and applies `platform-components.yaml`. It is safe to re-run.
 
 ```bash
 cd labs/lab-01-cluster-setup
@@ -72,14 +82,17 @@ cd labs/lab-01-cluster-setup
 ./verify.sh                 # add --provider k3d if you used k3d
 ```
 
-The rest of this README walks through what the script does so you can run each
-step by hand and understand it.
+The script ends with `Done. kubectl context: <context>` and a `Next:` hint. If you used the
+script, skip to [Verification](#verification).
+
+The rest of this section walks through what the script does so you can run each
+step by hand and understand it. Do the steps in order, from inside `labs/lab-01-cluster-setup`.
 
 ---
 
-## Option A: kind + Cilium (recommended, closest to a real cluster)
+### Option A: kind + Cilium (recommended, closest to a real cluster)
 
-### Step 1 - Create the cluster
+#### Step 1 - Create the cluster
 
 Key settings in [`kind-cluster.yaml`](kind-cluster.yaml):
 
@@ -101,7 +114,9 @@ kind create cluster --config kind-cluster.yaml
 kubectl get nodes      # STATUS is NotReady - expected, there is no CNI yet
 ```
 
-### Step 2 - Install Cilium with kube-proxy replacement
+Expected: three nodes (`platform-engineering-control-plane` and two `platform-engineering-worker`), all `NotReady`.
+
+#### Step 2 - Install Cilium with kube-proxy replacement
 
 Because there is no kube-proxy, nothing implements the `kubernetes` Service
 ClusterIP yet. Cilium must therefore talk to the API server **directly**, which
@@ -129,6 +144,8 @@ kubectl wait --for=condition=Ready nodes --all --timeout=300s
 kubectl -n kube-system get pods -l k8s-app=cilium
 ```
 
+Expected: all nodes `Ready`, and three `cilium-*` pods `Running` (1/1).
+
 Optional, if you have the [cilium CLI](https://github.com/cilium/cilium-cli/releases)
 (`brew install cilium-cli` on macOS):
 
@@ -137,7 +154,7 @@ cilium status --wait
 cilium hubble ui          # opens Hubble UI on http://localhost:12000
 ```
 
-### Step 3 - Storage
+#### Step 3 - Storage
 
 kind already ships the Rancher **local-path-provisioner** as the default
 `standard` StorageClass, so nothing needs installing:
@@ -146,11 +163,13 @@ kind already ships the Rancher **local-path-provisioner** as the default
 kubectl get storageclass   # standard (default)   rancher.io/local-path
 ```
 
-Continue with [Platform components](#platform-components-both-options).
+Expected: one StorageClass named `standard (default)`.
+
+Continue with [Platform components](#platform-components-both-options) (Step 4).
 
 ---
 
-## Option B: k3d (faster, lighter)
+### Option B: k3d (faster, lighter)
 
 k3d runs k3s, which bundles flannel, kube-proxy, a NetworkPolicy controller and
 a `local-path` StorageClass. To keep this path fast we **keep** those and only
@@ -181,6 +200,8 @@ k3d cluster create --config k3d-cluster.yaml
 kubectl get nodes -o wide       # Ready within ~30s
 ```
 
+Expected: three nodes (`k3d-platform-engineering-server-0`, `agent-0`, `agent-1`), all `Ready`.
+
 Push images to the bundled registry and use them in-cluster:
 
 ```bash
@@ -189,18 +210,21 @@ docker push localhost:5001/nginx:alpine
 # reference it in manifests as: platform-registry.localhost:5000/nginx:alpine
 ```
 
+This step is optional and not needed for the rest of the lab.
+
 > Cilium on k3d is possible but needs extra node mounts (`/sys/fs/bpf`) and
 > `--flannel-backend=none --disable-network-policy --disable-kube-proxy`. Use
 > the kind path if you want to explore Cilium/Hubble.
 
 ---
 
-## Platform components (both options)
+### Platform components (both options)
 
 Every chart is installed with `helm upgrade --install`, so re-running is safe.
 `--repo` is used instead of `helm repo add` so no local repo state is needed.
+After each `--wait` command returns, the release's pods are Ready; check with `helm list -A`.
 
-### Step 4 - Traefik ingress controller
+#### Step 4 - Traefik ingress controller
 
 ```bash
 helm upgrade --install traefik traefik \
@@ -211,7 +235,9 @@ helm upgrade --install traefik traefik \
 Traefik's Service is a `NodePort` on **30080/30443**, which the cluster config
 maps to `127.0.0.1:8080/8443` on your laptop.
 
-### Step 5 - cert-manager
+Expected: `kubectl -n traefik get svc traefik` lists the ports as `80:30080/TCP,443:30443/TCP` (the service ports are chart defaults; the NodePorts are what matter).
+
+#### Step 5 - cert-manager
 
 ```bash
 helm upgrade --install cert-manager cert-manager \
@@ -223,7 +249,7 @@ helm upgrade --install cert-manager cert-manager \
 flag is deprecated). `crds.keep: true` stops `helm uninstall` from deleting
 every Certificate in the cluster.
 
-### Step 6 - External Secrets Operator
+#### Step 6 - External Secrets Operator
 
 ```bash
 helm upgrade --install external-secrets external-secrets \
@@ -234,7 +260,7 @@ helm upgrade --install external-secrets external-secrets \
 See [External Secrets](../../docs/06-secrets-management/external-secrets.md) for how
 `SecretStore` / `ExternalSecret` are used.
 
-### Step 7 - Sealed Secrets
+#### Step 7 - Sealed Secrets
 
 ```bash
 kubectl apply --server-side \
@@ -242,7 +268,10 @@ kubectl apply --server-side \
 kubectl -n kube-system rollout status deployment/sealed-secrets-controller
 ```
 
-### Step 8 - metrics-server
+Expected: `deployment "sealed-secrets-controller" successfully rolled out`. (`setup.sh` also passes
+`--force-conflicts`, which only matters when you re-apply over an earlier install.)
+
+#### Step 8 - metrics-server
 
 ```bash
 helm upgrade --install metrics-server metrics-server \
@@ -251,9 +280,13 @@ helm upgrade --install metrics-server metrics-server \
 ```
 
 `--kubelet-insecure-tls` is needed because kind/k3d kubelets use self-signed
-serving certificates. **Never** use it on a real cluster.
+serving certificates.
 
-### Step 9 - Platform baseline
+> **Warning:** Never use `--kubelet-insecure-tls` on a real cluster.
+
+Expected: after about a minute, `kubectl top nodes` prints CPU and memory for all three nodes.
+
+#### Step 9 - Platform baseline
 
 [`platform-components.yaml`](platform-components.yaml) creates:
 
@@ -268,8 +301,13 @@ serving certificates. **Never** use it on a real cluster.
 ```bash
 kubectl apply -f platform-components.yaml
 kubectl get clusterissuer
+kubectl -n cert-manager wait --for=condition=Ready certificate/platform-root-ca --timeout=120s
+kubectl wait --for=condition=Ready clusterissuer/platform-ca --timeout=120s
 kubectl -n platform-smoke-test get deploy,svc,ingress,certificate
 ```
+
+Expected: `platform-ca` shows `READY True`, and the `hello` Deployment, Service, Ingress and
+`hello-tls` Certificate exist in `platform-smoke-test` (the certificate turns `READY True` within seconds).
 
 > Argo CD namespace annotations and Flux labels are intentionally **not** set
 > here - Lab 02 adopts these namespaces via GitOps instead.
@@ -284,7 +322,7 @@ kubectl -n platform-smoke-test get deploy,svc,ingress,certificate
 
 Expected output (abridged):
 
-```
+```text
 === Lab 01 verification (context: kind-platform-engineering) ===
 Cluster
   [PASS] 3 nodes registered
@@ -314,16 +352,22 @@ kubectl -n kube-system get ds kube-proxy       # NotFound on kind (Cilium KPR)
 
 ## Cleanup
 
+> **Warning:** This deletes the whole cluster and everything installed in it, including
+> work from later labs.
+
 ```bash
-./teardown.sh               # deletes whichever lab cluster exists
+./teardown.sh               # deletes whichever lab cluster exists (kind, k3d, k3d registry)
 # or explicitly:
 kind delete cluster --name platform-engineering
 k3d cluster delete platform-engineering
 ```
 
+Expected: `==> Teardown complete`. After this nothing from the lab is left running;
+`kind get clusters` / `k3d cluster list` no longer list `platform-engineering`.
+
 Keep the cluster if you are continuing to Lab 02. Optionally reclaim disk
 space afterwards with `docker image prune` (this affects all of Docker, not
-just the lab).
+only the lab).
 
 ---
 
@@ -376,8 +420,8 @@ k3d registry list
 In-cluster, use the name `platform-registry.localhost:5000`, not `localhost:5001`.
 
 ### cert-manager webhook errors on `kubectl apply`
-`failed calling webhook "webhook.cert-manager.io"` right after install just
-means the webhook isn't serving yet - wait 30 seconds and re-apply (setup.sh
+`failed calling webhook "webhook.cert-manager.io"` right after install
+means the webhook is not serving yet - wait 30 seconds and re-apply (setup.sh
 uses `--wait` to avoid this).
 
 ---

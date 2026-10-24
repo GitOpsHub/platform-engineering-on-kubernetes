@@ -32,7 +32,7 @@ graph LR
     SLO --> EB[Error Budget<br/>1 - SLO]
     EB --> BR[Burn Rate Alerts]
     EB --> POL[Error Budget Policy]
-    POL --> REL[Release velocity /<br/>reliability work]
+    POL --> REL["Release velocity /<br/>reliability work"]
     SLO --> SLA[SLA<br/>contractual, looser]
 ```
 
@@ -123,7 +123,7 @@ For request-based SLOs, the budget is a count: at 99.9% and 50M requests/month y
 
 ### Burn Rate
 
-```
+```text
 burn_rate = observed_error_ratio / (1 - SLO)
 ```
 
@@ -521,7 +521,7 @@ spec:
 
 ## Error Budget Policy
 
-An SLO without a policy is just a dashboard. The policy defines what happens when budget runs low. Agree on it **before** the first incident, with product and engineering leadership signing off.
+An SLO without a policy is only a dashboard. The policy defines what happens when budget runs low. Agree on it **before** the first incident, with product and engineering leadership signing off.
 
 ```markdown
 <!-- error-budget-policy.md (template) -->
@@ -571,11 +571,14 @@ fi
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Define an SLO, Burn the Budget, Catch the Alert
+### Exercise 1: Define an SLO, burn the budget, catch the alert
 
-**Prerequisites:** the kind cluster and kube-prometheus-stack from [Lab 06](../../labs/lab-06-observability-stack/).
+Goal: generate SLO recording and alert rules with Sloth, then burn the error budget and watch the
+alert fire.
+
+**Prerequisites:** a kind cluster with kube-prometheus-stack installed as in [Metrics Stack](../10-observability/metrics-stack.md) (release `kps`, namespace `monitoring`). [Lab 06](../../labs/lab-06-observability-stack/) uses a different release and namespace, so adjust service names if you use it.
 
 ```bash
 # 1. Deploy a demo app that exposes http_requests_total with an error knob.
@@ -622,10 +625,24 @@ kubectl run load -n slo-demo --rm -it --image=curlimages/curl --restart=Never --
          curl -s -o /dev/null podinfo:9898/status/500; done'
 
 # 6. Port-forward Prometheus and query burn rate
-kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090 &
+kubectl -n monitoring port-forward svc/kps-prometheus 9090 &
 # In the UI: slo:sli_error:ratio_rate5m{sloth_service="podinfo"}
 # and:       ALERTS{alertname="PodinfoErrorBudgetBurn"}
 ```
+
+Expected output:
+
+```text
+# step 4
+NAME      AGE
+podinfo   10s
+# step 6, slo:sli_error:ratio_rate5m{sloth_service="podinfo"}
+{sloth_service="podinfo", sloth_slo="availability"}  0.5
+```
+
+Check: `ALERTS{alertname="PodinfoErrorBudgetBurn", alertstate="firing"}` returns a series after
+about 5 minutes of bad traffic. The error ratio is 0.5 because the loop sends one good and one
+failing request per iteration.
 
 **Questions to answer:**
 1. With a 50% error ratio and a 99% objective, what is the burn rate? (Answer: 0.5 / 0.01 = 50.)

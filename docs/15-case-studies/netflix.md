@@ -184,11 +184,11 @@ These are interpretations of the documented material. They are not Netflix's own
 | Resilience by failure injection | [Chaos Engineering](../11-reliability/chaos-engineering.md) |
 | Paved road | [Platform Capabilities](../07-internal-developer-platform/platform-capabilities.md), [Backstage](../07-internal-developer-platform/backstage.md) |
 | Operate what you build | [Team Topologies](../14-platform-evolution/team-topologies.md) |
-| Titus-style workload contract | `Workload` CRD in [`code/workload-operator/`](../../code/workload-operator/) |
+| Titus-style workload contract | `Workload` CRD in [`code/workload-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/workload-operator/) |
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Exercise: Write a "paved road" comparison for one service
 

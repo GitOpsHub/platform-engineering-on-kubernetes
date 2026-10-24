@@ -184,7 +184,7 @@ The `publish:github` and `catalog:register` actions are standard scaffolder acti
 1. **Autonomy needs alignment.** Squads and tribes describe ownership; chapters, guilds and golden paths provide consistency without central control.
 2. **Make the supported way the discoverable way.** A portal with a catalog, templates and docs turns policy into a route engineers take voluntarily.
 3. **Open-source the commodity, keep the differentiation.** Backstage is a framework; Spotify's own golden paths and integrations are the differentiation, and they are maintained internally.
-4. **Measure use, not just publication.** Catalog coverage (what share of services are registered with an owner) is a good adoption measure; see [Measuring Success](../14-platform-evolution/measuring-success.md).
+4. **Measure use, not publication.** Catalog coverage (what share of services are registered with an owner) is a good adoption measure; see [Measuring Success](../14-platform-evolution/measuring-success.md).
 5. **Templates create; they do not operate.** Plan for upgrades and deprecations from the first template.
 
 ## What Does Not Transfer (Analysis)
@@ -209,7 +209,7 @@ Do not start at stage 5. A scorecard without a catalog produces a list of unowne
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Exercise: Design a first golden path
 

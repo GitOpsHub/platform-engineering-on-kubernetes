@@ -59,7 +59,7 @@ graph LR
 ### Architecture
 ```mermaid
 graph TB
-    UI[ArgoCD UI/CLI] --> API[API Server]
+    UI["ArgoCD UI/CLI"] --> API[API Server]
     API --> Repo[Repository Server]
     API --> AppCtrl[Application Controller]
     AppCtrl --> K8s[Kubernetes API]
@@ -214,7 +214,7 @@ spec:
 ```
 
 Directory structure:
-```
+```text
 clusters/production/
 ├── root/
 │   ├── argocd-projects.yaml
@@ -705,7 +705,7 @@ argocd app get platform-core
 ## Best Practices
 
 ### Repository Structure
-```
+```text
 platform-config/
 ├── clusters/
 │   ├── production/

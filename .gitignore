@@ -60,3 +60,8 @@ kubeconfig*
 *.kubeconfig
 *.pem
 *.key
+
+# Documentation site build output
+site/
+site-src/
+.venv/

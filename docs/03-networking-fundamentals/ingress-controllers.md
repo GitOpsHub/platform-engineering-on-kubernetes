@@ -20,9 +20,9 @@
 
 ```mermaid
 graph LR
-    Client([Client]) --> DNS[DNS: app.mycompany.io]
-    DNS --> LB[Cloud / MetalLB<br/>Service type=LoadBalancer]
-    LB --> GW[Ingress controller / Gateway<br/>Envoy, NGINX, Traefik]
+    Client([Client]) --> DNS["DNS: app.mycompany.io"]
+    DNS --> LB["Cloud / MetalLB<br/>Service type=LoadBalancer"]
+    LB --> GW["Ingress controller / Gateway<br/>Envoy, NGINX, Traefik"]
     GW -->|Host + path routing,<br/>TLS termination| SvcA[Service A]
     GW --> SvcB[Service B]
     SvcA --> PodsA[Pods]
@@ -187,16 +187,16 @@ CRDs. Its core resources reached GA (`v1`) in Gateway API v1.0 (Oct 2023), and `
 ```mermaid
 graph TB
     subgraph Infra[Infrastructure provider]
-        GC[GatewayClass<br/>cluster-scoped<br/>which controller]
+        GC["GatewayClass<br/>cluster-scoped<br/>which controller"]
     end
-    subgraph Platform[Platform team - namespace: platform-gateways]
-        GW[Gateway<br/>listeners, TLS, IPs<br/>allowedRoutes]
+    subgraph Platform["Platform team - namespace: platform-gateways"]
+        GW["Gateway<br/>listeners, TLS, IPs<br/>allowedRoutes"]
     end
-    subgraph AppA[App team - namespace: team-orders]
+    subgraph AppA["App team - namespace: team-orders"]
         HR1[HTTPRoute orders]
         S1[Service orders-api]
     end
-    subgraph AppB[App team - namespace: team-payments]
+    subgraph AppB["App team - namespace: team-payments"]
         HR2[GRPCRoute payments]
         S2[Service payments-grpc]
     end
@@ -496,8 +496,8 @@ conformance reports before choosing.
 ```mermaid
 graph TB
     subgraph Edge[platform-gateways]
-        GWPub[Gateway: public-edge<br/>*.apps.mycompany.io]
-        GWInt[Gateway: internal-edge<br/>*.internal.mycompany.io<br/>internal LB]
+        GWPub["Gateway: public-edge<br/>*.apps.mycompany.io"]
+        GWInt["Gateway: internal-edge<br/>*.internal.mycompany.io<br/>internal LB"]
     end
     subgraph T1[Tenant acme]
         R1[HTTPRoute] --> S1[Service]
@@ -507,7 +507,7 @@ graph TB
     end
     R1 --> GWPub
     R2 --> GWInt
-    Policy[Admission policy<br/>Kyverno / VAP] -.validates hostnames.-> R1
+    Policy["Admission policy<br/>Kyverno / VAP"] -.validates hostnames.-> R1
     Policy -.-> R2
 ```
 
@@ -522,7 +522,7 @@ Platform guardrails to add on top of Gateway API:
 | Separate blast radius for critical tenants | Dedicated `Gateway` per tenant/tier, same `GatewayClass` |
 | Default timeouts, retries, rate limits | Implementation-specific policy CRDs attached to the Gateway |
 
-The [Tenant operator](../../code/tenant-operator/) can stamp the `platform.mycompany.io/edge-access=true`
+The [Tenant operator](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/) can stamp the `platform.mycompany.io/edge-access=true`
 namespace label when a `Tenant` is approved for public ingress, making edge access a self-service capability.
 For exposing *platform* APIs to consumers, see [API Gateway](../09-platform-apis/api-gateway.md).
 
@@ -539,7 +539,7 @@ For exposing *platform* APIs to consumers, see [API Gateway](../09-platform-apis
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Lab: Envoy Gateway With a Weighted Canary
 

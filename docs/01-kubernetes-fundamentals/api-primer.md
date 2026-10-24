@@ -17,9 +17,9 @@
 
 ```mermaid
 graph LR
-    Client[kubectl / client-go] -->|"PUT /apis/apps/v1/namespaces/team-a/deployments/web"| API[kube-apiserver]
+    Client["kubectl / client-go"] -->|"PUT /apis/apps/v1/namespaces/team-a/deployments/web"| API[kube-apiserver]
     API --> Authn[Authentication]
-    Authn --> Authz[Authorization: RBAC]
+    Authn --> Authz["Authorization: RBAC"]
     Authz --> Mutate[Mutating admission]
     Mutate --> Validate[Validating admission]
     Validate --> Etcd[(etcd)]
@@ -27,7 +27,7 @@ graph LR
 ```
 
 ### Group/Version/Resource (GVR)
-```
+```text
 Group/Version/Resource (GVR)
 ├── Group: apps, batch, networking.k8s.io, platform.mycompany.io
 ├── Version: v1, v1beta1, v1alpha1
@@ -47,7 +47,7 @@ Group/Version/Resource (GVR)
 | admissionregistration.k8s.io | Validating/Mutating Webhooks | GA |
 
 ### Version Lifecycle
-```
+```text
 v1alpha1 → v1beta1 → v1 (GA) → deprecated → removed
    ^           ^         ^           ^          ^
    |           |         |           |          |
@@ -330,9 +330,14 @@ for event := range watch.ResultChan() {
 
 ## Hands-On Exercises
 
-### Exercise 1: Explore API Resources
+These exercises need a running cluster. Use the [Lab 01 cluster](../../labs/lab-01-cluster-setup/README.md) or any `kind` cluster.
+
+### Exercise 1: Explore API resources
+
+**Goal:** list the API groups, find which resources are namespaced, and read the schema of a field.
+
 ```bash
-# 1. List all API groups
+# 1. List all API group versions
 kubectl api-versions | sort
 
 # 2. Find all namespaced resources
@@ -341,34 +346,61 @@ kubectl api-resources --namespaced=true -o name | sort
 # 3. Find all cluster-scoped resources
 kubectl api-resources --namespaced=false -o name | sort
 
-# 4. Get resource details
+# 4. Read the schema of a nested field
 kubectl explain deployment.spec.template.spec.containers
 ```
 
-### Exercise 2: Work with Dynamic Client
+Expected output (abbreviated, versions vary by cluster):
+
+```text
+admissionregistration.k8s.io/v1
+apps/v1
+...
+v1
+```
+
+**Check:** `kubectl api-resources --namespaced=false -o name | grep -x nodes` prints `nodes`, and
+`kubectl api-resources --namespaced=true -o name | grep -x deployments.apps` prints `deployments.apps`.
+
+### Exercise 2: List CRDs with the dynamic client
+
+**Goal:** read an arbitrary resource type without generated Go types.
+
+Create a new directory, run `go mod init crdlist`, save the program as `main.go`, and run `go get k8s.io/client-go@latest k8s.io/apimachinery@latest`.
+
 ```go
-// Create a simple program to list all CRDs
 package main
 
 import (
     "context"
     "fmt"
+
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+    "k8s.io/apimachinery/pkg/runtime/schema"
     "k8s.io/client-go/dynamic"
     "k8s.io/client-go/tools/clientcmd"
-    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func main() {
-    config, _ := clientcmd.BuildConfigFromFlags("", clientcmd.RecommendedHomeFile)
-    dynClient, _ := dynamic.NewForConfig(config)
-    
+    config, err := clientcmd.BuildConfigFromFlags("", clientcmd.RecommendedHomeFile)
+    if err != nil {
+        panic(err)
+    }
+    dynClient, err := dynamic.NewForConfig(config)
+    if err != nil {
+        panic(err)
+    }
+
     gvr := schema.GroupVersionResource{
         Group:    "apiextensions.k8s.io",
         Version:  "v1",
         Resource: "customresourcedefinitions",
     }
-    
-    list, _ := dynClient.Resource(gvr).List(context.Background(), metav1.ListOptions{})
+
+    list, err := dynClient.Resource(gvr).List(context.Background(), metav1.ListOptions{})
+    if err != nil {
+        panic(err)
+    }
     for _, item := range list.Items {
         name := item.GetName()
         group := item.Object["spec"].(map[string]interface{})["group"]
@@ -377,17 +409,45 @@ func main() {
 }
 ```
 
-### Exercise 3: Patch Operations
+Run it:
+
 ```bash
-# Strategic merge patch (default)
+go run .
+```
+
+Expected output depends on the CRDs installed. On a cluster with Gateway API installed:
+
+```text
+CRD: gateways.gateway.networking.k8s.io (group: gateway.networking.k8s.io)
+```
+
+**Check:** the number of lines printed equals `kubectl get crd --no-headers | wc -l`.
+
+### Exercise 3: Patch operations
+
+**Goal:** change a replica count with each of the three patch types and see that all three produce the same result.
+
+```bash
+# 0. Create the Deployment used below
+kubectl create deployment myapp --image=nginx:alpine
+
+# 1. Strategic merge patch (default for built-in types)
 kubectl patch deployment myapp -p '{"spec":{"replicas":5}}'
 
-# JSON patch (RFC 6902)
-kubectl patch deployment myapp --type=json -p='[{"op":"replace","path":"/spec/replicas","value":5}]'
+# 2. JSON patch (RFC 6902)
+kubectl patch deployment myapp --type=json -p='[{"op":"replace","path":"/spec/replicas","value":3}]'
 
-# Merge patch
-kubectl patch deployment myapp --type=merge -p='{"spec":{"replicas":5}}'
+# 3. Merge patch
+kubectl patch deployment myapp --type=merge -p='{"spec":{"replicas":2}}'
 ```
+
+Expected output after each command:
+
+```text
+deployment.apps/myapp patched
+```
+
+**Check:** `kubectl get deployment myapp -o jsonpath='{.spec.replicas}'` prints `2`. Clean up with `kubectl delete deployment myapp`.
 
 ---
 

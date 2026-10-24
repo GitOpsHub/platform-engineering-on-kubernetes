@@ -17,10 +17,10 @@ How developers discover, create, and operate the things the platform offers with
 
 ```mermaid
 graph LR
-    Discover[Discover<br/>service catalog] --> Create[Create<br/>scaffolding]
-    Create --> Run[Run<br/>environment provisioning]
-    Run --> Measure[Measure<br/>DX metrics]
-    Measure --> Improve[Improve<br/>golden paths]
+    Discover["Discover<br/>service catalog"] --> Create["Create<br/>scaffolding"]
+    Create --> Run["Run<br/>environment provisioning"]
+    Run --> Measure["Measure<br/>DX metrics"]
+    Measure --> Improve["Improve<br/>golden paths"]
     Improve --> Discover
 ```
 

@@ -21,8 +21,8 @@ commit, and automated rotation that keeps running workloads current.
 
 ## Related Code
 
-- [`code/platform-api/`](../../code/platform-api/) — the platform API that provisions secret stores for new environments
-- [`code/helm-charts/`](../../code/helm-charts/) — chart values that wire service accounts to Vault roles
+- [`code/platform-api/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/platform-api/) — the platform API that provisions secret stores for new environments
+- [`code/helm-charts/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/helm-charts/) — chart values that wire service accounts to Vault roles
 
 ## Where This Leads
 

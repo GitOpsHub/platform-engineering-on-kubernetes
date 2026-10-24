@@ -44,15 +44,15 @@ The cost: every additional cluster adds control-plane overhead, add-on installs,
 ```mermaid
 graph TB
     subgraph L3["Layer 3: Workload Federation"]
-        K[Karmada / OCM Placement]
+        K["Karmada / OCM Placement"]
         W[Which clusters run which app replicas?]
     end
     subgraph L2["Layer 2: Configuration / Add-on Management"]
-        G[Argo CD ApplicationSet / Flux / Fleet]
+        G["Argo CD ApplicationSet / Flux / Fleet"]
         C[What baseline config does every cluster get?]
     end
     subgraph L1["Layer 1: Cluster Lifecycle"]
-        CAPI[Cluster API / Crossplane / Terraform]
+        CAPI["Cluster API / Crossplane / Terraform"]
         LC[Create, upgrade, scale, delete clusters]
     end
     L1 --> L2 --> L3
@@ -64,7 +64,7 @@ graph TB
 | 2. Configuration | "Does every cluster have cert-manager, policies, observability agents?" | Argo CD, Flux, Rancher Fleet, OCM add-ons | [Multi-Cluster GitOps](./multi-cluster-gitops.md) |
 | 3. Workload federation | "Where should these 12 replicas run, and what happens if a cluster dies?" | Karmada, OCM, (formerly KubeFed) | This doc + [Workload Distribution](./workload-distribution.md) |
 
-Many organizations only need layers 1 and 2: each app is pinned to specific clusters through GitOps, and "federation" is simply consistent configuration. Layer 3 becomes valuable when you want a scheduler to decide placement dynamically.
+Many organizations only need layers 1 and 2: each app is pinned to specific clusters through GitOps, and "federation" is consistent configuration. Layer 3 becomes valuable when you want a scheduler to decide placement dynamically.
 
 ---
 
@@ -76,9 +76,9 @@ Almost every multi-cluster tool uses a **hub-and-spoke** (a.k.a. management/work
 graph TB
     subgraph Hub["Management (Hub) Cluster"]
         CAPI[Cluster API controllers]
-        ARGO[Argo CD / Flux]
+        ARGO["Argo CD / Flux"]
         KAR[Karmada control plane]
-        OBS[Fleet observability<br/>Thanos / Mimir query]
+        OBS["Fleet observability<br/>Thanos / Mimir query"]
         POL[Policy distribution]
     end
 
@@ -95,10 +95,10 @@ graph TB
         D1[dev-1]
     end
 
-    CAPI -->|provision / upgrade| P1 & P2 & P3 & P4 & S1 & D1
+    CAPI -->|"provision / upgrade"| P1 & P2 & P3 & P4 & S1 & D1
     ARGO -->|baseline add-ons| P1 & P2 & P3 & P4 & S1 & D1
     KAR -->|propagate workloads| P1 & P2 & P3 & P4
-    P1 & P2 & P3 & P4 -.->|metrics / status| OBS
+    P1 & P2 & P3 & P4 -.->|"metrics / status"| OBS
 ```
 
 ### Design decisions for the hub
@@ -124,17 +124,17 @@ graph TB
 graph LR
     subgraph Mgmt["Management Cluster"]
         Core[CAPI core controllers]
-        BP[Bootstrap provider<br/>kubeadm]
-        CP[Control plane provider<br/>KubeadmControlPlane]
-        IP[Infrastructure provider<br/>AWS / Azure / GCP / vSphere / Docker]
+        BP["Bootstrap provider<br/>kubeadm"]
+        CP["Control plane provider<br/>KubeadmControlPlane"]
+        IP["Infrastructure provider<br/>AWS / Azure / GCP / vSphere / Docker"]
     end
     Cluster[Cluster CR] --> Core
     Core --> CP
     Core --> IP
     Core --> BP
     IP --> Cloud[(Cloud APIs)]
-    CP --> WL[Workload Cluster<br/>control plane]
-    BP --> Nodes[Workload Cluster<br/>nodes]
+    CP --> WL["Workload Cluster<br/>control plane"]
+    BP --> Nodes["Workload Cluster<br/>nodes"]
 ```
 
 | Provider type | Responsibility | Examples |
@@ -306,7 +306,7 @@ CAPI performs **immutable, rolling replacement**: new machines at the new versio
 | Terraform / OpenTofu | Ubiquitous, great for managed K8s | Not continuously reconciled; state files; drift between runs |
 | Cloud fleet services | GKE fleets, EKS + AWS tooling, Azure Kubernetes Fleet Manager | Vendor-specific |
 
-See [Crossplane](../04-infrastructure-as-code/crossplane.md) and [`code/terraform-modules/`](../../code/terraform-modules/) for the IaC approaches.
+See [Crossplane](../04-infrastructure-as-code/crossplane.md) and [`code/terraform-modules/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/terraform-modules/) for the IaC approaches.
 
 ---
 
@@ -318,7 +318,7 @@ See [Crossplane](../04-infrastructure-as-code/crossplane.md) and [`code/terrafor
 
 ```mermaid
 graph TB
-    User[kubectl / GitOps] --> KAPI[karmada-apiserver]
+    User["kubectl / GitOps"] --> KAPI[karmada-apiserver]
     KAPI --> ETCD[(etcd)]
     subgraph CP["Karmada Control Plane"]
         KAPI
@@ -326,12 +326,12 @@ graph TB
         SCH[karmada-scheduler]
         WH[karmada-webhook]
     end
-    CM -->|ResourceBinding / Work| KAPI
+    CM -->|"ResourceBinding / Work"| KAPI
     SCH -->|placement decisions| KAPI
-    CM -->|Push mode| M1[member: prod-eu-1]
-    CM -->|Push mode| M2[member: prod-us-1]
+    CM -->|Push mode| M1["member: prod-eu-1"]
+    CM -->|Push mode| M2["member: prod-us-1"]
     AG[karmada-agent] -->|Pull mode| KAPI
-    AG --- M3[member: edge-store-17]
+    AG --- M3["member: edge-store-17"]
 ```
 
 The resource flow:
@@ -621,7 +621,7 @@ See [Policy Engine](../12-security-compliance/policy-engine.md) for more on Kyve
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Lab: Provision two clusters with CAPI (Docker) and federate a workload with Karmada
 

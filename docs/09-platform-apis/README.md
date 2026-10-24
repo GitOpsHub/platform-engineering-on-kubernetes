@@ -17,11 +17,11 @@ The contract layer of the platform: the Kubernetes-style APIs that hold desired 
 
 ```mermaid
 graph TB
-    Users[Portal, CLI, CI, GitOps] --> GW[API Gateway<br/>TLS, JWT, rate limits]
-    GW --> REST[REST facade<br/>/api/v1alpha1]
-    REST --> K8s[Kubernetes API server<br/>platform.mycompany.io/v1alpha1]
-    K8s --> CRD[CRDs<br/>Tenant, Environment, Workload]
-    CRD --> Ctrl[Controllers<br/>controller-runtime]
+    Users[Portal, CLI, CI, GitOps] --> GW["API Gateway<br/>TLS, JWT, rate limits"]
+    GW --> REST["REST facade<br/>/api/v1alpha1"]
+    REST --> K8s["Kubernetes API server<br/>platform.mycompany.io/v1alpha1"]
+    K8s --> CRD["CRDs<br/>Tenant, Environment, Workload"]
+    CRD --> Ctrl["Controllers<br/>controller-runtime"]
     Ctrl --> Children[Namespaces, quotas, Deployments, HTTPRoutes]
 ```
 
@@ -41,11 +41,11 @@ Group: `platform.mycompany.io`. Version: `v1alpha1`.
 
 | Area | Location |
 |------|----------|
-| REST contract | [`code/platform-api/openapi.yaml`](../../code/platform-api/openapi.yaml) |
-| Tenant operator | [`code/tenant-operator/`](../../code/tenant-operator/) |
-| Environment operator | [`code/environment-operator/`](../../code/environment-operator/) |
-| Workload operator | [`code/workload-operator/`](../../code/workload-operator/) |
-| CLI | [`code/platform-cli/`](../../code/platform-cli/) |
+| REST contract | [`code/platform-api/openapi.yaml`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/platform-api/openapi.yaml) |
+| Tenant operator | [`code/tenant-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/) |
+| Environment operator | [`code/environment-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/environment-operator/) |
+| Workload operator | [`code/workload-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/workload-operator/) |
+| CLI | [`code/platform-cli/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/platform-cli/) |
 | Labs | [Lab 03: Platform API](../../labs/lab-03-platform-api/README.md), [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/README.md) |
 
 ## Related

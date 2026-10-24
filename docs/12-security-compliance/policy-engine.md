@@ -8,8 +8,9 @@
 - Test and debug policies
 
 ## Prerequisites
-- Kubernetes fundamentals
-- RBAC understanding
+- Kubernetes fundamentals, especially admission control ([Kubernetes Architecture](../01-kubernetes-fundamentals/kubernetes-architecture.md))
+- RBAC basics ([RBAC](../01-kubernetes-fundamentals/rbac.md))
+- A kind or k3d cluster and `kubectl`; Helm 3.x for installing the engines
 - Basic Rego (for Gatekeeper) or YAML (for Kyverno)
 
 ---
@@ -30,9 +31,9 @@
 ```mermaid
 graph LR
     Req[kubectl apply] --> API[kube-apiserver]
-    API --> Mutate[Mutating webhooks: Kyverno mutate]
-    Mutate --> CEL[ValidatingAdmissionPolicy: CEL]
-    CEL --> Webhooks[Validating webhooks: Gatekeeper, Kyverno validate]
+    API --> Mutate["Mutating webhooks: Kyverno mutate"]
+    Mutate --> CEL["ValidatingAdmissionPolicy: CEL"]
+    CEL --> Webhooks["Validating webhooks: Gatekeeper, Kyverno validate"]
     Webhooks -->|allowed| Etcd[(etcd)]
     Webhooks -->|denied| Reject[403 with policy message]
 ```
@@ -573,26 +574,58 @@ kubectl apply -f resource.yaml --dry-run=server
 
 ## Hands-On Exercises
 
-### Exercise 1: Audit Before You Enforce
-```bash
-# Install the CEL policies from Lab 05 (their bindings use validationActions: ["Deny"])
-kubectl apply -f labs/lab-05-policy-engine/cel-policies/
+These exercises use the policies in [Lab 05: Policy Engine](../../labs/lab-05-policy-engine/README.md).
+Run them from the repository root against a kind cluster where the lab's `setup.sh` has installed
+Gatekeeper and Kyverno. Install the Kyverno CLI and `opa` or `gator` for the test steps.
 
-# Edit a binding so validationActions is ["Warn", "Audit"], then apply a non-compliant pod
+### Exercise 1: Audit before you enforce
+
+Goal: watch a CEL policy report a violation without blocking it.
+
+```bash
+kubectl apply -f labs/lab-05-policy-engine/cel-policies/
+# Edit labs/lab-05-policy-engine/cel-policies/disallow-latest-tag.yaml so the binding has
+# validationActions: ["Warn", "Audit"], then re-apply it and create a non-compliant pod.
+kubectl apply -f labs/lab-05-policy-engine/cel-policies/disallow-latest-tag.yaml
 kubectl apply -f labs/lab-05-policy-engine/tests/fixtures/pod-latest-tag.yaml
 ```
 
-Keep the binding on `Warn` and `Audit` until the warnings are clean across your namespaces, then switch it back to `Deny`.
+Expected output: the pod is created, and `kubectl` prints a warning that names the policy:
 
-### Exercise 2: Prove a Policy Blocks What It Should
-1. Run the Gatekeeper suite in `labs/lab-05-policy-engine/gatekeeper-policies/tests/`.
-2. Add one new fixture that violates the required-labels rule in a way the suite does not cover, such as a label with an empty value.
-3. Confirm the suite fails, then tighten the Rego until it passes.
+```text
+Warning: Validation failed for ValidatingAdmissionPolicy 'disallow-latest-tag': ...
+pod/<pod-name> created
+```
 
-### Exercise 3: Write a Kyverno Mutation Instead of a Denial
-1. Take the `require-labels` policy from `labs/lab-05-policy-engine/kyverno-policies/`.
-2. Change the action from validate to mutate so it adds a default `team` label instead of rejecting the pod.
-3. Run the Kyverno CLI test in `labs/lab-05-policy-engine/kyverno-policies/tests/` and explain why mutation is harder to audit than validation.
+Check: `kubectl get pod -n <namespace-in-fixture>` shows the pod `Running` (replace
+`<namespace-in-fixture>` with the namespace in `pod-latest-tag.yaml`). Switch the binding back
+to `["Deny"]`, re-apply it, delete the pod and apply the fixture again. The apply now fails with
+`denied request`.
+
+### Exercise 2: Prove a policy blocks what it should
+
+Goal: extend a policy test suite and see it fail before you fix the policy.
+
+1. Run the Gatekeeper suite: `gator verify labs/lab-05-policy-engine/gatekeeper-policies/tests/...`
+   (expected: every case reports `ok`).
+2. Add one fixture under `gatekeeper-policies/tests/resources/` that violates the required-labels
+   rule in a way the suite does not cover, such as a label with an empty value, and list it in
+   `suite.yaml`.
+3. Re-run the suite and confirm it fails, then tighten the Rego until it passes.
+
+Check: the final run ends with all cases `ok` and exit code 0 (`echo $?`).
+
+### Exercise 3: Write a Kyverno mutation instead of a denial
+
+Goal: replace a rejection with a default so tenants are not blocked.
+
+1. Copy `labs/lab-05-policy-engine/kyverno-policies/require-labels.yaml` and compare it with
+   `add-default-labels.yaml` in the same directory.
+2. Change the copy from `validate` to `mutate` so it adds a default `team` label.
+3. Run `kyverno test labs/lab-05-policy-engine/kyverno-policies/tests/`.
+
+Expected output: a results table with every row `Pass`. Check: the mutated resource in the test
+output carries the `team` label. Then explain why mutation is harder to audit than validation.
 
 ---
 

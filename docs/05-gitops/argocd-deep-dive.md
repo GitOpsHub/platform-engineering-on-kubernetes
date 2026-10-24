@@ -19,7 +19,7 @@
 ### Components
 ```mermaid
 graph TB
-    UI[ArgoCD UI/CLI] --> API[API Server gRPC/REST]
+    UI["ArgoCD UI/CLI"] --> API["API Server gRPC/REST"]
     API --> Repo[Repository Server]
     API --> AppCtrl[Application Controller]
     API --> Dex[Dex OIDC]

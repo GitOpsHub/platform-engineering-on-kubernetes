@@ -53,7 +53,7 @@ graph LR
         PE[PreEnqueue] --> QS[QueueSort]
     end
     subgraph Scheduling Cycle - serial
-        PF[PreFilter] --> F[Filter] --> PoF[PostFilter<br/>preemption]
+        PF[PreFilter] --> F[Filter] --> PoF["PostFilter<br/>preemption"]
         F --> PS[PreScore] --> S[Score] --> NS[NormalizeScore] --> R[Reserve] --> P[Permit]
     end
     subgraph Binding Cycle - async
@@ -471,7 +471,7 @@ graph TB
         G1[tenant services]
     end
     subgraph gpu pool - taint dedicated=gpu
-        P1[ML training / inference]
+        P1["ML training / inference"]
     end
     subgraph tenant-dedicated pool - taint tenant=team-b
         T1[team-b regulated workloads]
@@ -521,7 +521,7 @@ let the operator/policy translate it — developers never write tolerations by h
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 Uses the kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md) (workers labeled
 `node-type=worker`).

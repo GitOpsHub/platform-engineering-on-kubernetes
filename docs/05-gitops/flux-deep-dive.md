@@ -476,7 +476,7 @@ spec:
 
 ## Repository Structure for Flux
 
-```
+```text
 platform-config/
 ├── clusters/
 │   └── production/

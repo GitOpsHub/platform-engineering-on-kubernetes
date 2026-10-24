@@ -9,7 +9,9 @@ Two kinds of canary appear in this lab:
 
 ## Part 1: Canary add-on rollout
 
-Use this for any single add-on: Traefik, cert-manager, External Secrets, metrics-server. This example uses cert-manager, moving from v1.21.2 to the next patch release you choose.
+Use this for any single add-on: Traefik, cert-manager, External Secrets, metrics-server. Run the `kubectl` and `argocd` commands from any directory; run `./upgrade-automation.sh` from
+`labs/lab-08-platform-upgrade`. Complete steps 1 to 4 of [blue-green-deploy.md](blue-green-deploy.md) first,
+so green is registered with Argo CD. This example uses cert-manager, moving from v1.21.3 (the version Lab 01 installs) to the next patch release you choose.
 
 ### Principle
 
@@ -18,7 +20,12 @@ Only one place runs the new version at a time. Green is the canary cluster becau
 ### Steps
 
 1. **Pick the target version** and check its release notes and upgrade notes. For cert-manager, check the CRD changes first.
-2. **Keep the shared ApplicationSet on the old version.** Blue and green both run v1.21.2.
+   Expected result: you have a target version `<new-version>` and have read the CRD changes.
+   Check: confirm the version exists with
+   `helm show chart cert-manager --repo https://charts.jetstack.io --version <new-version>`.
+2. **Keep the shared ApplicationSet on the old version.** Blue and green both run v1.21.3.
+   Check: `kubectl --context kind-platform-engineering-green -n cert-manager get deploy cert-manager -o jsonpath='{.spec.template.spec.containers[0].image}'`
+   ends in `:v1.21.3`.
 3. **Add a canary Application that targets only green** with the new chart version. Give it a different name from the shared app so the two never fight over one Helm release.
    ```yaml
    apiVersion: argoproj.io/v1alpha1
@@ -50,8 +57,30 @@ Only one place runs the new version at a time. Green is the canary cluster becau
    argocd app sync cert-manager-canary
    argocd app wait cert-manager-canary --health --timeout 600
    ```
+   Apply the Application first with `kubectl --context kind-platform-engineering apply -f cert-manager-canary.yaml`
+   (the YAML from step 3 saved to a file). Expected result: `argocd app wait` returns with `Health Status: Healthy`.
+   Check: the green deployment image from step 2 now ends in `:<new-version>`.
 5. **Watch the metrics** (below) for one full soak period. Run the cert-manager canary check: issue a test Certificate from the `platform-ca` ClusterIssuer and confirm it becomes Ready.
+   ```bash
+   cat <<'EOF' | kubectl --context kind-platform-engineering-green apply -f -
+   apiVersion: cert-manager.io/v1
+   kind: Certificate
+   metadata:
+     name: canary-check
+     namespace: platform-smoke-test
+   spec:
+     secretName: canary-check-tls
+     dnsNames: [canary-check.localtest.me]
+     issuerRef:
+       name: platform-ca
+       kind: ClusterIssuer
+   EOF
+   kubectl --context kind-platform-engineering-green -n platform-smoke-test wait --for=condition=Ready certificate/canary-check --timeout=120s
+   ```
+   Expected result: `certificate.cert-manager.io/canary-check condition met`. Delete it afterwards with
+   `kubectl --context kind-platform-engineering-green -n platform-smoke-test delete certificate canary-check`.
 6. **Promote or abort.** See the criteria below.
+   Check: promote only if none of the [abort criteria](#abort-criteria) hold.
 
 ### Promotion
 
@@ -138,7 +167,7 @@ So for a 1.36 control plane, kubelets may run 1.33 through 1.36. The upgrade ord
 
 ## Part 3: Pre-flight checks
 
-Run before any minor upgrade. The script is read-only unless you add `--execute`.
+Run before any minor upgrade, from `labs/lab-08-platform-upgrade`. The script is read-only unless you add `--execute`.
 
 ```bash
 ./upgrade-automation.sh --target-version 1.36 --context kind-platform-engineering
@@ -153,6 +182,10 @@ It runs:
 | PodDisruptionBudgets with zero disruptions allowed | WARN: drain will block until the pods recover |
 | Node health (Ready, and cordoned nodes) | FAIL for NotReady; WARN for cordoned |
 
+Expected result: `[PASS]`, `[WARN]`, `[FAIL]` or `[SKIP]` lines for each check, then
+`Summary: PASS=<n> WARN=<n> FAIL=<n> SKIP=<n>`. The script exits 0 when there is no FAIL, and 1 otherwise.
+With no FAIL it prints the planned cordon and drain steps without running them.
+
 Deprecated-API findings from kubent or pluto are WARN lines that you must read. The script does not parse their output, so it cannot tell that a clean run means zero findings.
 
 You can also check the API server's own count of deprecated-API requests:
@@ -161,7 +194,8 @@ You can also check the API server's own count of deprecated-API requests:
 kubectl --context kind-platform-engineering get --raw /metrics | grep apiserver_requested_deprecated_apis
 ```
 
-Non-zero series mean clients are still calling deprecated APIs. Find them before upgrading.
+Expected result: no output on a clean cluster. Non-zero series mean clients are still calling deprecated APIs.
+Find them before upgrading.
 
 ---
 

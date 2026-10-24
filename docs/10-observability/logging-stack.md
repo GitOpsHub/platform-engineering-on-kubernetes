@@ -7,9 +7,10 @@
 - Implement log-based alerting and dashboards
 
 ## Prerequisites
-- Kubernetes cluster with storage
-- Helm 3.x
-- Basic understanding of logging concepts
+- [Metrics Stack](./metrics-stack.md): Grafana installed, and the label model that Loki reuses
+- A Kubernetes cluster with a default StorageClass (kind or k3d works for the exercises)
+- Helm 3.x and `kubectl`
+- Familiarity with container logging (`kubectl logs`, stdout/stderr)
 
 ---
 
@@ -17,7 +18,7 @@
 
 ```mermaid
 graph TB
-    Apps[Applications] --> Vector[Vector/Fluent Bit]
+    Apps[Applications] --> Vector["Vector/Fluent Bit"]
     System[System Logs] --> Vector
     Vector --> Loki[Loki]
     Loki --> Querier[Querier]
@@ -576,11 +577,81 @@ loki:
 
 ---
 
+## Hands-On Exercises
+
+These exercises assume Loki and Promtail from [Install via Helm](#install-via-helm) run in the
+`monitoring` namespace. On a kind or k3d cluster, replace `storageClassName: fast-ssd` with the
+name from `kubectl get storageclass` and lower `persistence.size` to `5Gi`.
+
+### Exercise 1: Ship logs from a workload
+
+Goal: confirm that a pod's logs reach Loki with the labels you expect.
+
+```bash
+kubectl run log-demo -n default --image=busybox --restart=Never -- \
+  sh -c 'while true; do echo "{\"level\":\"info\",\"msg\":\"hello\"}"; sleep 2; done'
+kubectl port-forward -n monitoring svc/loki 3100:3100 &
+sleep 5
+curl -G -s http://localhost:3100/loki/api/v1/query_range \
+  --data-urlencode 'query={pod="log-demo"}' | jq '.data.result[0].stream'
+```
+
+Expected output (label values vary by cluster):
+
+```json
+{
+  "namespace": "default",
+  "pod": "log-demo",
+  "container": "log-demo"
+}
+```
+
+Check: `curl -s http://localhost:3100/loki/api/v1/labels | jq -r '.data[]'` lists `pod` and
+`namespace`. If the query returns `null`, wait 15 seconds and run it again.
+
+### Exercise 2: Parse and filter with LogQL
+
+Goal: extract JSON fields at query time and aggregate them. Run these in Grafana
+(Explore, Loki data source) against the pod from Exercise 1.
+
+```logql
+{pod="log-demo"} | json | level=~"warn|error"
+sum by (namespace) (count_over_time({namespace=~".+"} | json | level="info" [5m]))
+```
+
+Expected output: the first query returns no lines (the pod only writes `info`). The second
+returns one series for `default` with a count that grows by about 30 every minute.
+
+Check: change `level="info"` to `level="error"` in the second query. The result is empty.
+
+### Exercise 3: Break and fix ingestion
+
+Goal: see how a new label value becomes a new stream and why cardinality matters.
+
+```bash
+kubectl delete pod log-demo
+kubectl run log-demo-2 -n default --labels app=log-demo-2 --image=busybox --restart=Never -- \
+  sh -c 'while true; do echo "{\"level\":\"warn\",\"msg\":\"again\"}"; sleep 2; done'
+sleep 20
+curl -G -s http://localhost:3100/loki/api/v1/query_range \
+  --data-urlencode 'query={pod="log-demo-2"} | json | level="warn"' | jq '.data.result | length'
+```
+
+Expected output: `1`.
+
+Check: the stream appears within one scrape interval. Then explain why a high-cardinality label
+(for example, a request ID) would create one stream per request and hurt Loki, and how you would
+move that value into the log line instead. Clean up with
+`kubectl delete pod log-demo-2; kill %1`.
+
+---
+
 ## Troubleshooting
 
-### Common Issues
+### Symptom: Loki is not receiving logs
 
-#### Loki Not Receiving Logs
+Cause: the collector cannot reach Loki, or Loki rejects the push. Check each hop in order.
+
 ```bash
 # Check Promtail/Vector logs
 kubectl logs -n monitoring -l app.kubernetes.io/name=promtail
@@ -595,7 +666,10 @@ curl -X POST http://loki.monitoring.svc:3100/loki/api/v1/push \
   -d '{"streams":[{"stream":{"job":"test"},"values":[["'$(date +%s%N)'","test message"]]}]}'
 ```
 
-#### High Memory Usage
+### Symptom: Loki memory usage is high
+
+Cause: too many streams (high-cardinality labels) or oversized chunks. Check usage, then tune limits.
+
 ```bash
 # Check Loki memory
 kubectl top pods -n monitoring -l app.kubernetes.io/name=loki
@@ -605,7 +679,10 @@ kubectl top pods -n monitoring -l app.kubernetes.io/name=loki
 # Increase chunk_target_size
 ```
 
-#### Query Performance
+### Symptom: queries are slow
+
+Cause: wide time ranges, no caching, or unselective stream selectors. Tune as follows.
+
 ```bash
 # Enable query caching
 # In Loki config:
@@ -615,39 +692,6 @@ kubectl top pods -n monitoring -l app.kubernetes.io/name=loki
 # Use recording rules for common queries
 # Reduce max_query_parallelism
 ```
-
----
-
-## Hands-On Exercises
-
-### Exercise 1: Ship Logs from a Workload
-```bash
-# Run a pod that writes JSON logs, then confirm they reach Loki with labels
-kubectl run log-demo -n default --image=busybox --restart=Never -- \
-  sh -c 'while true; do echo "{\"level\":\"info\",\"msg\":\"hello\"}"; sleep 2; done'
-
-# Port-forward Loki and query through its HTTP API
-kubectl port-forward -n monitoring svc/loki 3100:3100 &
-curl -G -s http://localhost:3100/loki/api/v1/query_range \
-  --data-urlencode 'query={pod="log-demo"}' | jq '.data.result[0].stream'
-```
-
-### Exercise 2: Parse and Filter with LogQL
-```logql
-# Parse JSON lines and keep only warnings and errors
-{pod="log-demo"} | json | level=~"warn|error"
-
-# Count errors per namespace over five minutes
-sum by (namespace) (count_over_time({namespace=~".+"} | json | level="error" [5m]))
-```
-
-### Exercise 3: Break and Fix Ingestion
-1. Stop the log writer: `kubectl delete pod log-demo`.
-2. Re-run Exercise 1 with a pod label you have not used before, such as `app=log-demo-2`.
-3. Query by that label and confirm the stream appears within one scrape interval.
-4. Explain why a high-cardinality label (for example, a request ID) would hurt Loki and how you would remove it.
-
----
 
 ## Further Reading
 

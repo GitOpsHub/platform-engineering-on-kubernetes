@@ -29,12 +29,12 @@ Platform teams often fail not because the technology is wrong, but because the t
 
 ```mermaid
 graph TB
-    Org[Engineering organization] --> SA1[Stream-aligned team: Payments]
-    Org --> SA2[Stream-aligned team: Search]
-    Org --> SA3[Stream-aligned team: Checkout]
-    Org --> PT[Platform team: Developer Platform]
-    Org --> ET[Enabling team: Observability Enablement]
-    Org --> CS[Complicated-subsystem team: Fraud Scoring]
+    Org[Engineering organization] --> SA1["Stream-aligned team: Payments"]
+    Org --> SA2["Stream-aligned team: Search"]
+    Org --> SA3["Stream-aligned team: Checkout"]
+    Org --> PT["Platform team: Developer Platform"]
+    Org --> ET["Enabling team: Observability Enablement"]
+    Org --> CS["Complicated-subsystem team: Fraud Scoring"]
     PT -. X-as-a-Service .-> SA1
     PT -. X-as-a-Service .-> SA2
     PT -. X-as-a-Service .-> SA3
@@ -118,10 +118,10 @@ What a platform team typically owns in a Kubernetes estate:
 
 | Area | Examples in this repo |
 |------|-----------------------|
-| Cluster lifecycle | Cluster provisioning via [Terraform modules](../../code/terraform-modules/) and [Cluster API](../13-multi-cluster/cluster-federation.md) |
+| Cluster lifecycle | Cluster provisioning via [Terraform modules](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/terraform-modules/) and [Cluster API](../13-multi-cluster/cluster-federation.md) |
 | Delivery | GitOps bootstrapping and tenant AppProjects ([Lab 02](../../labs/lab-02-gitops-bootstrap/)) |
-| Tenancy | [`tenant-operator`](../../code/tenant-operator/) and [Lab 07](../../labs/lab-07-multi-tenancy/) |
-| Environments | [`environment-operator`](../../code/environment-operator/) |
+| Tenancy | [`tenant-operator`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/) and [Lab 07](../../labs/lab-07-multi-tenancy/) |
+| Environments | [`environment-operator`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/environment-operator/) |
 | Policy | Admission policies via the [Policy Engine](../12-security-compliance/policy-engine.md) |
 | Developer portal | [Backstage](../07-internal-developer-platform/backstage.md) templates and catalog |
 
@@ -162,8 +162,8 @@ Team types describe *who* does what. Interaction modes describe *how* two teams 
 
 ```mermaid
 graph LR
-    C[Collaboration<br/>discover together] --> F[Facilitating<br/>teach and step back]
-    F --> X[X-as-a-Service<br/>consume without help]
+    C["Collaboration<br/>discover together"] --> F["Facilitating<br/>teach and step back"]
+    F --> X["X-as-a-Service<br/>consume without help"]
     X -. new unknown .-> C
 ```
 
@@ -241,9 +241,9 @@ graph TB
 
 ```mermaid
 graph TB
-    PT[Platform core team] --> P1[Platform: Cluster Lifecycle]
-    PT --> P2[Platform: Delivery Tooling]
-    PT --> P3[Platform: Developer Portal]
+    PT[Platform core team] --> P1["Platform: Cluster Lifecycle"]
+    PT --> P2["Platform: Delivery Tooling"]
+    PT --> P3["Platform: Developer Portal"]
     P1 --> CL1[(Cluster fleet)]
     P2 --> CL1
     P3 --> CL1
@@ -327,9 +327,11 @@ Moving from Operational to Scalable usually means changing the *interaction mode
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Exercise: Map your organization
+
+**Goal:** classify every team, name each interaction mode, and write one support boundary.
 
 **Time:** 60–90 minutes. **Materials:** a list of current teams and their recent work, a whiteboard or a diagram tool, the Workload example above.
 
@@ -342,6 +344,9 @@ Moving from Operational to Scalable usually means changing the *interaction mode
 Tie your output to the [Platform Capabilities](../07-internal-developer-platform/platform-capabilities.md) document: every "could be self-service" item should map to a capability and an interface.
 
 Save the mapping as `docs/team-map.md` in your own working repo, not in this one.
+
+Check: run `grep -ci unclear docs/team-map.md`. The count should fall each time you revise the map.
+Every team must have a type, and every weekly interaction must have an intended mode.
 
 **Discussion questions:**
 - Which team is doing the most unplanned work? Who asked them to do it?

@@ -22,8 +22,8 @@ detection to catch what changes outside the declared state.
 
 ## Related Code
 
-- [`code/terraform-modules/`](../../code/terraform-modules/) — EKS, GKE, AKS, networking, and addon modules
-- [`code/crossplane-compositions/`](../../code/crossplane-compositions/) — XRDs, Compositions, functions, and example claims
+- [`code/terraform-modules/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/terraform-modules/) — EKS, GKE, AKS, networking, and addon modules
+- [`code/crossplane-compositions/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/crossplane-compositions/) — XRDs, Compositions, functions, and example claims
 
 ## Where This Leads
 

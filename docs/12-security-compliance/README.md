@@ -12,6 +12,6 @@ Guardrails that keep tenant workloads safe by default, and the evidence that pro
 ## Related
 
 - Lab: [Lab 05 - Policy Engine](../../labs/lab-05-policy-engine/)
-- Code: [code/policy-engine](../../code/policy-engine/)
+- Code: [code/policy-engine](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/policy-engine/)
 - Previous section: [11 - Reliability](../11-reliability/README.md)
 - Next section: [13 - Multi-Cluster](../13-multi-cluster/)

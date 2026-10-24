@@ -40,7 +40,7 @@ graph LR
 
 Start with the question, not the metric. Examples of good questions:
 - Are stream-aligned teams getting changes to production faster than last year?
-- Is the platform making things more reliable, or just faster?
+- Is the platform making things more reliable, or only faster?
 - Which self-service capability is used, and which is ignored?
 - Where do platform engineers spend time that users would not notice if it stopped?
 
@@ -440,7 +440,7 @@ A number without an explanation invites the wrong conclusion.
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Exercise: Build a minimum viable metrics set
 

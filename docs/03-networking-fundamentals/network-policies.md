@@ -30,13 +30,13 @@ NetworkPolicy is the Kubernetes-native firewall for Pods, enforced by the CNI on
 
 ```mermaid
 graph LR
-    subgraph Before[Default: allow-all]
-        A1[tenant-a/api] <--> B1[tenant-b/db]
+    subgraph Before["Default: allow-all"]
+        A1["tenant-a/api"] <--> B1["tenant-b/db"]
         A1 <--> M1[(metadata<br/>169.254.169.254)]
     end
     subgraph After[With platform baseline]
-        A2[tenant-a/api] -.x.- B2[tenant-b/db]
-        A2 --> A3[tenant-a/db]
+        A2["tenant-a/api"] -.x.- B2["tenant-b/db"]
+        A2 --> A3["tenant-a/db"]
         A2 -.x.- M2[(metadata)]
         IG[ingress gateway] --> A2
     end
@@ -148,7 +148,7 @@ The only difference is a single `-`. Lint for this in CI and code review.
 
 ## A Platform Baseline for Tenant Namespaces
 
-Every tenant namespace created by the platform (for example by the [Tenant operator](../../code/tenant-operator/)
+Every tenant namespace created by the platform (for example by the [Tenant operator](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/)
 from a `Tenant` resource) should get the same baseline. The policies below assume namespaces carry
 `platform.mycompany.io/tenant: <name>`.
 
@@ -158,7 +158,7 @@ flowchart LR
         P[Pods]
     end
     GW[platform-gateways] -->|allow| P
-    MON[monitoring / Prometheus] -->|allow scrape| P
+    MON["monitoring / Prometheus"] -->|allow scrape| P
     SAME[Same-tenant namespaces] -->|allow| P
     P -->|allow 53/UDP+TCP| DNS[kube-dns]
     P -->|allow| SAME
@@ -563,7 +563,7 @@ spec:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Lab: Isolate Two Tenants and Observe Drops
 

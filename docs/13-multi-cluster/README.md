@@ -31,7 +31,7 @@ graph LR
 
 - Tool-level multi-cluster GitOps mechanics: [docs/05-gitops/multi-cluster-gitops.md](../05-gitops/multi-cluster-gitops.md)
 - Labs: [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/), [Lab 08: Platform Upgrade](../../labs/lab-08-platform-upgrade/)
-- Code: [`code/terraform-modules/`](../../code/terraform-modules/), [`code/workload-operator/`](../../code/workload-operator/)
+- Code: [`code/terraform-modules/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/terraform-modules/), [`code/workload-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/workload-operator/)
 
 ## Next Section
 

@@ -27,8 +27,8 @@ The API server is the **front door** to the Kubernetes control plane. All commun
 
 ```mermaid
 graph TB
-    Client[Client: kubectl, Controllers, Scheduler] --> API[API Server]
-    API --> Auth[AuthN/AuthZ]
+    Client["Client: kubectl, Controllers, Scheduler"] --> API[API Server]
+    API --> Auth["AuthN/AuthZ"]
     Auth --> Admission[Admission Controllers]
     Admission --> Etcd[(etcd)]
     Admission --> Watch[Watch Mechanism]
@@ -87,9 +87,9 @@ Assigns pods to nodes based on constraints and optimization.
 **Scheduling Framework:**
 ```mermaid
 graph LR
-    Queue[Scheduling Queue] --> Filter[Filter: Predicates]
-    Filter --> Score[Score: Priorities]
-    Score --> Bind[Bind: Assign to Node]
+    Queue[Scheduling Queue] --> Filter["Filter: Predicates"]
+    Filter --> Score["Score: Priorities"]
+    Score --> Bind["Bind: Assign to Node"]
 ```
 
 **Extension Points:**
@@ -164,7 +164,7 @@ Standard interface between kubelet and container runtime.
 ## Kubernetes API Concepts
 
 ### Resource Model
-```
+```text
 Group/Version/Resource (GVR)
 ├── Group: apps, batch, networking.k8s.io, platform.mycompany.io
 ├── Version: v1, v1beta1, v1alpha1
@@ -208,7 +208,7 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Explore Your Cluster
 ```bash
@@ -292,6 +292,49 @@ spec:
 
 ---
 
+## Troubleshooting
+
+Replace `<node>` in the commands below with the name of the control-plane node (for example `kind-control-plane`).
+
+### Symptom: the API server does not respond
+```bash
+# Check API server logs
+kubectl logs -n kube-system kube-apiserver-<node>
+
+# Check etcd health
+kubectl exec -n kube-system etcd-<node> -- etcdctl endpoint health
+
+# Check etcd status
+kubectl exec -n kube-system etcd-<node> -- etcdctl endpoint status --write-out=table
+```
+
+### Symptom: Pods stay Pending
+```bash
+# Check scheduler logs
+kubectl logs -n kube-system kube-scheduler-<node>
+
+# View pending pods
+kubectl get pods --all-namespaces --field-selector=status.phase=Pending
+
+# Check node resources
+kubectl describe nodes | grep -A 5 "Allocated resources"
+```
+
+### Symptom: a node is NotReady or Pods do not start
+```bash
+# Check kubelet status
+systemctl status kubelet
+
+# View kubelet logs
+journalctl -u kubelet -f
+
+# Check container runtime
+crictl ps -a
+crictl info
+```
+
+---
+
 ## Further Reading
 
 ### Official Documentation
@@ -309,47 +352,6 @@ spec:
 - "Kubernetes Up & Running" - Brendan Burns, Kelsey Hightower
 - "Programming Kubernetes" - Stefan Schimanski, Michael Hausenblas
 - "Kubernetes Operators" - Jason Dobies, Joshua Wood
-
----
-
-## Troubleshooting
-
-### API Server Not Responding
-```bash
-# Check API server logs
-kubectl logs -n kube-system kube-apiserver-<node>
-
-# Check etcd health
-kubectl exec -n kube-system etcd-<node> -- etcdctl endpoint health
-
-# Check certificate expiration
-kubectl exec -n kube-system etcd-<node> -- etcdctl endpoint status --write-out=table
-```
-
-### Scheduler Not Scheduling
-```bash
-# Check scheduler logs
-kubectl logs -n kube-system kube-scheduler-<node>
-
-# View pending pods
-kubectl get pods --all-namespaces --field-selector=status.phase=Pending
-
-# Check node resources
-kubectl describe nodes | grep -A 5 "Allocated resources"
-```
-
-### Kubelet Issues
-```bash
-# Check kubelet status
-systemctl status kubelet
-
-# View kubelet logs
-journalctl -u kubelet -f
-
-# Check container runtime
-crictl ps -a
-crictl info
-```
 
 ---
 

@@ -13,13 +13,15 @@ segmenting it, and securing service-to-service communication.
 | 4 | [Service Mesh](service-mesh.md) | mTLS, identity-based authorization, and traffic management with Istio ambient, Linkerd, and Cilium |
 
 ## Related Labs
+
 - [Lab 01: Cluster Setup](../../labs/lab-01-cluster-setup/README.md) — kind cluster with Cilium and Hubble
 - [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/) — network isolation per tenant
 
 ## Where This Leads
+
 - [Multi-Cluster Networking](../13-multi-cluster/multi-cluster-networking.md)
 - [API Gateway](../09-platform-apis/api-gateway.md)
 - [Policy Engine](../12-security-compliance/policy-engine.md)
 
 Previous section: [02 — Container Runtime](../02-container-runtime/README.md) ·
-Next section: [04 — Infrastructure as Code](../04-infrastructure-as-code/)
+Next section: [04 — Infrastructure as Code](../04-infrastructure-as-code/README.md)

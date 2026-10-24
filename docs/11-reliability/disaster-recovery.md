@@ -23,9 +23,9 @@ A cluster is made of several layers, each with different recovery mechanisms. Th
 ```mermaid
 graph TB
     subgraph Rebuildable["Reproducible from code"]
-        INFRA[Cloud infra<br/>Terraform / Crossplane]
-        CLUSTER[Cluster + addons<br/>Cluster API / EKS module]
-        APPS[Platform & app manifests<br/>Argo CD / Flux]
+        INFRA["Cloud infra<br/>Terraform / Crossplane"]
+        CLUSTER["Cluster + addons<br/>Cluster API / EKS module"]
+        APPS["Platform & app manifests<br/>Argo CD / Flux"]
     end
     subgraph Stateful["Must be backed up"]
         ETCD[(etcd<br/>cluster state, CR status,<br/>non-GitOps objects)]
@@ -39,7 +39,7 @@ graph TB
     Velero[Velero] --> ETCD
     Velero --> PV
     Snap[etcd snapshots] --> ETCD
-    Cloud[Cloud-native backups / PITR] --> EXT
+    Cloud["Cloud-native backups / PITR"] --> EXT
 ```
 
 | Layer | Source of truth | Recovery method |
@@ -101,7 +101,7 @@ spec:
 
 ```mermaid
 graph LR
-    BR[Backup & Restore<br/>$ · hours] --> PL[Pilot Light<br/>$$ · tens of minutes]
+    BR["Backup & Restore<br/>$ · hours"] --> PL[Pilot Light<br/>$$ · tens of minutes]
     PL --> WS[Warm Standby<br/>$$$ · minutes]
     WS --> AA[Active-Active<br/>$$$$ · ~zero]
 ```
@@ -129,7 +129,7 @@ graph TB
     Git --> PB
     DBA -- async replication --> DBB
     S3A[(Velero bucket A)] -- cross-region replication --> S3B[(Velero bucket B)]
-    DNS[Global DNS / GSLB] --> PA
+    DNS["Global DNS / GSLB"] --> PA
     DNS -. failover .-> PB
 ```
 
@@ -153,8 +153,8 @@ See [Multi-Cluster GitOps](../13-multi-cluster/multi-cluster-gitops.md) for mana
 
 ```mermaid
 graph TB
-    CLI[velero CLI / GitOps] --> API[Kubernetes API]
-    API --> CRDs[Backup / Schedule / Restore CRs]
+    CLI["velero CLI / GitOps"] --> API[Kubernetes API]
+    API --> CRDs["Backup / Schedule / Restore CRs"]
     CRDs --> VS[Velero server]
     VS -->|list/get all resources| API
     VS -->|tarball of manifests| BSL[(BackupStorageLocation<br/>S3 / GCS / Blob / MinIO)]
@@ -564,9 +564,12 @@ spec:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Back Up and Restore a Stateful App with Velero + MinIO on kind
+### Exercise 1: Back up and restore a stateful app with Velero and MinIO on kind
+
+Goal: back up a namespace with a PVC, delete it, restore it, and measure your recovery time.
+Requires `kind`, `kubectl` and the `velero` CLI; expect about 20 minutes.
 
 ```bash
 # 1. Cluster and MinIO (local S3)
@@ -634,6 +637,21 @@ kubectl delete namespace notes
 time velero restore create --from-backup notes-1 --wait
 kubectl -n notes exec deploy/notes -- cat /data/notes.txt   # "important record" present
 ```
+
+Expected output:
+
+```text
+# step 2
+NAME      PROVIDER   BUCKET/PREFIX   PHASE       LAST VALIDATED
+default   aws        velero          Available   10s ago
+# step 5
+Restore completed with status: Completed.
+Tue Jan  1 10:00:00 UTC 2030
+important record
+```
+
+Check: `velero backup get` lists `notes-1` as `Completed`, and the `important record` line is
+present after the restore. The `time` output from step 5 is your measured RTO.
 
 **Questions:**
 1. What was your measured RTO? What dominated it?

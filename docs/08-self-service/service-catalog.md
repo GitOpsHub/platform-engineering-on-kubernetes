@@ -32,15 +32,15 @@ The term "service catalog" is overloaded. Platforms need both meanings:
 ```mermaid
 graph LR
     subgraph Offering["Offering catalog"]
-        O1[Offering: postgres]
-        O2[Offering: go-service]
-        O3[Offering: preview-env]
+        O1["Offering: postgres"]
+        O2["Offering: go-service"]
+        O3["Offering: preview-env"]
     end
     subgraph Inventory["Inventory catalog"]
-        C[Component: payments-api]
-        R[Resource: payments-db]
-        E[Environment: payments-pr-42]
-        T[Group: team-payments]
+        C["Component: payments-api"]
+        R["Resource: payments-db"]
+        E["Environment: payments-pr-42"]
+        T["Group: team-payments"]
     end
     O2 -->|instantiated as| C
     O1 -->|instantiated as| R
@@ -111,20 +111,20 @@ graph TB
         Repo[catalog-info.yaml in repos]
     end
     subgraph Pull["Observed (pull)"]
-        K8s[Kubernetes: Workloads, Environments]
-        Cloud[Cloud accounts: RDS, buckets]
-        IdP[IdP: teams and users]
+        K8s["Kubernetes: Workloads, Environments"]
+        Cloud["Cloud accounts: RDS, buckets"]
+        IdP["IdP: teams and users"]
     end
     Disc[Discovery providers] --> Cat[(Catalog)]
     Repo --> Disc
-    K8s --> Ing[Kubernetes ingestor / exporter]
+    K8s --> Ing["Kubernetes ingestor / exporter"]
     Cloud --> CloudIng[Cloud ingestor]
     IdP --> OrgIng[Org ingestor]
     Ing --> Cat
     CloudIng --> Cat
     OrgIng --> Cat
     Cat --> Fresh[Freshness + orphan checks]
-    Fresh --> Alerts[Scorecards / alerts]
+    Fresh --> Alerts["Scorecards / alerts"]
 ```
 
 | Technique | Detects | Implementation |
@@ -258,13 +258,13 @@ The repo's `code/service-catalog` provides the core: a registry of offerings, in
 ```mermaid
 graph LR
     CLI[platform-cli catalog] --> Lib
-    API[platform-api /api/v1/catalog] --> Lib
+    API["platform-api /api/v1/catalog"] --> Lib
     BS[Backstage action] --> API
     Lib[service-catalog library] --> Reg[(registry/offerings/*.yaml)]
     Lib --> Tpl[(templates/*.tmpl)]
     Lib --> Out[Rendered manifests]
     Out --> Git[GitOps PR]
-    Out --> K8s[kubectl apply / SSA]
+    Out --> K8s["kubectl apply / SSA"]
 ```
 
 ```go
@@ -526,45 +526,92 @@ groups:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Build and Use an Offering Catalog
+### Exercise 1: Scaffold services with the service-catalog tool
 
-This exercise complements [Lab 04: Service Catalog](../../labs/lab-04-service-catalog/README.md).
+**Goal:** Use the repo's [`code/service-catalog`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/service-catalog/) tool to list templates, scaffold a service, and validate the generated `Workload`. This complements [Lab 04: Service Catalog](../../labs/lab-04-service-catalog/README.md).
 
-1. **Create the registry** under `code/service-catalog/` with the `postgres` offering and template from this doc. Add a second offering, `redis`, with `size` and `persistence` inputs.
-2. **Run the tests** and generate golden files:
+**Before you start:** Go 1.22 or later, and the `Workload` CRD installed in your kind cluster (`make -C code/workload-operator install`).
+
+1. **Run the tests** for the catalog library:
+
    ```bash
    cd code/service-catalog
-   go test ./... -run TestRender -update
    go test ./...
    ```
-3. **Render via CLI** (planned command; `platform-cli catalog` does not exist yet) and validate against the cluster:
-   ```bash
-   platform-cli catalog provision postgres \
-     --set name=orders-db --set tenant=payments --set environment=dev --dry-run -o yaml \
-     | kubectl apply --dry-run=server -f -
-   ```
-4. **Publish a new version** `postgres@1.4.0` that adds a `backupRetentionDays` input. Confirm `Get("postgres", "")` returns 1.4.0 and `1.3.0` still renders.
-5. **Run the coverage check** script above and register any running Workload missing from the catalog.
 
-#### Verification
-- [ ] Invalid inputs return a `ValidationError` with a field-level message
-- [ ] Rendered resources carry `platform.mycompany.io/offering` and `offering-version` labels
-- [ ] Coverage report lists zero running-but-uncataloged Workloads
+   Expected output: `ok` for each package.
+2. **List and describe the built-in templates:**
+
+   ```bash
+   go run ./cmd/catalog list
+   go run ./cmd/catalog describe go-http-service
+   ```
+
+   Expected output: `go-http-service` and `static-site` appear in the list; `describe` shows the inputs.
+3. **Scaffold a service** into a scratch directory and validate it against the cluster:
+
+   ```bash
+   go run ./cmd/catalog scaffold go-http-service \
+     --set name=orders --set owner=payments --set namespace=payments-dev --dry-run
+   ```
+
+   Expected output: the rendered file list, including `workload.yaml` and `catalog-info.yaml`. Re-run with `--out ./orders` instead of `--dry-run` to write the files, then validate the manifest:
+
+   ```bash
+   kubectl apply --dry-run=server -f ./orders/workload.yaml
+   ```
+
+4. **Add a template.** Create a team template directory with `template.yaml` and `.tmpl` files (see the [service-catalog README](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/service-catalog/README.md) for the format) and load it with `--templates ./team-templates`.
+5. **Design the offering catalog.** Using the offering definition in this page, write a `redis` offering with `size` and `persistence` inputs. The Go offering catalog and `platform-cli catalog` shown in this page are design material and do not exist in the repo yet.
+
+**Check:**
+
+- [ ] Invalid inputs return an error that names the field.
+- [ ] Scaffolded `workload.yaml` passes `kubectl apply --dry-run=server`.
+- [ ] Every scaffolded service has a `catalog-info.yaml` with an owner.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| Catalog shows services that were deleted months ago | No orphan cleanup; static locations | Use discovery providers; `full` mutations in entity providers |
-| Owner shows as "unknown" | Owner group not ingested | Ingest org data first; validate `spec.owner` in CI |
-| `map has no entry for key` when rendering | `missingkey=error` caught a template typo | Fix the key or add a default in the schema |
-| Defaults not applied for nested objects | `applyDefaults` only handles top level | Use a schema-defaults library or flatten inputs |
-| Offering provisioned but never appears in inventory | Labels/annotations missing on rendered resource | Add `backstage.io/kubernetes-id` / tenant labels in the template |
-| Users keep filing tickets anyway | Offering doesn't cover their case | Add inputs or a new offering version; track ticket categories |
+### Catalog shows services that were deleted months ago
+
+**Cause:** No orphan cleanup; static locations
+
+**Fix:** Use discovery providers; `full` mutations in entity providers
+
+### Owner shows as "unknown"
+
+**Cause:** Owner group not ingested
+
+**Fix:** Ingest org data first; validate `spec.owner` in CI
+
+### `map has no entry for key` when rendering
+
+**Cause:** `missingkey=error` caught a template typo
+
+**Fix:** Fix the key or add a default in the schema
+
+### Defaults not applied for nested objects
+
+**Cause:** `applyDefaults` only handles top level
+
+**Fix:** Use a schema-defaults library or flatten inputs
+
+### Offering provisioned but never appears in inventory
+
+**Cause:** Labels/annotations missing on rendered resource
+
+**Fix:** Add `backstage.io/kubernetes-id` / tenant labels in the template
+
+### Users keep filing tickets anyway
+
+**Cause:** Offering doesn't cover their case
+
+**Fix:** Add inputs or a new offering version; track ticket categories
+
 
 ---
 

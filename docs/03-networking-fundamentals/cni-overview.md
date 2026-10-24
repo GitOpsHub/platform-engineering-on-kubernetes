@@ -30,12 +30,12 @@ Services, DNS, and NetworkPolicy are built *on top of* this flat L3 network.
 ```mermaid
 graph TB
     subgraph Node1[Node A - 10.0.1.10]
-        P1[Pod 10.244.1.5] --- V1[veth] --- BR1[cni0 / eBPF datapath]
+        P1[Pod 10.244.1.5] --- V1[veth] --- BR1["cni0 / eBPF datapath"]
         P2[Pod 10.244.1.6] --- V2[veth] --- BR1
         BR1 --- ETH1[eth0]
     end
     subgraph Node2[Node B - 10.0.1.11]
-        P3[Pod 10.244.2.7] --- V3[veth] --- BR2[cni0 / eBPF datapath]
+        P3[Pod 10.244.2.7] --- V3[veth] --- BR2["cni0 / eBPF datapath"]
         BR2 --- ETH2[eth0]
     end
     ETH1 <-->|Overlay VXLAN/Geneve or native routes / BGP| ETH2
@@ -184,10 +184,10 @@ sudo ip netns del demo
 ```mermaid
 graph LR
     subgraph Overlay
-      A1[Pod A] --> E1[Encap VXLAN<br/>outer: nodeA→nodeB] --> D1[Decap] --> B1[Pod B]
+      A1[Pod A] --> E1["Encap VXLAN<br/>outer: nodeA→nodeB"] --> D1[Decap] --> B1[Pod B]
     end
     subgraph Native
-      A2[Pod A] --> R2[Underlay route<br/>10.244.2.0/24 via nodeB] --> B2[Pod B]
+      A2[Pod A] --> R2["Underlay route<br/>10.244.2.0/24 via nodeB"] --> B2[Pod B]
     end
 ```
 
@@ -283,16 +283,16 @@ balancing, NetworkPolicy (L3–L7), encryption, and flow visibility without ipta
 ```mermaid
 graph TB
     subgraph ControlPlane[Control plane]
-        OP[cilium-operator<br/>IPAM, CRD GC] --> API[kube-apiserver]
+        OP["cilium-operator<br/>IPAM, CRD GC"] --> API[kube-apiserver]
     end
     subgraph Node[Each node]
-        AG[cilium-agent DaemonSet] -->|compiles & loads| BPF[eBPF programs<br/>tc / XDP / socket]
-        AG --> ENV[cilium-envoy<br/>L7 policy & Gateway API]
+        AG[cilium-agent DaemonSet] -->|compiles & loads| BPF["eBPF programs<br/>tc / XDP / socket"]
+        AG --> ENV["cilium-envoy<br/>L7 policy & Gateway API"]
         AG --> HUB[Hubble server]
         BPF --- PODS[Pods]
     end
     AG --> API
-    HUB --> RELAY[hubble-relay] --> UI[Hubble UI / CLI]
+    HUB --> RELAY[hubble-relay] --> UI["Hubble UI / CLI"]
 ```
 
 ```yaml
@@ -403,16 +403,16 @@ spec:
 ```mermaid
 flowchart TD
     Start([New platform cluster]) --> Managed{Managed K8s<br/>with opinionated CNI?}
-    Managed -->|Yes, and it meets needs| Cloud[Use provider CNI<br/>GKE DPv2 / AWS VPC CNI / Azure CNI]
+    Managed -->|Yes, and it meets needs| Cloud["Use provider CNI<br/>GKE DPv2 / AWS VPC CNI / Azure CNI"]
     Managed -->|No / need more| Policy{Need NetworkPolicy?}
     Policy -->|No - dev/edge only| Flannel[Flannel]
     Policy -->|Yes| L7{Need L7/FQDN policy,<br/>flow visibility,<br/>kube-proxy replacement?}
     L7 -->|Yes| Cilium[Cilium]
     L7 -->|No| BGP{BGP fabric or<br/>Windows nodes?}
     BGP -->|Yes| Calico[Calico]
-    BGP -->|No| Either[Calico or Cilium<br/>- pick on team skills]
+    BGP -->|No| Either["Calico or Cilium<br/>- pick on team skills"]
     Cloud --> Chain{Want Cilium features<br/>on top?}
-    Chain -->|Yes| Chaining[Cilium chaining mode / ENI mode]
+    Chain -->|Yes| Chaining["Cilium chaining mode / ENI mode"]
 ```
 
 ### Platform Decision Checklist
@@ -512,7 +512,7 @@ groups:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Lab: Inspect Pod Networking End to End
 

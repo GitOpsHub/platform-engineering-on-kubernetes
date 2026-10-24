@@ -18,7 +18,7 @@ graph LR
     L[Logs] --> A
     T[Traces] --> M
     T --> P[Profiles]
-    A --> SLO[11 - Reliability: SLOs]
+    A --> SLO["11 - Reliability: SLOs"]
 ```
 
 ## Related

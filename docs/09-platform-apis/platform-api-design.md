@@ -29,9 +29,9 @@ graph TB
         GitOps[GitOps repos]
     end
     subgraph API["Platform API layer"]
-        Gateway[API gateway<br/>authn, rate limits, routing]
-        REST[REST / JSON<br/>/api/v1alpha1/...]
-        K8s[Kubernetes API<br/>platform.mycompany.io/v1alpha1]
+        Gateway["API gateway<br/>authn, rate limits, routing"]
+        REST["REST / JSON<br/>/api/v1alpha1/..."]
+        K8s["Kubernetes API<br/>platform.mycompany.io/v1alpha1"]
     end
     subgraph Backends
         Ops[tenant-operator]
@@ -414,35 +414,88 @@ oasdiff breaking origin/main:code/platform-api/openapi.yaml code/platform-api/op
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-Goal: review the platform API contract and make a breaking change safely.
+### Exercise 1: Review the API contract and make a breaking change safely
 
-1. **Read the contract.** Open `code/platform-api/openapi.yaml` and list every path and method. Confirm each `Workload` and `Environment` route maps to a Kubernetes resource in the `platform.mycompany.io/v1alpha1` group.
-2. **Find a gap.** Identify one operation a developer would want that has no route (for example, listing a tenant's environments through `/tenants/{name}/environments`). Write it as a resource-oriented route, not an RPC name.
-3. **Classify a change.** For each of these, say whether it is compatible and why:
+**Goal:** Read the real contract, find a gap, classify four changes, and stage a rename across two releases.
+
+**Before you start:** a clone of this repository and Go 1.22 or later. The contract is [`code/platform-api/openapi.yaml`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/platform-api/openapi.yaml).
+
+1. **List every path and method** in the contract:
+
+   ```bash
+   grep -nE '^  /|^    (get|post|put|patch|delete):' code/platform-api/openapi.yaml
+   ```
+
+   Expected output: one line per path, each followed by its methods. Confirm each `Workload` and `Environment` route maps to a resource in the `platform.mycompany.io/v1alpha1` group.
+2. **Find a gap.** Identify one operation a developer would want that has no route, such as listing a tenant's environments through `/tenants/{name}/environments`. Write it as a resource-oriented route, not an RPC name.
+3. **Classify each change** as compatible or breaking, and say why:
    - Add `spec.env[].valueFrom` to `Workload`.
    - Rename `spec.replicas` to `spec.desiredReplicas`.
    - Make `spec.port` required.
    - Change the default `ttl` for `preview` from `72h` to `24h`.
-4. **Make the rename safely.** Add `desiredReplicas` as optional, keep `replicas` working with a deprecation marker, and write a test that both fields produce the same result. Only remove `replicas` in a new version.
-5. **Run the breaking-change check** against your branch and confirm it reports the rename as breaking only when `replicas` is removed.
+4. **Stage the rename.** Add `desiredReplicas` as optional, keep `replicas` working with a deprecation marker, and write a test that both fields produce the same result. Remove `replicas` only in a new version.
+5. **Run the contract tests** in `code/platform-api`:
 
-**Success criteria:** every route is resource-oriented; the rename is staged across two releases; the check passes before removal.
+   ```bash
+   cd code/platform-api && go test ./...
+   ```
+
+   Expected output: `ok` for each package. If your team has an OpenAPI diff tool in CI, run it on your branch and confirm it reports the rename as breaking only when `replicas` is removed.
+
+**Check:**
+
+- [ ] Every route is resource-oriented.
+- [ ] The rename is staged across two releases.
+- [ ] The tests pass before and after the removal.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| Clients break after a release with no visible API change | Validation tightened, or a default changed | Treat as breaking; add ratcheting or a migration; revert the default |
-| `403` for users who should have access | RBAC on the object is correct but the handler acts as the service account instead of the caller, or the caller's groups were filtered out by the allowlist | Check which identity the handler uses and which groups platform-api forwarded; check `kubectl auth can-i --as <user> --as-group <group>` |
-| Duplicate environments after client retries | `POST` without a stable name or idempotency key | Use a generated name from the client, or accept `Idempotency-Key` |
-| `unknown field` errors from a new CLI | Client generated from a newer spec than the server | Pin the client to the server version; check the `/version` endpoint |
-| List results differ page to page | Offset pagination on a changing collection | Switch to `continue` tokens |
-| Long requests time out on create | Synchronous provisioning in the handler | Return `202` and poll or watch the resource |
-| OpenAPI and server disagree | Hand-edited spec, or generated types not regenerated | Add a contract test in CI; regenerate |
+### Clients break after a release with no visible API change
+
+**Cause:** Validation tightened, or a default changed
+
+**Fix:** Treat as breaking; add ratcheting or a migration; revert the default
+
+### `403` for users who should have access
+
+**Cause:** RBAC on the object is correct but the handler acts as the service account instead of the caller, or the caller's groups were filtered out by the allowlist
+
+**Fix:** Check which identity the handler uses and which groups platform-api forwarded; check `kubectl auth can-i --as <user> --as-group <group>`
+
+### Duplicate environments after client retries
+
+**Cause:** `POST` without a stable name or idempotency key
+
+**Fix:** Use a generated name from the client, or accept `Idempotency-Key`
+
+### `unknown field` errors from a new CLI
+
+**Cause:** Client generated from a newer spec than the server
+
+**Fix:** Pin the client to the server version; check the `/version` endpoint
+
+### List results differ page to page
+
+**Cause:** Offset pagination on a changing collection
+
+**Fix:** Switch to `continue` tokens
+
+### Long requests time out on create
+
+**Cause:** Synchronous provisioning in the handler
+
+**Fix:** Return `202` and poll or watch the resource
+
+### OpenAPI and server disagree
+
+**Cause:** Hand-edited spec, or generated types not regenerated
+
+**Fix:** Add a contract test in CI; regenerate
+
 
 ---
 

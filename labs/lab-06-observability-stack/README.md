@@ -25,8 +25,10 @@ Background reading: [Logging stack](../../docs/10-observability/logging-stack.md
 | Python | 3.12 | Only if you want to run `app.py` outside the cluster (optional) |
 | [Lab 01 done](../lab-01-cluster-setup/README.md) | - | kind cluster `platform-engineering` (context `kind-platform-engineering`), Cilium, Traefik, cert-manager, and the `platform-monitoring` namespace |
 
-## Estimated Time: 45-60 minutes
-(Most of it is image pulls and Prometheus Operator CRD installation on the first run.)
+## Estimated Time
+
+45-60 minutes, most of it image pulls and Prometheus Operator CRD installation on the first run.
+Difficulty: Intermediate.
 
 ---
 
@@ -70,7 +72,7 @@ Chart versions live at the top of `setup.sh`; change them there, and the values 
 
 ## Architecture
 
-```
+```text
 checkout-api (checkout ns)
   |- /metrics  --scrape (ServiceMonitor)-------------> Prometheus (+ Thanos sidecar)
   |- OTLP traces -> otel-collector -> Tempo ----------+
@@ -90,12 +92,20 @@ Logs take the Alloy path. The collector has a logs pipeline too, for apps that s
 ### Step 1 - Check the cluster
 
 ```bash
-kubectl config current-context    # kind-platform-engineering
-kubectl get nodes                 # 3 nodes, Ready
+kubectl config current-context      # kind-platform-engineering
+kubectl get nodes                   # 3 nodes, all Ready
 kubectl get ns platform-monitoring  # created in Lab 01 (privileged PSA)
 ```
 
+Expected result: the context is `kind-platform-engineering`, one control-plane and two worker nodes
+are `Ready`, and the namespace is `Active`. If the namespace is missing, `setup.sh` creates and
+labels it. If you install by hand, create it first with
+`kubectl create namespace platform-monitoring`.
+
 ### Step 2 - Install everything
+
+Choose one path: run the script here, or run Steps 3 to 8 by hand. The script is idempotent, so
+running both is safe but wastes time.
 
 ```bash
 cd labs/lab-06-observability-stack
@@ -104,9 +114,15 @@ cd labs/lab-06-observability-stack
 ```
 
 The script installs in this order: Loki, Tempo, OpenTelemetry Collector, Alloy, kube-prometheus-stack, then
-builds `checkout-api:0.1.0`, loads it into kind, applies the app, and applies the Grafana datasource ConfigMap.
+builds `checkout-api:0.1.0`, loads it into kind, applies the app, waits for the `checkout-api`
+rollout, and applies the Grafana datasource ConfigMap. It needs `docker` and `kind` unless you pass
+`--skip-app`.
 
-The rest of this section walks through what the script does so you can run each step by hand.
+Expected result: a series of `==>` lines, ending with `==> Done. Context: kind-platform-engineering`
+and the Grafana port-forward hint. Allow 10 to 15 minutes on the first run.
+
+Steps 3 to 8 show what the script does so you can run each step by hand. Run them from
+`labs/lab-06-observability-stack`.
 
 ### Step 3 - Loki and Tempo
 
@@ -120,6 +136,9 @@ helm upgrade --install tempo tempo --repo https://grafana-community.github.io/he
 
 Loki runs in `SingleBinary` mode and keeps its chunks on a PVC (`loki-stack.yaml`). The gateway, caches and canary
 are off, which keeps it small. Tempo listens for OTLP on `4317` (gRPC) and `4318` (HTTP).
+
+Expected result: each command prints `STATUS: deployed`. Check with
+`kubectl -n platform-monitoring get pods loki-0 tempo-0`, which should show both `Running`.
 
 ### Step 4 - OpenTelemetry Collector
 
@@ -138,6 +157,9 @@ helm upgrade --install otel-collector opentelemetry-collector \
 | logs | `otlp_http/loki` | Loki `/otlp` (native OTLP ingestion) |
 | metrics | `prometheusremotewrite` | Prometheus `/api/v1/write` (remote write receiver enabled) |
 
+Expected result: `STATUS: deployed`, and `kubectl -n platform-monitoring get deploy otel-collector`
+shows `1/1` ready.
+
 ### Step 5 - Grafana Alloy (pod logs)
 
 ```bash
@@ -147,6 +169,8 @@ helm upgrade --install alloy alloy --repo https://grafana.github.io/helm-charts 
 
 Alloy reads pod logs through the Kubernetes API (`loki.source.kubernetes`) and pushes them to Loki, labelled
 with `namespace`, `pod`, `container` and `app`. It runs as one Deployment, so it needs no host log mounts.
+
+Expected result: `STATUS: deployed`, and `kubectl -n platform-monitoring get deploy alloy` shows it ready.
 
 ### Step 6 - kube-prometheus-stack, Thanos sidecar and Grafana
 
@@ -168,11 +192,17 @@ helm upgrade --install kps kube-prometheus-stack \
 - `kubeEtcd`, `kubeControllerManager`, `kubeScheduler` and `kubeProxy` scrapers are off because kind does not
   expose them, and Cilium replaces kube-proxy.
 
+Expected result: `STATUS: deployed`. This is the slowest install because it also creates the Prometheus
+Operator CRDs. Check with `kubectl -n platform-monitoring get pods | grep kps`.
+
 ### Step 7 - Datasource ConfigMap
 
 ```bash
 kubectl apply -f grafana/datasources-configmap.yaml
 ```
+
+Expected result: `configmap/grafana-datasources-lab06 created`. Grafana's sidecar picks it up within
+about a minute.
 
 [`grafana/datasources.yaml`](grafana/datasources.yaml) is the source of truth. The ConfigMap embeds the same content
 for the sidecar. It sets up:
@@ -190,7 +220,12 @@ docker build -t checkout-api:0.1.0 apps/checkout-api
 kind load docker-image checkout-api:0.1.0 --name platform-engineering
 kubectl apply -f apps/checkout-api/k8s/00-namespace.yaml
 kubectl apply -f apps/checkout-api/k8s/
+kubectl -n checkout rollout status deployment/checkout-api --timeout=180s
 ```
+
+Expected result: `deployment "checkout-api" successfully rolled out`. The `kubectl apply` creates the
+Deployment, Service, ServiceMonitor and the `checkout-loadgen` Job. Applying `00-namespace.yaml` first
+makes sure the `checkout` namespace exists before the rest.
 
 [`app.py`](apps/checkout-api/app.py) serves:
 
@@ -214,7 +249,9 @@ kubectl -n platform-monitoring get pods       # all Running/Ready (loki-0, tempo
 kubectl -n checkout get pods                  # checkout-api Running, checkout-loadgen Completed or Running
 ```
 
-**Grafana**
+Expected result: every pod shows `Running` (or `Completed` for the load generator) with all containers ready.
+
+### Grafana
 
 ```bash
 kubectl -n platform-monitoring port-forward svc/kps-grafana 3000:80
@@ -223,8 +260,9 @@ kubectl -n platform-monitoring get secret kps-grafana -o jsonpath='{.data.admin-
 ```
 
 Open **Connections > Data sources**, then **Save & test** on Prometheus, Loki and Tempo. All three must pass.
+Stop the port-forward with Ctrl+C when you are done.
 
-**Metrics and exemplars**
+### Metrics and exemplars
 
 ```bash
 kubectl -n platform-monitoring port-forward svc/kps-kube-prometheus-stack-prometheus 9090:9090 &
@@ -232,20 +270,21 @@ curl -s 'http://localhost:9090/api/v1/query?query=sum(rate(http_request_duration
 curl -s 'http://localhost:9090/api/v1/query_exemplars?query=http_request_duration_seconds_bucket' | head -c 600
 ```
 
-The exemplar query should return `trace_id` labels. Graph the histogram in Grafana Explore, and the
-exemplar dots link to traces.
+Expected result: the first query returns `"status":"success"` with a value above 0 (about 5 while the load
+generator runs). The exemplar query returns `trace_id` labels. Graph the histogram in Grafana Explore, and the
+exemplar dots link to traces. Stop the background port-forward with `kill %1`.
 
-**Logs -> traces**
+### Logs to traces
 
 In Grafana Explore, pick Loki and run `{namespace="checkout"} | json`. Each line with a `trace_id` shows a
 **View trace** link (derived field).
 
-**Traces -> logs and metrics**
+### Traces to logs and metrics
 
 Explore, pick Tempo, search `service.name = checkout-api`. Open a trace, then use **Logs for this span**
 (Loki) and the metrics links (Prometheus).
 
-**Thanos sidecar**
+### Thanos sidecar
 
 ```bash
 kubectl -n platform-monitoring logs -l app.kubernetes.io/name=prometheus -c thanos-sidecar --tail=20
@@ -257,6 +296,9 @@ only serves local data.
 ---
 
 ## Cleanup
+
+> **Warning:** `teardown.sh` deletes the `checkout` namespace and the Loki, Tempo and Prometheus volumes,
+> so all stored logs, traces and metrics are lost.
 
 ```bash
 ./teardown.sh
@@ -273,6 +315,9 @@ releases. Helm keeps StatefulSet PVCs, so the script also deletes the Loki, Temp
 
 Helm does not remove CRDs, so the Prometheus Operator CRDs stay. Remove them only if you do not need them:
 `kubectl get crd | grep monitoring.coreos.com`, then delete the listed CRDs.
+
+Still running afterwards: the kind cluster and the Lab 01 platform components. Confirm with
+`kubectl -n platform-monitoring get pods`, which should list no Lab 06 pods.
 
 ---
 
@@ -317,7 +362,7 @@ storage behaviour differs between Prometheus 2.x and 3.x, so compare against the
 
 ### Thanos sidecar in `CrashLoopBackOff`
 Check the Thanos version against the Prometheus version the operator deploys:
-`kubectl -n platform-monitoring logs <prometheus-pod> -c thanos-sidecar`. Adjust `thanos.version` in
+`kubectl -n platform-monitoring logs <prometheus-pod> -c thanos-sidecar`, where `<prometheus-pod>` is a pod from `kubectl -n platform-monitoring get pods | grep prometheus-kps`. Adjust `thanos.version` in
 `prometheus-stack.yaml`.
 
 ### `kind load docker-image` fails
@@ -340,7 +385,7 @@ kubectl apply -f apps/checkout-api/k8s/40-loadgen-job.yaml
 3. **Expose Grafana** through Traefik with an Ingress and a `*.localtest.me` host, as in Lab 01.
 4. **Object storage**: add MinIO or a cloud bucket, then enable `objectStorageConfig` on the Thanos sidecar
    (or Loki and Tempo storage) to see real long-term retention.
-5. **Lab 07**: [Multi-Tenancy](../lab-07-multi-tenancy/) (see the lab directory)
+5. **Lab 07**: [Multi-Tenancy](../lab-07-multi-tenancy/README.md)
 
 ---
 

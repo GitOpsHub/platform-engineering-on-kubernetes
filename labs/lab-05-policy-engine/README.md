@@ -22,8 +22,10 @@ Background reading: [Policy Engine](../../docs/12-security-compliance/policy-eng
 [Compliance](../../docs/12-security-compliance/compliance.md).
 Lab 01 is the prerequisite: [Cluster Setup](../lab-01-cluster-setup/README.md).
 
-## Estimated Time: 60 minutes
-(About 15 minutes is Gatekeeper and Kyverno image pulls on the first run.)
+## Estimated Time
+
+60 minutes, about 15 of which are Gatekeeper and Kyverno image pulls on the first run.
+Difficulty: Intermediate.
 
 ---
 
@@ -96,7 +98,15 @@ The rest of this README walks through the same steps by hand.
 
 ---
 
-## Step 1 - Install the engines
+## Steps
+
+Run every command from the lab directory:
+
+```bash
+cd labs/lab-05-policy-engine
+```
+
+### Step 1 - Install the engines
 
 Gatekeeper:
 
@@ -123,7 +133,17 @@ for ns in policy-test-gatekeeper policy-test-kyverno policy-test-cel; do
 done
 ```
 
-## Step 2 - Gatekeeper: templates, then constraints
+Expected result: both Helm commands print `STATUS: deployed`, and these pods reach `Running`:
+
+```bash
+kubectl get pods -n gatekeeper-system
+kubectl get pods -n kyverno
+```
+
+You should see one `gatekeeper-controller-manager` and one `gatekeeper-audit` pod, and the
+Kyverno admission, background, cleanup and reports controller pods.
+
+### Step 2 - Gatekeeper: templates, then constraints
 
 Gatekeeper creates a CRD for each template, so the templates must be established first:
 
@@ -134,11 +154,14 @@ kubectl apply -f gatekeeper-policies/constraints/
 kubectl get constraints
 ```
 
+Expected result: three constraints are listed, one each of kind `K8sRequiredLabels`,
+`K8sDisallowedTags` and `K8sAllowedRepos`, all scoped to `policy-test-gatekeeper`.
+
 The `enforcementAction: deny` field in each constraint is what rejects requests. Set it to
 `warn` or `dryrun` to roll a policy out without blocking anything, then read the audit
 results with `kubectl get <kind> <name> -o yaml`.
 
-## Step 3 - Kyverno: validate, mutate, generate
+### Step 3 - Kyverno: validate, mutate, generate
 
 Kyverno's generate rules need extra RBAC for the background controller. Apply it first:
 
@@ -153,10 +176,14 @@ kubectl apply -f kyverno-policies/require-labels.yaml \
 kubectl get clusterpolicy
 ```
 
+Expected result: five `ClusterPolicy` objects (`require-team-label`, `disallow-latest-tag`,
+`restrict-image-registries`, `add-default-labels`, `generate-tenant-defaults`) with `READY`
+`True`. The `ValidatingPolicy` is listed separately with `kubectl get validatingpolicy`.
+
 Kyverno's `add-default-labels` policy uses the `+( )` anchor, so a value a developer sets
 always wins over the default.
 
-## Step 4 - CEL: ValidatingAdmissionPolicy
+### Step 4 - CEL: ValidatingAdmissionPolicy
 
 No extra controller is needed. The API server evaluates CEL in-process:
 
@@ -166,10 +193,13 @@ kubectl apply -f cel-policies/
 kubectl -n policy-test-cel get configmap allowed-registries replica-limit
 ```
 
+Expected result: the first command prints `validatingadmissionpolicies`. The `kubectl apply`
+creates four policies and four bindings, and the last command lists both parameter ConfigMaps.
+
 [`cel-expressions.md`](cel-expressions.md) explains each file, including why the
 parameters live in a `ConfigMap`.
 
-## Step 5 - Optional: image signature verification
+### Step 5 - Optional: image signature verification
 
 ```bash
 kubectl apply -f kyverno-policies/verify-images.yaml
@@ -177,6 +207,8 @@ kubectl apply -f kyverno-policies/verify-images.yaml
 
 This needs outbound access to `ghcr.io` and the public Sigstore services (Fulcio and
 Rekor). Without it, the signed-image test is skipped.
+
+Expected result: `clusterpolicy.kyverno.io/verify-image-signatures created`.
 
 ---
 
@@ -193,7 +225,7 @@ policy, but does not store the object:
 
 Expected output (abridged):
 
-```
+```text
 == gatekeeper (policy-test-gatekeeper)
   PASS: policy-test-gatekeeper allows pod-compliant.yaml
   PASS: policy-test-gatekeeper denies pod-missing-team-label.yaml
@@ -233,17 +265,29 @@ kubectl apply -f tests/fixtures/namespace-generate.yaml
 kubectl -n policy-test-generated get networkpolicy,resourcequota
 ```
 
+Expected result: a `default-deny-all` NetworkPolicy and a `default-quota` ResourceQuota
+appear within about a minute. `test-policies.sh` creates and deletes this namespace itself.
+
 ---
 
 ## Cleanup
+
+> **Warning:** `teardown.sh` uninstalls Kyverno and Gatekeeper from the current cluster.
 
 ```bash
 ./teardown.sh
 ```
 
-This deletes the policies, the test namespaces and both helm releases. Remove the test
-namespaces only with `kubectl delete namespace policy-test-gatekeeper policy-test-kyverno policy-test-cel policy-test-generated`
-if you want to keep the engines installed.
+This deletes the policies, the four test namespaces, both Helm releases and the `kyverno`
+and `gatekeeper-system` namespaces. The `platform-engineering` kind cluster keeps running.
+
+To keep the engines installed, remove only the test namespaces:
+
+```bash
+kubectl delete namespace policy-test-gatekeeper policy-test-kyverno policy-test-cel policy-test-generated --ignore-not-found
+```
+
+The cluster-scoped policies stay in place after that command.
 
 ---
 
@@ -259,7 +303,8 @@ Gatekeeper version with `helm list -n gatekeeper-system` and see the template st
 `kubectl get constrainttemplate k8srequiredlabels -o yaml`.
 
 ### Kyverno policy ignored (no denial)
-Check the policy is `Ready` and that the test namespace has the label Kyverno matches:
+Check the policy is `Ready`. The Kyverno policies match pods by namespace name
+(`policy-test-kyverno`), so test in that namespace:
 ```bash
 kubectl get clusterpolicy
 kubectl get clusterpolicy require-team-label -o jsonpath='{.status.conditions}'

@@ -36,12 +36,12 @@ graph LR
     Portal --> Catalog[Software Catalog]
     Portal --> Scaffolder[Software Templates]
     Portal --> Docs[TechDocs]
-    Portal --> Plugins[Plugins: K8s, ArgoCD, CI]
+    Portal --> Plugins["Plugins: K8s, ArgoCD, CI"]
     Scaffolder --> Git[(Git Provider)]
-    Scaffolder --> PAPI[Platform API / CRDs]
+    Scaffolder --> PAPI["Platform API / CRDs"]
     Catalog --> Git
     Plugins --> K8s[(Kubernetes Clusters)]
-    Git --> GitOps[ArgoCD / Flux]
+    Git --> GitOps["ArgoCD / Flux"]
     GitOps --> K8s
 ```
 
@@ -56,7 +56,7 @@ graph LR
 ```mermaid
 graph TB
     subgraph Browser
-        App[Frontend App<br/>React + plugin UIs]
+        App["Frontend App<br/>React + plugin UIs"]
     end
     subgraph Backend["Backend (Node.js, new backend system)"]
         Auth[auth plugin]
@@ -69,7 +69,7 @@ graph TB
         Proxy[proxy plugin]
     end
     DB[(PostgreSQL)]
-    IdP[OIDC IdP<br/>GitHub / Okta / Entra]
+    IdP["OIDC IdP<br/>GitHub / Okta / Entra"]
     GH[(GitHub / GitLab)]
     Clusters[(Kubernetes Clusters)]
     S3[(Object storage<br/>TechDocs)]
@@ -145,16 +145,16 @@ Every catalog entity follows the same Kubernetes-like envelope: `apiVersion`, `k
 
 ```mermaid
 graph TB
-    Domain[Domain: payments] --> System[System: checkout]
-    System --> C1[Component: payments-api]
-    System --> C2[Component: payments-worker]
-    System --> API1[API: payments-rest]
+    Domain["Domain: payments"] --> System["System: checkout"]
+    System --> C1["Component: payments-api"]
+    System --> C2["Component: payments-worker"]
+    System --> API1["API: payments-rest"]
     C1 -->|providesApi| API1
     C2 -->|consumesApi| API1
-    C1 -->|dependsOn| R1[Resource: payments-db]
-    Group[Group: team-payments] -->|ownerOf| C1
+    C1 -->|dependsOn| R1["Resource: payments-db"]
+    Group["Group: team-payments"] -->|ownerOf| C1
     Group -->|ownerOf| C2
-    User[User: alice] -->|memberOf| Group
+    User["User: alice"] -->|memberOf| Group
 ```
 
 | Kind | Represents | Typical `spec` fields |
@@ -776,12 +776,12 @@ platform:
 
 ```mermaid
 graph LR
-    Users --> GW[Gateway / Ingress<br/>TLS]
+    Users --> GW["Gateway / Ingress<br/>TLS"]
     GW --> BS1[backstage pod 1]
     GW --> BS2[backstage pod 2]
     BS1 --> PG[(PostgreSQL<br/>managed or CNPG)]
     BS2 --> PG
-    BS1 --> ES[External Secrets<br/>tokens, OAuth creds]
+    BS1 --> ES["External Secrets<br/>tokens, OAuth creds"]
     BS1 --> S3[(TechDocs bucket)]
 ```
 
@@ -832,22 +832,25 @@ spec:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Local Backstage with a Platform Template
+### Exercise 1: Run Backstage with a platform template
 
-This exercise is the short version of [Lab 04: Service Catalog](../../labs/lab-04-service-catalog/README.md).
+**Goal:** Start a local Backstage, register org data and a template, and dry-run the template. This is the short version of [Lab 04: Service Catalog](../../labs/lab-04-service-catalog/README.md); use the lab for the full, scripted setup.
 
-#### Step 1: Create the app
+**Before you start:** Node 20 or 22, Yarn through `corepack enable`, and the kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md).
+
+**Step 1: Create the app.**
 
 ```bash
-# Requires Node 20/22 and corepack-enabled Yarn
 npx @backstage/create-app@latest --path ./portal
 cd portal
-yarn start          # frontend :3000, backend :7007
+yarn start          # frontend on :3000, backend on :7007
 ```
 
-#### Step 2: Register org data and a component
+Expected output: the log ends with `webpack compiled successfully`, and `http://localhost:3000` shows the Backstage home page.
+
+**Step 2: Register org data.** Create `catalog/org.yaml` in the app directory:
 
 ```bash
 mkdir -p catalog
@@ -869,7 +872,7 @@ spec:
 EOF
 ```
 
-Add to `app-config.local.yaml`:
+Add the location to `app-config.local.yaml`, then restart `yarn start`:
 
 ```yaml
 catalog:
@@ -880,9 +883,7 @@ catalog:
         - allow: [Group, User]
 ```
 
-#### Step 3: Add the Go service template
-
-Copy the template from this doc into `templates/go-service/template.yaml`, create a minimal `skeleton/catalog-info.yaml` and `workload/workload.yaml`, then register it:
+**Step 3: Add the Go service template.** Copy the template from this page into `templates/go-service/template.yaml`. Create a minimal `skeleton/catalog-info.yaml` and `workload/workload.yaml` next to it, then register it:
 
 ```yaml
 catalog:
@@ -893,37 +894,78 @@ catalog:
         - allow: [Template]
 ```
 
-#### Step 4: Dry-run the template
-
-Open `http://localhost:3000/create`, choose **Go gRPC Service**, and use the **Template Editor** (`/create/edit`) to dry-run it. Inspect the rendered `workload.yaml` and confirm it validates against the CRD:
+**Step 4: Dry-run the template.** Open `http://localhost:3000/create/edit`, load the **Go gRPC Service** template, and run **Dry-run**. Save the rendered `workload.yaml` as `rendered/workload.yaml`, then validate it against the CRD (install the CRDs first with `make -C code/workload-operator install`):
 
 ```bash
 kubectl apply --dry-run=server -f rendered/workload.yaml
 ```
 
-#### Step 5: Wire up the Kubernetes plugin
+Expected output:
 
-Point `kubernetes.clusterLocatorMethods` at your kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md) and apply a `Workload` with the label `backstage.io/kubernetes-id: payments-api`. The entity page's **Kubernetes** tab should list the Workload and its pods.
+```text
+workload.platform.mycompany.io/payments-api created (server dry run)
+```
 
-#### Verification
-- [ ] Catalog shows `team-payments` and at least one Component owned by it
-- [ ] Template dry-run produces a valid `Workload`
-- [ ] Kubernetes tab shows pods for the component
+**Step 5: Wire up the Kubernetes plugin.** Point `kubernetes.clusterLocatorMethods` at the kind cluster and apply a `Workload` with the label `backstage.io/kubernetes-id: payments-api`. Open the entity page and select the **Kubernetes** tab.
+
+**Check:**
+
+- [ ] The catalog lists `team-payments` and at least one Component owned by it.
+- [ ] The dry-run command above prints `(server dry run)` and no validation error.
+- [ ] The **Kubernetes** tab lists the Workload and its pods.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| Entity stuck "processing" or missing | YAML error or rule disallows kind | Check `catalog.rules`; inspect the entity's **Inspect entity → Ancestry/Errors** |
-| `NotAllowedError: Location type ... not allowed` | Missing `rules` on the location | Add `rules: [{ allow: [...] }]` to the location |
-| Kubernetes tab empty | Label/annotation mismatch | Pod labels must contain `backstage.io/kubernetes-id: <entity-name>` |
-| Kubernetes tab shows `403` | Service account lacks RBAC | Apply the `backstage-reader` ClusterRole above |
-| `publish:github` fails with 404 | GitHub App/token lacks repo creation scope | Configure `integrations.github` with a GitHub App that has `Administration: write` |
-| Template parameters not rendering | Wrong syntax | Use `${{ parameters.x }}` in `template.yaml`, `${{ values.x }}` in skeleton files |
-| Users can sign in but own nothing | Sign-in resolver can't map identity | Ensure `User` entities exist and names match the resolver |
-| Slow catalog after growth | Single process doing everything | Tune `catalog.processingInterval`, scale replicas, split plugins into separate deployments |
+### Entity stuck "processing" or missing
+
+**Cause:** YAML error or rule disallows kind
+
+**Fix:** Check `catalog.rules`; inspect the entity's **Inspect entity → Ancestry/Errors**
+
+### `NotAllowedError: Location type ... not allowed`
+
+**Cause:** Missing `rules` on the location
+
+**Fix:** Add `rules: [{ allow: [...] }]` to the location
+
+### Kubernetes tab empty
+
+**Cause:** Label/annotation mismatch
+
+**Fix:** Pod labels must contain `backstage.io/kubernetes-id: <entity-name>`
+
+### Kubernetes tab shows `403`
+
+**Cause:** Service account lacks RBAC
+
+**Fix:** Apply the `backstage-reader` ClusterRole above
+
+### `publish:github` fails with 404
+
+**Cause:** GitHub App/token lacks repo creation scope
+
+**Fix:** Configure `integrations.github` with a GitHub App that has `Administration: write`
+
+### Template parameters not rendering
+
+**Cause:** Wrong syntax
+
+**Fix:** Use `${{ parameters.x }}` in `template.yaml`, `${{ values.x }}` in skeleton files
+
+### Users can sign in but own nothing
+
+**Cause:** Sign-in resolver can't map identity
+
+**Fix:** Ensure `User` entities exist and names match the resolver
+
+### Slow catalog after growth
+
+**Cause:** Single process doing everything
+
+**Fix:** Tune `catalog.processingInterval`, scale replicas, split plugins into separate deployments
+
 
 ```bash
 # Useful backend debug commands

@@ -19,7 +19,7 @@ Be clear about what is simulated:
 
 ## Design
 
-```
+```text
             laptop
   127.0.0.1:8080 (blue)          127.0.0.1:9080 (green)
           |                               |
@@ -67,8 +67,10 @@ Background reading:
 | kubent | 0.7.x | Optional. Deprecated-API check, preferred over pluto |
 | pluto | 5.x | Optional. Used if kubent is not installed |
 
-## Estimated Time: 2-3 hours
-About 30 minutes of that is image pulls and two cluster bootstraps. Velero and the canary add 45-60 minutes.
+## Estimated Time
+
+2-3 hours. About 30 minutes of that is image pulls and two cluster bootstraps. Velero and the canary add 45-60 minutes.
+Difficulty: Advanced.
 
 ---
 
@@ -103,6 +105,9 @@ Versions were checked against public release metadata on 2026-10-24. Items marke
 
 ## Steps
 
+Each step links to a runbook section that gives the command, the expected result and a check. Run them in
+this order from `labs/lab-08-platform-upgrade`.
+
 1. **Create green**: [blue-green-deploy.md, steps 1-2](blue-green-deploy.md#step-1-create-the-green-cluster)
 2. **Register green with blue's Argo CD**: [step 3](blue-green-deploy.md#step-3-register-green-with-argo-cd-in-blue)
 3. **Deploy the same add-ons and smoke app to both clusters**: [step 4](blue-green-deploy.md#step-4-deploy-the-same-applicationset-to-both-clusters)
@@ -111,6 +116,19 @@ Versions were checked against public release metadata on 2026-10-24. Items marke
 6. **Back up blue with Velero and test a restore**: [rollback-procedures.md, section d](rollback-procedures.md#d-velero)
 7. **Cut traffic over to green and smoke test**: [blue-green-deploy.md, step 5](blue-green-deploy.md#step-5-switch-traffic)
 8. **Decommission blue**, or keep it running as your rollback target: [blue-green-deploy.md, step 7](blue-green-deploy.md#step-7-decommission-blue)
+
+What to expect after each step:
+
+| Step | Expected result |
+|------|-----------------|
+| 1 | A second kind cluster, `platform-engineering-green`, with 3 Ready nodes on v1.36.4 |
+| 2 | `argocd cluster list` shows `platform-engineering-green` connected |
+| 3 | `argocd app list` shows the add-on and smoke apps Synced and Healthy for each labelled cluster |
+| 4 | The canary app is Healthy on green only, and the test Certificate becomes Ready |
+| 5 | A summary line `Summary: PASS=<n> WARN=<n> FAIL=<n> SKIP=<n>`, and the planned steps (nothing is changed) |
+| 6 | `velero backup get` shows `hello-pre-upgrade` as `Completed`, and the restore into `platform-smoke-test-restore` completes |
+| 7 | `curl -s http://hello.localtest.me:8080/hostname` prints a green pod name |
+| 8 | Only if you decommission: `kind get clusters` lists only `platform-engineering-green` |
 
 ---
 
@@ -132,21 +150,50 @@ curl -s http://hello.localtest.me:8080/hostname   # prints a pod name from green
 ./upgrade-automation.sh --target-version 1.36      # dry run; read the summary
 ```
 
+Expected result: the two `gitVersion` lines show `v1.35.8` and `v1.36.4` (each command also prints a client
+version line), the green cluster lists 3 `Ready` nodes, and both `curl` commands print a green pod name. The
+last command prints a `Summary:` line with `FAIL=0`.
+
 Done when the switched hostname returns a pod from green, Argo CD shows both clusters Healthy, and a Velero restore into `platform-smoke-test-restore` succeeds.
 
 ---
 
 ## Cleanup
 
+> **Warning:** This deletes the green cluster and the local Velero store, including every backup in it.
+
+Revert the traffic switch in Git first (see [rollback of the switch](blue-green-deploy.md#rollback-of-the-switch)).
+Otherwise blue's Ingress still points at `hello-green-proxy`, and `teardown.sh` removes that Service and the
+green cluster behind it.
+
 ```bash
-# Undo the switch first (revert the Ingress backend in Git, or restore the hello backend)
-kubectl --context kind-platform-engineering -n platform-smoke-test delete service hello-green-proxy   # if created
-kind delete cluster --name platform-engineering-green
-docker rm -f velero-s3                                  # the local S3-compatible store, if you started it
-kubectl --context kind-platform-engineering delete namespace platform-smoke-test-restore --ignore-not-found
+./teardown.sh
 ```
 
-Blue is deleted by Lab 01's `teardown.sh`, and only after you have moved Argo CD off it (see the decommission step). Leave blue running if you want to keep Lab 01 or do the next lab.
+`teardown.sh` does the following, and each part is safe to repeat:
+
+- Deletes the Service `hello-green-proxy` in `platform-smoke-test` on blue.
+- Deletes the namespace `platform-smoke-test-restore` on blue.
+- Deletes the kind cluster `platform-engineering-green`.
+- Removes the `velero-s3` Docker container (the local S3-compatible store).
+
+Expected result: `==> Done. Blue cluster left in place; ...`. Blue keeps running. The script does not remove
+the Argo CD objects, the Velero server, or any background port-forward. Remove those yourself if you no longer
+need them:
+
+```bash
+kubectl --context kind-platform-engineering -n argocd delete applicationset platform-addons --ignore-not-found
+argocd cluster rm platform-engineering-green
+velero uninstall            # uses the current kubectl context: switch to blue first
+pkill -f 'port-forward svc/argocd-server 18080'
+```
+
+Check with `kind get clusters` (only `platform-engineering` remains) and `docker ps --filter name=velero-s3`
+(no rows).
+
+Blue is deleted by Lab 01's `teardown.sh`, and only after you have moved Argo CD off it (see the
+[decommission step](blue-green-deploy.md#step-7-decommission-blue)). Leave blue running if you want to keep
+Lab 01 or do the next lab.
 
 ---
 
@@ -163,7 +210,7 @@ docker exec platform-engineering-control-plane getent hosts platform-engineering
 If it does not, check that both kind clusters are on the `kind` Docker network: `docker network inspect kind`.
 
 ### Port 8080 is already in use when you start `port-forward`
-Lab 02's `kubectl port-forward ... 8080:443` collides with Lab 01's host port 8080. Use `18080` (as in step 3) and `argocd login localhost:18080`.
+Lab 01's Traefik publishes host port 8080, so a `kubectl port-forward ... 8080:443` fails. Use `18080` (as in step 3) and `argocd login localhost:18080`.
 
 ### Switched traffic still shows blue
 Argo CD `selfHeal` reverts manual `kubectl edit` changes to the blue Ingress. Make the backend change in Git, or disable auto-sync for that app while you test.

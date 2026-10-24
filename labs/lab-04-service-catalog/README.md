@@ -26,32 +26,17 @@ Background reading:
 [Scaffolding](../../docs/08-self-service/scaffolding.md),
 [Backstage](../../docs/07-internal-developer-platform/backstage.md).
 
-## Estimated Time: 60-90 minutes
+## Estimated Time
+
+60-90 minutes
+
+**Difficulty:** Advanced
 
 The first Backstage build takes 15-25 minutes (dependency install and TypeScript compilation). Everything else takes about 30 minutes.
 
 ---
 
-## How it fits together
-
-```mermaid
-flowchart LR
-  subgraph kind[Lab 01 kind cluster - namespace developer-platform]
-    bs[Backstage<br/>Helm release]
-    pg[(PostgreSQL)]
-    bs --> pg
-  end
-  git[(GitHub repo<br/>labs/lab-04-service-catalog)] -- "catalog locations" --> bs
-  dev([Developer]) -- "browser: localtest.me:8080" --> bs
-  bs -- "publish:github" --> newrepo[(New service repo)]
-  bs -- "catalog:register" --> bs
-```
-
-Backstage reads the catalog from Git, not from your laptop, so the catalog entities and
-templates live in this repository. The chart runs Backstage as a single pod. Postgres
-holds the catalog and scaffolder state.
-
-### Files in this lab
+## Files in this lab
 
 | Path | Purpose |
 |------|---------|
@@ -64,7 +49,31 @@ holds the catalog and scaffolder state.
 | [`deploy.sh`](deploy.sh) | Installs Postgres, the config, the secrets and the Backstage chart |
 | [`teardown.sh`](teardown.sh) | Removes the release, Postgres (with its data) and the lab Secrets/ConfigMaps |
 
+---
+
+## How it fits together
+
+```mermaid
+flowchart LR
+  subgraph kind["Lab 01 kind cluster - namespace developer-platform"]
+    bs[Backstage<br/>Helm release]
+    pg[("PostgreSQL")]
+    bs --> pg
+  end
+  git[("GitHub repo<br/>labs/lab-04-service-catalog")] -- "catalog locations" --> bs
+  dev([Developer]) -- "browser: localtest.me:8080" --> bs
+  bs -- "publish:github" --> newrepo[("New service repo")]
+  bs -- "catalog:register" --> bs
+```
+
+Backstage reads the catalog from Git, not from your laptop, so the catalog entities and
+templates live in this repository. The chart runs Backstage as a single pod. Postgres
+holds the catalog and scaffolder state.
+
 ### Which Kubernetes objects Backstage creates
+
+After `deploy.sh` finishes, these objects exist in the `developer-platform` namespace.
+
 
 | Object | Name | Source |
 |--------|------|--------|
@@ -76,7 +85,11 @@ holds the catalog and scaffolder state.
 
 ---
 
-## Step 1 - Read the catalog before you run it
+## Steps
+
+Prepare a terminal with kubectl pointing at `kind-platform-engineering`.
+
+### Step 1 - Read the catalog before you run it
 
 The catalog is a set of YAML files. Look at how the entities refer to each other:
 
@@ -89,7 +102,9 @@ Every `owner`, `system` and `providesApis` value is a reference to another entit
 Backstage draws those references as the relation graph you will see in the UI. If a
 reference is wrong, the catalog shows it as unresolved, so the mistake is visible.
 
-## Step 2 - Build the Backstage image
+Expected: ten `kind:` entries (Group, Group, User, User, System, Component x3, API, Resource) and the `owner`/`system` lines that refer to them.
+
+### Step 2 - Build the Backstage image
 
 `deploy.sh` does not build an image. It loads one you built, because Backstage is an
 application you own: it has your plugins and your `app-config`. Create the app
@@ -97,7 +112,7 @@ application you own: it has your plugins and your `app-config`. Create the app
 
 ```bash
 mkdir -p ~/backstage-lab && cd ~/backstage-lab
-npx @backstage/create-app@latest      # answer the prompt with: backstage
+npx @backstage/create-app@latest      # when prompted for the app name, enter: backstage
 cd backstage
 corepack enable                       # Yarn 4, from the packageManager field
 yarn install                          # slow the first time
@@ -111,15 +126,17 @@ Check the image exists:
 docker image ls backstage-lab:local
 ```
 
+Expected: one row, repository `backstage-lab`, tag `local`.
+
 The `packages/backend/Dockerfile` created by `create-app` runs
 `node packages/backend`. That is the command set in [`helm-values.yaml`](helm-values.yaml).
 
-## Step 3 - Deploy Backstage
+### Step 3 - Deploy Backstage
 
-From this directory:
+Go back to this lab's directory. Replace `<path-to-repo>` with the folder where you cloned this repository:
 
 ```bash
-cd ../../../labs/lab-04-service-catalog       # or wherever this repository is
+cd <path-to-repo>/labs/lab-04-service-catalog
 BACKSTAGE_IMAGE=backstage-lab:local ./deploy.sh
 ```
 
@@ -131,6 +148,8 @@ The script:
 4. Loads the image into kind and runs `helm upgrade --install` with the official chart
 5. Waits for the Backstage Deployment to roll out
 
+Expected: the script ends with `Backstage is running.` and prints the UI, catalog and template URLs. Check with `kubectl -n developer-platform get deploy backstage backstage-postgres` (both `1/1`).
+
 Optional flags:
 
 | Flag or variable | Use it when |
@@ -139,7 +158,7 @@ Optional flags:
 | `--repo-url https://github.com/<you>/platform-engineering-on-kubernetes` | Your fork holds the catalog and the templates |
 | `--ref <branch>` | The catalog is on a branch other than `main` |
 
-## Step 4 - Sign in and explore the catalog
+### Step 4 - Sign in and explore the catalog
 
 Open **http://backstage.localtest.me:8080**, choose **Continue as guest**, then:
 
@@ -155,7 +174,7 @@ Catalog import takes about a minute after the pod starts. If the catalog is empt
 kubectl -n developer-platform logs deploy/backstage | grep -iE 'catalog|location' | tail -10
 ```
 
-## Step 5 - Create a service from a template
+### Step 5 - Create a service from a template
 
 1. In the UI, open **Create** and choose **Service with a Workload**.
 2. Fill in the form. Name: `orders`. Owner: `storefront-team`. System: `platform-lab`.
@@ -165,7 +184,9 @@ kubectl -n developer-platform logs deploy/backstage | grep -iE 'catalog|location
 
 Without `GITHUB_TOKEN` the publish step fails with an authentication error. Fetch still
 works, so you can read the generated files in the step log. To publish, redeploy with a
-token: `GITHUB_TOKEN=... ./deploy.sh`.
+token: `GITHUB_TOKEN=<token> ./deploy.sh` (replace `<token>` with a GitHub token that has the `repo` scope).
+
+Expected with a token: all three steps are green and the new repository exists under your GitHub account.
 
 Look at what the template produced. The skeleton is in
 [`templates/workload-service/skeleton/`](templates/workload-service/skeleton/). The most important
@@ -180,7 +201,7 @@ spec:
   image: ghcr.io/<you>/orders:0.1.0
   replicas: 2
   port: 8080
-  ...
+  # ...remaining fields omitted
 ```
 
 The developer sets `image`, `replicas` and `port`. Everything else (Deployment, Service,
@@ -188,10 +209,10 @@ probes, security context, Ingress) belongs to the platform.
 
 > **Workload vs WebApp.** Lab 03 defines a smaller `WebApp` CRD so you can see the whole
 > pattern in one controller. `Workload` is the platform's richer API, defined in
-> [`code/workload-operator`](../../code/workload-operator/). Both are Kubernetes custom resources,
+> [`code/workload-operator`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/workload-operator). Both are Kubernetes custom resources,
 > and the catalog treats them the same way.
 
-## Step 6 - Create an API from a template
+### Step 6 - Create an API from a template
 
 Open **Create** again and choose **OpenAPI contract**. It creates a repository with
 `openapi.yaml` and `catalog-info.yaml`, and registers an API entity. It deploys nothing.
@@ -200,7 +221,7 @@ Open the new API in the catalog and look at its **Definition** tab. The contract
 `openapi.yaml` through `$text`, a reference resolved when the catalog is read. Edit the
 file in the new repository and the catalog updates.
 
-## Step 7 - Change an entity and watch the catalog follow
+### Step 7 - Change an entity and watch the catalog follow
 
 This step needs a fork, as in Lab 02. Edit [`catalog-entities.yaml`](catalog-entities.yaml) in your
 fork and change `guestbook`'s `lifecycle` from `production` to `experimental`. Commit and push, then
@@ -221,7 +242,7 @@ kubectl -n developer-platform rollout status deploy/backstage --timeout=60s
 curl -fsS -o /dev/null -w '%{http_code}\n' http://backstage.localtest.me:8080/.backstage/health/v1/readiness   # 200
 ```
 
-Expected: both Deployments show `READY 1/1`, the readiness check returns `200`, and the Catalog
+Expected: `deployment "backstage" successfully rolled out`, both Deployments show `READY 1/1`, the readiness check returns `200`, and the Catalog
 page lists 10 entities (2 Groups, 2 Users, 1 System, 3 Components, 1 API, 1 Resource) plus the
 2 Templates from the Create page.
 
@@ -229,13 +250,15 @@ page lists 10 entities (2 Groups, 2 Users, 1 System, 3 Components, 1 API, 1 Reso
 
 ## Cleanup
 
+> **Warning:** `teardown.sh` deletes the Postgres PVC, so the catalog database and all scaffolder history are lost.
+
 ```bash
 ./teardown.sh
 ```
 
-This removes the Helm release, Postgres with its data, and the lab Secrets and ConfigMaps. It keeps
+Expected: lines starting `==>` ending with `==> Teardown complete`. This removes the Helm release, Postgres with its data, and the lab Secrets and ConfigMaps. It keeps
 the `developer-platform` namespace and the kind cluster, which Lab 01 owns. To remove the image, run
-`docker image rm backstage-lab:local`. Delete the `~/backstage-lab` directory yourself when you no longer need it.
+`docker image rm backstage-lab:local`. Delete the `~/backstage-lab` directory yourself when you no longer need it. Left running: the kind cluster and the Lab 01 platform components, plus anything from Labs 02 and 03.
 
 ---
 
@@ -259,7 +282,7 @@ The usual cause is Postgres not ready yet. The Backstage pod retries on its own.
 
 ### Backstage pod `OOMKilled`
 
-Node needs memory. Raise Docker's memory to 8 GB or more, or raise `backstage.resources.limits.memory`
+The node needs more memory. Raise Docker's memory to 8 GB or more, or raise `backstage.resources.limits.memory`
 in [`helm-values.yaml`](helm-values.yaml) and run `./deploy.sh` again.
 
 ### Sign-in fails with a message about `dangerouslyAllowOutsideDevelopment`

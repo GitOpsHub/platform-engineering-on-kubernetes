@@ -60,13 +60,13 @@ Each cluster runs its own controller and pulls its own path from Git.
 graph TB
     Git[(platform-config)]
     subgraph C1["dev-1"]
-        F1[Flux / Argo CD]
+        F1["Flux / Argo CD"]
     end
     subgraph C2["prod-eu-1"]
-        F2[Flux / Argo CD]
+        F2["Flux / Argo CD"]
     end
     subgraph C3["prod-us-1"]
-        F3[Flux / Argo CD]
+        F3["Flux / Argo CD"]
     end
     Git -->|clusters/dev-1| F1
     Git -->|clusters/prod-eu-1| F2
@@ -105,7 +105,7 @@ graph TB
 
 The layout is the most important decision. It should make the common change (bump an add-on everywhere) a one-line PR and the rare change (one cluster is special) possible without forking.
 
-```
+```text
 platform-config/
 ├── clusters/                         # one directory per cluster: thin, mostly references
 │   ├── dev-1/
@@ -526,7 +526,7 @@ spec:
         automated: { prune: false, selfHeal: true }   # never auto-delete tenant namespaces
 ```
 
-The tenant operator in each cluster ([`code/tenant-operator/`](../../code/tenant-operator/)) then expands the `Tenant` into namespaces, quotas, RBAC, and network policies. See [Lab 07](../../labs/lab-07-multi-tenancy/README.md).
+The tenant operator in each cluster ([`code/tenant-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/)) then expands the `Tenant` into namespaces, quotas, RBAC, and network policies. See [Lab 07](../../labs/lab-07-multi-tenancy/README.md).
 
 ---
 

@@ -22,9 +22,9 @@ Every request to the API server passes through three gates. RBAC is the most com
 
 ```mermaid
 graph LR
-    C[Client<br/>kubectl / controller / CI] -->|TLS| AN[Authentication<br/>x509, OIDC, SA tokens, webhook]
-    AN -->|user, groups, extra| AZ[Authorization<br/>Node, RBAC, Webhook]
-    AZ -->|allowed| AD[Admission<br/>mutating → validating<br/>policies, webhooks]
+    C["Client<br/>kubectl / controller / CI"] -->|TLS| AN["Authentication<br/>x509, OIDC, SA tokens, webhook"]
+    AN -->|user, groups, extra| AZ["Authorization<br/>Node, RBAC, Webhook"]
+    AZ -->|allowed| AD["Admission<br/>mutating → validating<br/>policies, webhooks"]
     AD --> E[(etcd)]
     AN -.->|401 Unauthorized| C
     AZ -.->|403 Forbidden| C
@@ -105,11 +105,11 @@ Identity, Vault Kubernetes auth): external systems trust the cluster's OIDC issu
 ```mermaid
 graph TB
     subgraph Cluster-scoped
-        CR[ClusterRole<br/>rules]
+        CR["ClusterRole<br/>rules"]
         CRB[ClusterRoleBinding]
     end
     subgraph Namespace team-a-dev
-        R[Role<br/>rules]
+        R["Role<br/>rules"]
         RB1[RoleBinding → Role]
         RB2[RoleBinding → ClusterRole]
     end
@@ -373,10 +373,10 @@ highly privileged ServiceAccount (e.g. an operator's) in a namespace where tenan
 
 ```mermaid
 graph TB
-    IdP[Identity Provider<br/>groups claim] --> API[API Server OIDC]
+    IdP["Identity Provider<br/>groups claim"] --> API[API Server OIDC]
     subgraph Cluster-wide
-        PA[platform-admins → cluster-admin<br/>via ClusterRoleBinding, JIT]
-        PV[platform-viewers → view + read CRDs<br/>ClusterRoleBinding]
+        PA["platform-admins → cluster-admin<br/>via ClusterRoleBinding, JIT"]
+        PV["platform-viewers → view + read CRDs<br/>ClusterRoleBinding"]
     end
     subgraph team-a-dev / team-a-staging
         D1[team-a-developers → edit]
@@ -412,7 +412,7 @@ spec:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Exercise 1: Explore Built-in Roles
 
@@ -504,7 +504,7 @@ kubectl access-matrix -n team-a-dev --as=alice --as-group=team-a-developers
 
 The message tells you exactly which check failed:
 
-```
+```text
 pods "web" is forbidden: User "alice" cannot create resource "pods/exec" in API group "" in the namespace "team-a-prod"
 ```
 
@@ -531,7 +531,7 @@ kubectl get rolebindings,clusterrolebindings -A -o json \
 
 ### Controller Logs `failed to list *v1.Secret: ... forbidden`
 
-The operator's ClusterRole is missing `list`/`watch` (informers need both, not just `get`). Regenerate RBAC from
+The operator's ClusterRole is missing `list`/`watch` (informers need both, not only `get`). Regenerate RBAC from
 kubebuilder markers (`make manifests`) and re-apply.
 
 ### Aggregated Rules Not Appearing
@@ -570,4 +570,4 @@ recreating bindings and only adds missing rules).
 1. **Read**: [Container Runtimes](../02-container-runtime/container-runtimes.md) — start Phase 1, section 02
 2. **Read**: [Pod Security](../12-security-compliance/pod-security.md) and [Policy Engine](../12-security-compliance/policy-engine.md) — admission controls that complement RBAC
 3. **Practice**: [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/) — generate tenant RBAC with the tenant-operator
-4. **Explore**: [`code/tenant-operator/`](../../code/tenant-operator/) — RBAC markers and bindings in a real operator
+4. **Explore**: [`code/tenant-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/) — RBAC markers and bindings in a real operator

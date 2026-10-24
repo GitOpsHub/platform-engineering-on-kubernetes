@@ -45,16 +45,16 @@ graph LR
     P1[Prometheus replica A] --> AM
     P2[Prometheus replica B] --> AM
     LR[Loki ruler] --> AM
-    TR[Thanos/Mimir ruler] --> AM
+    TR["Thanos/Mimir ruler"] --> AM
     subgraph AM[Alertmanager cluster - 3 replicas, gossip]
         D[Dedup] --> G[Group]
         G --> I[Inhibit]
-        I --> S[Silence / mute intervals]
+        I --> S["Silence / mute intervals"]
         S --> R[Route]
     end
     R --> PD[PagerDuty]
     R --> SL[Slack]
-    R --> WH[Webhook: ticketing / ChatOps]
+    R --> WH["Webhook: ticketing / ChatOps"]
     R --> N[null]
 ```
 
@@ -535,9 +535,16 @@ spec:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Route, Inhibit, and Silence
+### Exercise 1: Route, inhibit, and silence
+
+Goal: prove that routing sends alerts to the right receiver, that a critical alert inhibits its
+warning twin, and that a silence stops notifications.
+
+Before you start, set `KPS_VERSION` to the kube-prometheus-stack chart version from
+[Metrics Stack](./metrics-stack.md) (`helm list -n monitoring` shows it as `CHART`), and install
+`amtool` and `yq`.
 
 ```bash
 # 1. Lightweight webhook receiver to observe notifications
@@ -588,6 +595,22 @@ kubectl -n monitoring logs echo | grep -o '"severity":"[a-z]*"' | sort | uniq -c
 amtool --alertmanager.url=http://localhost:9093 silence add alertname=DiskFilling \
   --duration=30m --author=lab --comment="lab exercise"
 ```
+
+Expected output:
+
+```text
+# amtool config routes test (info)
+null
+# amtool config routes test (warning)
+echo
+# step 5: the warning is inhibited, so only critical arrives
+      1 "severity":"critical"
+```
+
+Check: `amtool --alertmanager.url=http://localhost:9093 silence query` lists the silence as
+`active`, and `kubectl -n monitoring logs echo` shows no new `DiskFilling` notification after
+`repeat_interval` (5 minutes). Clean up with
+`kubectl -n monitoring delete pod,svc echo; kill %1`.
 
 **Stretch goals:**
 1. Create an `AlertmanagerConfig` in namespace `demo`. In the Alertmanager UI status page, check that the operator injected `namespace="demo"`.

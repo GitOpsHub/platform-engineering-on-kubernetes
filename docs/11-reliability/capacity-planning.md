@@ -32,11 +32,11 @@ graph TB
         KARP[Karpenter<br/>just-in-time nodes]
     end
     subgraph Gov["Governance"]
-        RQ[ResourceQuota / LimitRange]
+        RQ["ResourceQuota / LimitRange"]
         PDB[PodDisruptionBudget]
         PC[PriorityClass]
     end
-    Metrics[metrics-server /<br/>Prometheus / external] --> HPA
+    Metrics["metrics-server /<br/>Prometheus / external"] --> HPA
     Metrics --> VPA
     Events[Queues, streams, cron] --> KEDA
     KEDA --> HPA
@@ -207,7 +207,7 @@ kubectl describe hpa -n checkout checkout-api     # look at Conditions: AbleToSc
 
 ```mermaid
 graph LR
-    Src[Kafka / SQS / RabbitMQ /<br/>Prometheus / Cron] --> KO[KEDA operator]
+    Src["Kafka / SQS / RabbitMQ /<br/>Prometheus / Cron"] --> KO[KEDA operator]
     KO -->|0 ↔ 1 activation| Dep[Deployment]
     KO --> MS[keda-operator-metrics-apiserver<br/>external.metrics.k8s.io]
     MS --> HPA[HPA owned by KEDA]
@@ -243,7 +243,7 @@ spec:
         activationLagThreshold: "10"
     - type: prometheus
       metadata:
-        serverAddress: http://kube-prometheus-stack-prometheus.monitoring:9090
+        serverAddress: http://kps-prometheus.monitoring:9090
         query: sum(rate(orders_processed_total{namespace="checkout"}[1m]))
         threshold: "200"
 ```
@@ -729,14 +729,17 @@ Tools such as [OpenCost](https://www.opencost.io/) (CNCF) allocate node cost to 
 | Right-size requests (VPA recs) | 20–40% | Under-sizing → OOM/latency |
 | Spot / preemptible capacity | 60–90% on those nodes | Interruptions → need PDBs, spread |
 | Karpenter consolidation | 10–30% | Churn; tune budgets |
-| Arm64 (Graviton etc.) | 20%+ price-performance | Multi-arch images required (see [Supply Chain](../12-security-compliance/supply-chain.md)) |
+| Arm64 (for example, Graviton) | 20%+ price-performance | Multi-arch images required (see [Supply Chain](../12-security-compliance/supply-chain.md)) |
 | Scale to zero (KEDA) for dev/preview | Up to 100% off-hours | Cold start |
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Watch HPA React to Load (kind)
+### Exercise 1: Watch HPA react to load (kind)
+
+Goal: see an HPA scale a Deployment up under CPU load and back down after the stabilization
+window. Requires `kind`, `helm` and `kubectl`; expect about 15 minutes.
 
 ```bash
 # 1. Cluster + metrics-server (kind needs --kubelet-insecure-tls)
@@ -776,6 +779,20 @@ kubectl -n capacity run load --rm -it --image=busybox:1.36 --restart=Never -- \
 kubectl -n capacity get hpa web -w
 kubectl -n capacity top pods
 ```
+
+Expected output from `kubectl -n capacity get hpa web -w` once the load runs:
+
+```text
+NAME   REFERENCE        TARGETS    MINPODS   MAXPODS   REPLICAS
+web    Deployment/web   <unknown>/50%   1   10   1
+web    Deployment/web   250%/50%        1   10   1
+web    Deployment/web   120%/50%        1   10   5
+web    Deployment/web   48%/50%         1   10   6
+```
+
+Check: `kubectl -n capacity get deploy web` shows more than one ready replica while the load runs,
+and `kubectl top pods -n capacity` returns values (it fails if metrics-server is not ready).
+The replica count and percentages vary by machine.
 
 **Tasks:**
 1. Record time from load start to the first scale-up and to steady state.

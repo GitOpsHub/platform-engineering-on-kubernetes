@@ -378,12 +378,12 @@ flowchart TD
     A[Drift alert] --> B{Known legitimate<br/>controller/webhook?}
     B -->|Yes| C[Add ignore rule via PR] --> Z[Close]
     B -->|No| D{Active incident<br/>hotfix?}
-    D -->|Yes| E[Suspend reconciliation<br/>for that object]
-    E --> F[After incident:<br/>PR to adopt fix into Git]
+    D -->|Yes| E["Suspend reconciliation<br/>for that object"]
+    E --> F["After incident:<br/>PR to adopt fix into Git"]
     F --> G[Resume reconciliation] --> Z
     D -->|No| H{Who made it?<br/>audit logs}
-    H --> I[Revert: sync / apply]
-    I --> J[Close access gap:<br/>RBAC, policy, IAM]
+    H --> I["Revert: sync / apply"]
+    I --> J["Close access gap:<br/>RBAC, policy, IAM"]
     J --> Z
 ```
 

@@ -26,11 +26,11 @@ Compliance is the ability to **prove**, on demand and continuously, that agreed 
 graph TB
     subgraph Prevent[Prevent - admission]
         PSA[Pod Security Admission]
-        Kyv[Kyverno / VAP policies]
+        Kyv["Kyverno / VAP policies"]
         Sig[Image verification]
     end
     subgraph Detect[Detect - continuous]
-        Bench[kube-bench<br/>CIS node/control plane]
+        Bench["kube-bench<br/>CIS node/control plane"]
         Trivy[Trivy Operator<br/>vulns, config, RBAC]
         Kubescape[Kubescape<br/>NSA, MITRE]
         PR[PolicyReports]
@@ -48,7 +48,7 @@ graph TB
     Trivy --> Prom
     Kubescape --> Prom
     PR --> Prom
-    Falco --> Alert[Alertmanager / SIEM]
+    Falco --> Alert["Alertmanager / SIEM"]
     Audit --> SIEM[(SIEM / Loki)]
     Prom --> Dash
     PR --> Store
@@ -424,7 +424,7 @@ spec:
               platform.mycompany.io/data-classification: "public | internal | confidential | restricted"
 ```
 
-Kyverno also publishes ready-made policy sets (`pod-security`, `best-practices`, `other`) in the [kyverno/policies](https://github.com/kyverno/policies) repo — vendor them through GitOps rather than writing from scratch. The policies used in this repo live in [code/policy-engine](../../code/policy-engine/) and [Lab 05](../../labs/lab-05-policy-engine/).
+Kyverno also publishes ready-made policy sets (`pod-security`, `best-practices`, `other`) in the [kyverno/policies](https://github.com/kyverno/policies) repo — vendor them through GitOps rather than writing from scratch. The policies used in this repo live in [code/policy-engine](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/policy-engine/) and [Lab 05](../../labs/lab-05-policy-engine/).
 
 ---
 
@@ -611,12 +611,12 @@ Evidence must be **timestamped, tamper-evident and retrievable for a past period
 
 ```mermaid
 graph LR
-    CJ[CronJob: evidence-collector<br/>daily] --> K8s[Kubernetes API]
+    CJ["CronJob: evidence-collector<br/>daily"] --> K8s[Kubernetes API]
     K8s -->|PolicyReports, ClusterComplianceReports,<br/>VulnerabilityReport summaries,<br/>RBAC bindings, namespace labels| CJ
     CJ --> Bench[kube-bench JSON]
     CJ -->|sha256 manifest + upload| S3[(Object storage<br/>Object Lock / WORM)]
     Audit[Audit logs] --> SIEM[(SIEM)] --> S3
-    S3 --> Auditor[Auditor portal / GRC tool]
+    S3 --> Auditor["Auditor portal / GRC tool"]
 ```
 
 ```yaml
@@ -680,9 +680,14 @@ Combine this with:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Build a Compliance Baseline for a Kind Cluster
+### Exercise 1: Build a compliance baseline for a kind cluster
+
+Goal: collect findings from kube-bench, Trivy Operator, a Kyverno PolicyReport and Kubescape,
+then reduce them to two numbers. Before you start, save the policy from
+[Compliance-Oriented Kyverno Policies](#compliance-oriented-kyverno-policies) as
+`kyverno-cis-5-4-1-no-secret-env.yaml`.
 
 **Prerequisites:** Kind cluster (1.28+), Helm, Kyverno ([Lab 05](../../labs/lab-05-policy-engine/)), optionally kube-prometheus-stack ([Lab 06](../../labs/lab-06-observability-stack/)).
 
@@ -720,6 +725,24 @@ kubescape scan framework nsa --format pretty-printer
 kubectl get vulnerabilityreports -A -o json | jq '[.items[].report.summary.criticalCount] | add'
 kubectl get policyreports -A -o json | jq '[.items[].summary.fail] | add'
 ```
+
+Expected output:
+
+```text
+# step 2 (counts vary)
+[FAIL] 1.1.12 Ensure that the etcd data directory ownership is set to etcd:etcd
+== Summary total ==
+# step 3
+NAMESPACE   NAME                              REPOSITORY    TAG    SCANNER
+default     replicaset-vulnerable-...         library/nginx  1.19  Trivy
+# step 4
+NAMESPACE   NAME                          PASS   FAIL   WARN   ERROR   SKIP
+default     cpol-no-secret-env-vars       0      1      0       0       0
+```
+
+Check: step 6 prints a number greater than 0 for each command, because `nginx:1.19` has known
+critical CVEs and `leaky` violates the audit policy. The exact PolicyReport name depends on your
+policy.
 
 **Stretch goals:**
 1. Enable an audit policy in Kind (`kubeadmConfigPatches` with `audit-policy-file`, as in [Pod Security](./pod-security.md#cluster-wide-defaults-and-exemptions)) and find your `kubectl exec` in the log.

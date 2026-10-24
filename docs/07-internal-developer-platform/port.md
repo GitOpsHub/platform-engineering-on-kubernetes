@@ -27,10 +27,10 @@ graph LR
         GH[(GitHub app)]
         Argo[(ArgoCD)]
         Cloud[(AWS / GCP)]
-        API[Port REST API<br/>from CI / controllers]
+        API["Port REST API<br/>from CI / controllers"]
     end
     subgraph Port["Port (SaaS)"]
-        BP[Blueprints<br/>data model]
+        BP["Blueprints<br/>data model"]
         Ent[Entities]
         SC[Scorecards]
         Act[Self-service actions]
@@ -631,40 +631,83 @@ terraform apply tf.plan
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Model the Platform in Port
+### Exercise 1: Model the platform in Port
 
-You need a Port organization (a free tier is available) and a kind cluster with the platform CRDs from [Lab 03](../../labs/lab-03-platform-api/README.md).
+**Goal:** Ingest the platform's Kubernetes resources into Port, score them, and trigger one self-service action.
 
-1. **Create blueprints** `tenant`, `environment`, `workload` with Terraform (above) or the UI.
-2. **Install the exporter** with the mapping in this doc. Confirm entities appear:
+**Before you start:** a Port organization (the free tier is enough), the kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md), and the platform CRDs:
+
+```bash
+kubectl config use-context kind-platform-engineering
+for op in tenant-operator environment-operator workload-operator; do make -C code/$op install; done
+```
+
+1. **Create the blueprints** `tenant`, `environment`, and `workload` with the Terraform above or in the Port UI.
+2. **Install the exporter** with the mapping in this page. Confirm the source objects exist, then open the Workloads catalog page in Port:
+
    ```bash
    kubectl get tenants,environments.platform.mycompany.io,workloads -A
-   # then open Port's catalog page for Workloads
    ```
-3. **Add the scorecard** `production_readiness` and observe which workloads fail `pinned_image`.
-4. **Create the `request_preview_environment` action** pointing at a test repo with the workflow above. Run it from the UI and follow the run log.
-5. **Merge the PR** and watch the new `Environment` appear in Port after ArgoCD syncs.
 
-#### Verification
-- [ ] Entity graph shows Tenant → Environment → Workload relations
-- [ ] Scorecard levels compute for each Workload
-- [ ] Action run shows log messages and a link to the PR
+   Expected output: the three resource lists print without `error: the server doesn't have a resource type`. Entities appear in Port within a minute.
+3. **Add the scorecard** `production_readiness` and note which workloads fail `pinned_image`.
+4. **Create the `request_preview_environment` action** against a test repository, using the workflow above. Run it from the UI and follow the run log.
+5. **Merge the generated PR** and watch the new `Environment` appear in Port after Argo CD syncs.
+
+**Check:**
+
+- [ ] The entity graph shows Tenant, Environment, and Workload relations.
+- [ ] Scorecard levels compute for each Workload.
+- [ ] The action run shows log messages and a link to the PR.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| Exporter logs `forbidden` | Missing RBAC for CRDs | Apply the extra ClusterRole for `platform.mycompany.io` |
-| Entities missing relations | Target entity identifier mismatch | Ensure relation JQ produces the *exact* target identifier; enable `createMissingRelatedEntities` |
-| Duplicate entities across clusters | Identifiers not cluster-unique | Prefix identifiers with cluster or namespace |
-| Entities deleted unexpectedly | Two exporters share a `stateKey` | Give each cluster a unique `stateKey` |
-| Action run stuck "In progress" | Workflow never reports status | Set `reportWorkflowStatus: true` or PATCH the run to `SUCCESS`/`FAILURE` |
-| Webhook `401` from platform-api | Signature or auth mismatch | Verify the signing secret; check clock skew on timestamp validation |
-| JQ mapping error in logs | Null fields | Use `// ""` defaults, e.g. `.status.phase // "Pending"` |
+### Exporter logs `forbidden`
+
+**Cause:** Missing RBAC for CRDs
+
+**Fix:** Apply the extra ClusterRole for `platform.mycompany.io`
+
+### Entities missing relations
+
+**Cause:** Target entity identifier mismatch
+
+**Fix:** Ensure relation JQ produces the *exact* target identifier; enable `createMissingRelatedEntities`
+
+### Duplicate entities across clusters
+
+**Cause:** Identifiers not cluster-unique
+
+**Fix:** Prefix identifiers with cluster or namespace
+
+### Entities deleted unexpectedly
+
+**Cause:** Two exporters share a `stateKey`
+
+**Fix:** Give each cluster a unique `stateKey`
+
+### Action run stuck "In progress"
+
+**Cause:** Workflow never reports status
+
+**Fix:** Set `reportWorkflowStatus: true` or PATCH the run to `SUCCESS`/`FAILURE`
+
+### Webhook `401` from platform-api
+
+**Cause:** Signature or auth mismatch
+
+**Fix:** Verify the signing secret; check clock skew on timestamp validation
+
+### JQ mapping error in logs
+
+**Cause:** Null fields
+
+**Fix:** Use `// ""` defaults, e.g. `.status.phase // "Pending"`
+
 
 ```bash
 # Inspect exporter logs for mapping errors

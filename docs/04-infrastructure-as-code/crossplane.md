@@ -83,7 +83,7 @@ Crossplane 2.0 (2025) reshaped the composition model. You will meet both styles 
 | Managed resources | Cluster-scoped (`s3.aws.upbound.io`) | Namespaced variants (`s3.aws.m.upbound.io`) alongside legacy |
 | What can be composed | Managed resources | Any Kubernetes resource (Deployments, ConfigMaps, other XRs...) |
 
-**This repo's approach:** compositions are always written in **Pipeline mode**, which works on Crossplane ≥ 1.14 and 2.x. The main walkthrough uses an `apiextensions.crossplane.io/v1` XRD with a claim (portable across both majors), followed by the 2.x namespaced equivalent. The code lives in [`code/crossplane-compositions/`](../../code/crossplane-compositions/) (`xrd/`, `compositions/`, `functions/`, `claims/`).
+**This repo's approach:** compositions are always written in **Pipeline mode**, which works on Crossplane ≥ 1.14 and 2.x. The main walkthrough uses an `apiextensions.crossplane.io/v1` XRD with a claim (portable across both majors), followed by the 2.x namespaced equivalent. The code lives in [`code/crossplane-compositions/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/crossplane-compositions/) (`xrd/`, `compositions/`, `functions/`, `claims/`).
 
 ---
 
@@ -409,7 +409,7 @@ For complex logic (loops, conditionals), `function-go-templating` renders resour
         {{- end }}
 ```
 
-Other useful functions: `function-kcl`, `function-cel-filter`, `function-environment-configs`, and functions you write yourself in Go or Python with the function SDKs — see [`code/crossplane-compositions/functions/`](../../code/crossplane-compositions/functions/).
+Other useful functions: `function-kcl`, `function-cel-filter`, `function-environment-configs`, and functions you write yourself in Go or Python with the function SDKs — see [`code/crossplane-compositions/functions/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/crossplane-compositions/functions/).
 
 ---
 
@@ -688,5 +688,5 @@ kubectl get events --field-selector involvedObject.kind=XObjectStorage
 
 1. **Read**: [GitOps Tool Comparison](./gitops-tool-comparison.md) — delivering XRDs and claims through Git
 2. **Read**: [Drift Detection](./drift-detection.md)
-3. **Explore code**: [`code/crossplane-compositions/`](../../code/crossplane-compositions/)
+3. **Explore code**: [`code/crossplane-compositions/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/crossplane-compositions/)
 4. **Lab**: [Lab 03 - Platform API](../../labs/lab-03-platform-api/README.md) — compare a hand-written operator with a Crossplane composition

@@ -33,16 +33,16 @@ The goal: **adding a cluster is adding one record of metadata; changing the flee
 ```mermaid
 graph LR
     subgraph Git["Fleet Repository"]
-        INV[Cluster inventory<br/>labels / metadata]
-        COMP[Components<br/>versioned bases]
-        POL[Rollout policy<br/>waves]
+        INV["Cluster inventory<br/>labels / metadata"]
+        COMP["Components<br/>versioned bases"]
+        POL["Rollout policy<br/>waves"]
     end
-    INV --> GEN[Generators<br/>ApplicationSet / Flux]
+    INV --> GEN["Generators<br/>ApplicationSet / Flux"]
     COMP --> GEN
     POL --> GEN
-    GEN --> W0[Wave 0: canary clusters]
-    W0 -->|healthy| W1[Wave 1: non-prod + 1 prod]
-    W1 -->|healthy| W2[Wave 2: all production]
+    GEN --> W0["Wave 0: canary clusters"]
+    W0 -->|healthy| W1["Wave 1: non-prod + 1 prod"]
+    W1 -->|healthy| W2["Wave 2: all production"]
 ```
 
 ---
@@ -57,7 +57,7 @@ One GitOps control plane on a management cluster deploys to all workload cluster
 graph TB
     Git[(Fleet repo)] --> Hub
     subgraph Hub["Management cluster"]
-        ARGO[Argo CD<br/>app controller shards]
+        ARGO["Argo CD<br/>app controller shards"]
     end
     ARGO -->|push via cluster API credentials| C1[prod-eu-1]
     ARGO --> C2[prod-us-1]
@@ -91,13 +91,13 @@ graph TB
     Git[(Fleet repo)] --> HubArgo
     TenantGit[(Tenant repos)] --> F1 & F2
     subgraph Hub["Management cluster"]
-        HubArgo[Argo CD: baseline + bootstrap]
+        HubArgo["Argo CD: baseline + bootstrap"]
     end
     subgraph C1["prod-eu-1"]
-        F1[Flux: tenant apps]
+        F1["Flux: tenant apps"]
     end
     subgraph C2["prod-us-1"]
-        F2[Flux: tenant apps]
+        F2["Flux: tenant apps"]
     end
     HubArgo -->|installs baseline incl. Flux| C1
     HubArgo -->|installs baseline incl. Flux| C2
@@ -118,7 +118,7 @@ graph TB
 
 ### Recommended layout
 
-```
+```text
 fleet-config/
 ├── clusters/                       # INVENTORY: one small file per cluster — metadata only
 │   ├── prod-eu-1.yaml
@@ -224,7 +224,7 @@ stringData:
 For managed clusters, prefer cloud-native auth over static tokens (Argo CD supports `awsAuthConfig` for EKS and `execProviderConfig` for exec plugins such as GKE/AKS credential helpers).
 
 Implementation options for the registration controller:
-- A small operator (fits [`code/environment-operator/`](../../code/environment-operator/) patterns) watching CAPI `Cluster` objects
+- A small operator (fits [`code/environment-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/environment-operator/) patterns) watching CAPI `Cluster` objects
 - Crossplane composition that outputs the Argo CD Secret alongside the cluster
 - Open Cluster Management's Argo CD integration, which generates cluster secrets from OCM placements
 - Community projects that sync CAPI clusters into Argo CD (evaluate maturity before adopting)
@@ -460,9 +460,9 @@ Health checks only catch "pods aren't running". To catch "pods run but error rat
 
 ```mermaid
 flowchart LR
-    W0[Wave 0 synced] --> A{Analysis:<br/>error rate, latency,<br/>policy violations,<br/>SLO burn}
+    W0[Wave 0 synced] --> A{"Analysis:<br/>error rate, latency,<br/>policy violations,<br/>SLO burn"}
     A -->|pass after bake time| P[Promote to wave 1]
-    A -->|fail| H[Halt + alert<br/>auto-revert PR]
+    A -->|fail| H["Halt + alert<br/>auto-revert PR"]
 ```
 
 Practical options: a CI job that queries Prometheus/Thanos for fleet-level SLIs before opening the promotion PR; Argo Rollouts `AnalysisTemplate`s reused for platform components; or a promotion tool (e.g. Kargo) with verification steps. See [SLOs & SLIs](../11-reliability/slos-slis.md).
@@ -511,9 +511,11 @@ Build a "fleet version matrix" dashboard (component × cluster → version) from
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Lab: Label-driven fleet rollout with Argo CD on three kind clusters
+
+**Goal:** register two clusters with wave labels and watch an ApplicationSet sync the canary cluster before the production cluster.
 
 **Prerequisites:** completed [Lab 02: GitOps Bootstrap](../../labs/lab-02-gitops-bootstrap/), `kind`, `kubectl`, `argocd` CLI, a GitHub fork for fleet config.
 
@@ -561,10 +563,17 @@ argocd appset get podinfo
 argocd app list -l platform.mycompany.io/component=podinfo
 ```
 
+Expected output: `argocd cluster list` shows `wl-canary` and `wl-prod` with status `Successful`.
+`argocd app list` shows the canary Application as `Synced`/`Healthy` before the production one
+starts syncing. The Application names depend on your ApplicationSet template.
+
+Check: run `kubectl --context kind-wl-prod get deploy -A | grep podinfo`. It returns nothing
+until the canary Application is `Healthy`, then lists the `podinfo` Deployment.
+
 **Challenges:**
 1. Break the development overlay (e.g. a nonexistent image tag). Confirm wave 1 never syncs.
 2. Re-implement the rollout with Option B (wave branches) and compare the audit trail.
-3. Add a third cluster just by registering it with labels — no YAML changes in Git.
+3. Add a third cluster by registering it with labels — no YAML changes in Git.
 
 **Cleanup:** `kind delete cluster --name hub; kind delete cluster --name wl-canary; kind delete cluster --name wl-prod`
 

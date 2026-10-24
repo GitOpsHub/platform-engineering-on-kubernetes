@@ -86,7 +86,7 @@ Resources: 8 GB RAM and 4 CPU cores are the minimum for the full stack. Labs 01 
 ### Step 7. Infrastructure as code
 
 - **Read:** [terraform-kubernetes.md](docs/04-infrastructure-as-code/terraform-kubernetes.md), [crossplane.md](docs/04-infrastructure-as-code/crossplane.md), [gitops-tool-comparison.md](docs/04-infrastructure-as-code/gitops-tool-comparison.md), [drift-detection.md](docs/04-infrastructure-as-code/drift-detection.md)
-- **Explore:** [code/terraform-modules](code/terraform-modules/README.md), [code/crossplane-compositions](code/crossplane-compositions/README.md). You don't need to apply anything.
+- **Explore:** [code/terraform-modules](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/terraform-modules/README.md), [code/crossplane-compositions](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/crossplane-compositions/README.md). You don't need to apply anything.
 - **Check:** you can explain the difference between a Terraform module and a Crossplane composition in one paragraph.
 
 ### Step 8. GitOps principles
@@ -212,6 +212,6 @@ Resources: 8 GB RAM and 4 CPU cores are the minimum for the full stack. Labs 01 
 
 ## Where to Go Next
 
-- Reference implementations: [code/](code/) (platform-api, platform-cli, service-catalog, policy-engine, the three operators, Terraform, Crossplane and Helm)
+- Reference implementations: [code/](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/) (platform-api, platform-cli, service-catalog, policy-engine, the three operators, Terraform, Crossplane and Helm)
 - Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Clean up everything: run each lab's `teardown.sh`, then `kind delete cluster --name platform-engineering`

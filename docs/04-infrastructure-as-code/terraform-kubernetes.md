@@ -23,13 +23,13 @@ Kubernetes has its own declarative API and reconciliation loop. Terraform also h
 ```mermaid
 graph TB
     subgraph L0["Layer 0 - Cloud foundation (Terraform)"]
-        Net[VPC / Subnets / NAT]
+        Net["VPC / Subnets / NAT"]
         IAM[IAM roles, KMS keys]
         DNS[DNS zones]
     end
     subgraph L1["Layer 1 - Cluster (Terraform)"]
-        CP[Managed control plane<br/>EKS / GKE / AKS]
-        NG[Node groups / Karpenter IAM]
+        CP["Managed control plane<br/>EKS / GKE / AKS"]
+        NG["Node groups / Karpenter IAM"]
     end
     subgraph L2["Layer 2 - Bootstrap (Terraform, minimal)"]
         NS[Namespaces]
@@ -38,7 +38,7 @@ graph TB
     end
     subgraph L3["Layer 3 - Everything else (GitOps)"]
         Addons[cert-manager, ESO, ingress, policy]
-        Platform[Platform CRDs: Tenant / Environment / Workload]
+        Platform["Platform CRDs: Tenant / Environment / Workload"]
         Apps[Tenant workloads]
     end
     L0 --> L1 --> L2 --> L3
@@ -183,11 +183,11 @@ Why this hurts:
 graph LR
     A["stacks/10-network<br/>state: network.tfstate"] -->|outputs: vpc_id, subnets| B["stacks/20-cluster<br/>state: cluster.tfstate"]
     B -->|outputs: cluster_name, endpoint, oidc| C["stacks/30-bootstrap<br/>state: bootstrap.tfstate"]
-    C -->|installs| D[Argo CD / Flux]
+    C -->|installs| D["Argo CD / Flux"]
     D -->|pulls| E[(platform-config repo)]
 ```
 
-```
+```text
 infra/
 ├── modules/                     # reusable modules (see code/terraform-modules)
 └── stacks/
@@ -237,7 +237,7 @@ State contains every attribute of every resource, **including Secret data and He
 
 ## Provisioning the Cluster (Layer 1)
 
-The repo's reusable modules live in [`code/terraform-modules/`](../../code/terraform-modules/) (`eks/`, `gke/`, `aks/`, `networking/`, `addons/`). The example below uses the community `terraform-aws-modules/eks` module to show the shape.
+The repo's reusable modules live in [`code/terraform-modules/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/terraform-modules/) (`eks/`, `gke/`, `aks/`, `networking/`, `addons/`). The example below uses the community `terraform-aws-modules/eks` module to show the shape.
 
 ```hcl
 # stacks/20-cluster/main.tf
@@ -733,5 +733,5 @@ terraform providers                              # see resolved provider tree
 
 1. **Read**: [Crossplane](./crossplane.md) — manage cloud infrastructure with Kubernetes-native reconciliation
 2. **Compare**: [GitOps Tool Comparison](./gitops-tool-comparison.md)
-3. **Explore code**: [`code/terraform-modules/`](../../code/terraform-modules/)
+3. **Explore code**: [`code/terraform-modules/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/terraform-modules/)
 4. **Lab**: [Lab 02 - GitOps Bootstrap](../../labs/lab-02-gitops-bootstrap/README.md)

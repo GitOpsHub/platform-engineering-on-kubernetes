@@ -30,7 +30,7 @@ Metrics are cheap to store, fast to query, and easy to aggregate. They answer "i
 
 Each time series is identified by a metric name plus a set of key/value labels:
 
-```
+```text
 http_requests_total{namespace="checkout", service="cart", method="GET", code="200"}  1027
 └──── metric name ─┘└──────────────────────── labels ───────────────────────┘  └ sample value
 ```
@@ -55,17 +55,17 @@ http_requests_total{namespace="checkout", service="cart", method="GET", code="20
 ```mermaid
 graph TB
     subgraph Cluster
-        App[App Pods /metrics] --> P
+        App["App Pods /metrics"] --> P
         KSM[kube-state-metrics] --> P
         NE[node-exporter DaemonSet] --> P
-        KL[kubelet / cAdvisor] --> P
+        KL["kubelet / cAdvisor"] --> P
         API[kube-apiserver] --> P
         PO[Prometheus Operator] -->|generates config| P[Prometheus StatefulSet]
-        SM[ServiceMonitor / PodMonitor / PrometheusRule CRDs] --> PO
+        SM["ServiceMonitor / PodMonitor / PrometheusRule CRDs"] --> PO
         P --> AM[Alertmanager]
         P --> G[Grafana]
     end
-    AM --> Pager[PagerDuty / Slack]
+    AM --> Pager["PagerDuty / Slack"]
 ```
 
 `kube-prometheus-stack` ships everything in this diagram as a single Helm chart.
@@ -92,10 +92,10 @@ graph LR
         PB[Prometheus Agent]
     end
     subgraph "Observability Cluster"
-        Q[Thanos Query / Mimir Querier]
+        Q["Thanos Query / Mimir Querier"]
         SG[Store Gateway]
         C[Compactor]
-        R[Receive / Distributor]
+        R["Receive / Distributor"]
     end
     PA -- "upload blocks" --> OS[(Object Storage)]
     PA -- "StoreAPI (gRPC)" --> Q
@@ -608,9 +608,16 @@ The **RED** method (Rate, Errors, Duration) suits services. The **USE** method (
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Prometheus + Thanos with Tenant Self-Service Scraping
+### Exercise 1: Prometheus + Thanos with tenant self-service scraping
+
+Goal: run Prometheus with a Thanos sidecar, let a tenant add its own scrape target through a
+`ServiceMonitor`, and confirm the data is queryable. Expect about 30 minutes.
+
+Before you start, create `kps-values.yaml` from the values in
+[Production-Oriented Values](#production-oriented-values) and set `KPS_VERSION` to the
+kube-prometheus-stack chart version you want (`helm search repo prometheus-community/kube-prometheus-stack`).
 
 This exercise is a short version of [Lab 06: Observability Stack](../../labs/lab-06-observability-stack/).
 
@@ -671,6 +678,19 @@ kubectl -n checkout run load --image=busybox --restart=Never -- \
 # 8. Confirm the sidecar uploaded blocks (after ~2h, or check sidecar logs)
 kubectl -n monitoring logs sts/prometheus-kps-prometheus -c thanos-sidecar | grep -i upload
 ```
+
+Expected output:
+
+```text
+# step 6
+["1730000000.123","1"]
+# step 8 (after the first 2h block is cut)
+msg="upload new block" ... id=01H...
+```
+
+Check: `up{namespace="checkout"}` returns the value `1` for the `podinfo` target. In the
+Prometheus UI under Status > Targets, the `serviceMonitor/checkout/podinfo/0` pool shows `UP`.
+Clean up with `kubectl delete ns checkout; kill %1`.
 
 **Stretch goals:**
 1. Add the recording rules above and point a Grafana panel at `service:http_requests:rate5m`.

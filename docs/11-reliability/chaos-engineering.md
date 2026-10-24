@@ -30,7 +30,7 @@ It is a **scientific method**, not random destruction:
 
 ```mermaid
 graph LR
-    SS[Define steady state<br/>SLI e.g. success ratio > 99.9%] --> H[Hypothesis]
+    SS["Define steady state<br/>SLI e.g. success ratio > 99.9%"] --> H[Hypothesis]
     H --> E[Inject fault<br/>small blast radius]
     E --> O[Observe SLIs,<br/>traces, logs]
     O --> D{Steady state held?}
@@ -86,11 +86,11 @@ graph LR
 
 ```mermaid
 graph TB
-    User[kubectl / GitOps / Dashboard] --> API[Kubernetes API]
+    User["kubectl / GitOps / Dashboard"] --> API[Kubernetes API]
     API --> CR[Chaos CRs<br/>PodChaos, NetworkChaos, ...]
     CR --> CM[chaos-controller-manager]
     CM -->|gRPC| CD[chaos-daemon<br/>DaemonSet, privileged]
-    CD -->|tc, iptables, stress-ng,<br/>ptrace, cgroups| Pod[Target Pod netns/pidns]
+    CD -->|tc, iptables, stress-ng,<br/>ptrace, cgroups| Pod["Target Pod netns/pidns"]
     CM --> API
     Dash[chaos-dashboard] --> API
 ```
@@ -404,14 +404,14 @@ kubectl get workflownode -n checkout --selector="chaos-mesh.org/workflow=checkou
 
 ```mermaid
 graph TB
-    CC[Chaos Center UI/API] --> Sub[Chaos Infrastructure<br/>subscriber + exporter]
+    CC["Chaos Center UI/API"] --> Sub[Chaos Infrastructure<br/>subscriber + exporter]
     Sub --> CO[chaos-operator]
     CE[ChaosEngine CR] --> CO
     CO --> Runner[chaos-runner pod]
     Runner --> Exp[Experiment job<br/>e.g. pod-delete]
     Exp --> Target[Target workload]
-    Exp --> Probes[Probes<br/>http / cmd / k8s / prom]
-    Runner --> CR[ChaosResult CR<br/>Pass/Fail]
+    Exp --> Probes["Probes<br/>http / cmd / k8s / prom"]
+    Runner --> CR["ChaosResult CR<br/>Pass/Fail"]
 ```
 
 Litmus separates **what** (a `ChaosExperiment` — usually pulled from [ChaosHub](https://hub.litmuschaos.io/)) from **when and against whom** (`ChaosEngine`). Results land in a `ChaosResult` CR with a verdict.
@@ -523,7 +523,7 @@ spec:
             type: promProbe
             mode: EOT
             promProbe/inputs:
-              endpoint: http://kube-prometheus-stack-prometheus.monitoring:9090
+              endpoint: http://kps-prometheus.monitoring:9090
               query: >
                 sum(rate(http_requests_total{job="checkout-api",code=~"5.."}[2m]))
                 / sum(rate(http_requests_total{job="checkout-api"}[2m]))
@@ -577,7 +577,7 @@ graph LR
     Argo --> NS[Tenant namespace]
     NS --> K[Kyverno<br/>guardrails]
     K -->|allowed| CM[Chaos Mesh]
-    K -->|denied| X[Rejected:<br/>cross-namespace / prod hours]
+    K -->|denied| X["Rejected:<br/>cross-namespace / prod hours"]
     CM --> Prom[Prometheus]
     Prom --> Abort{Error budget<br/>burning?}
     Abort -->|yes| Pause[Pause schedules]
@@ -664,9 +664,14 @@ spec:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Prove (or Disprove) That checkout Survives a Pod Loss
+### Exercise 1: Prove (or disprove) that checkout survives a pod loss
+
+Goal: state the hypothesis "checkout keeps answering when one pod dies", test it against a
+single-replica Deployment, then fix the weakness and test again. Before you start, save the
+manifest from [PodChaos](#podchaos) as `podchaos-kill-one.yaml`. Requires `kind`, `helm` and
+`kubectl`.
 
 ```bash
 # 1. kind cluster + Chaos Mesh (see Installation above)
@@ -703,6 +708,19 @@ kubectl -n checkout delete pod prober
 kubectl delete -f podchaos-kill-one.yaml && kubectl apply -f podchaos-kill-one.yaml
 # Re-create the prober and count again — failures should be ~0
 ```
+
+Expected output of `kubectl -n checkout logs prober | sort | uniq -c`:
+
+```text
+# before the fix (one replica)
+     12 000
+    240 200
+# after the fix (three replicas)
+    260 200
+```
+
+Check: the `000` count (timeouts) is greater than zero before the fix and zero after it. Counts
+vary with timing; the pattern is what matters.
 
 **Extensions:**
 1. Run `networkchaos-db-latency.yaml` against a dependency and observe p99 latency in Grafana.
@@ -752,7 +770,7 @@ kubectl logs -n chaos-mesh -l app.kubernetes.io/component=chaos-daemon --tail=10
 ## Next Steps
 
 1. **Back it with SLOs**: Every experiment's steady state should be an SLI from [SLOs, SLIs and Error Budgets](slos-slis.md)
-2. **Test recovery, not just resilience**: Run a namespace-loss GameDay with [Disaster Recovery](disaster-recovery.md)
+2. **Test recovery, as well as resilience**: Run a namespace-loss GameDay with [Disaster Recovery](disaster-recovery.md)
 3. **Validate autoscaling**: Combine StressChaos with HPA/Karpenter from [Capacity Planning](capacity-planning.md)
 4. **Practice upgrades under failure**: [Lab 08: Platform Upgrade](../../labs/lab-08-platform-upgrade/)
 5. **Lock it down**: Scope privileged chaos components with [Pod Security](../12-security-compliance/pod-security.md)

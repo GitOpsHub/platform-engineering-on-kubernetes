@@ -22,12 +22,12 @@ Scaffolding turns a few answers into a working starting point: a repo that build
 
 ```mermaid
 graph LR
-    Q[Answers:<br/>name, tenant, language, size] --> E[Template engine]
+    Q["Answers:<br/>name, tenant, language, size"] --> E[Template engine]
     T[(Template repo<br/>versioned)] --> E
     E --> Repo[New repo]
-    Repo --> CI[CI: build, test, scan, sign]
+    Repo --> CI["CI: build, test, scan, sign"]
     Repo --> Cat[catalog-info.yaml]
-    Repo --> WL[deploy/workload.yaml]
+    Repo --> WL["deploy/workload.yaml"]
     CI --> Img[(Signed image)]
     WL --> GitOps[GitOps repo PR]
     GitOps --> Dev[Running in dev]
@@ -482,7 +482,7 @@ graph TB
     end
     subgraph Referenced["Referenced (upgraded centrally)"]
         R1[Reusable workflow @v3]
-        R2[Base image / ko defaults]
+        R2["Base image / ko defaults"]
         R3[Go platform SDK module]
         R4[Workload API - operator encodes best practice]
     end
@@ -502,49 +502,99 @@ graph TB
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Build, Test, and Update a Copier Template
+### Exercise 1: Build, test, and update a Copier template
 
-1. **Create** the `go-service` Copier template from this doc in a scratch repo; tag it `v1.0.0`.
-2. **Generate** a service:
+**Goal:** Generate a service from a Copier template, validate its `Workload`, then evolve the template and pull the change into the generated project.
+
+**Before you start:** [uv](https://docs.astral.sh/uv/) (provides `uvx`), Go 1.22 or later, git, and the kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md) with the `Workload` CRD installed (`make -C code/workload-operator install`).
+
+1. **Create** the `go-service` Copier template from this page in a scratch repository named `platform-templates`. Commit it and tag it `v1.0.0`.
+2. **Generate a service** and check that it serves `/healthz`:
+
    ```bash
    uvx copier copy --trust ./platform-templates/go-service ./orders-api \
      --data project_name=orders-api --data tenant=payments
-   cd orders-api && go run ./cmd/orders-api &
-   curl -s localhost:8080/healthz -o /dev/null -w '%{http_code}\n'   # 200
+   cd orders-api
+   go run ./cmd/orders-api &
+   sleep 2
+   curl -s localhost:8080/healthz -o /dev/null -w '%{http_code}\n'
+   kill %1
    ```
-3. **Validate** the generated `Workload` against your cluster from [Lab 03](../../labs/lab-03-platform-api/README.md):
+
+   Expected output: `200`.
+3. **Validate** the generated `Workload` against the cluster:
+
    ```bash
    kubectl apply --dry-run=server -f deploy/workload.yaml
    ```
-4. **Evolve the template**: add a `readinessProbePath` question and use it in `main.go.jinja`; tag `v1.1.0`.
-5. **Update** the generated project and resolve any conflicts:
+
+   Expected output: `workload.platform.mycompany.io/orders-api created (server dry run)`.
+4. **Evolve the template.** In the template repository, add a `readinessProbePath` question, use it in `main.go.jinja`, commit, and tag `v1.1.0`.
+5. **Update the generated project** and review the result:
+
    ```bash
-   cd orders-api && git add -A && git commit -m "initial"
+   git init -q && git add -A && git commit -qm "initial"
    uvx copier update --trust --skip-answered --data readinessProbePath=/readyz
    git diff
    ```
-6. **Bonus**: implement the Go scaffolder and make the planned `platform-cli service create` produce the same output as Copier for the same answers (compare with `diff -r`).
 
-#### Verification
-- [ ] Generated service builds, runs, and serves `/healthz`
-- [ ] `copier update` applies template changes without overwriting your local edits
-- [ ] CI matrix renders all combinations successfully
+   Expected output: the diff shows the new probe path and none of your local edits reverted.
+6. **Bonus.** Implement the Go scaffolder from this page and compare its output with Copier's for the same answers using `diff -r`. (The `platform-cli service create` command is planned and does not exist yet.)
+
+**Check:**
+
+- [ ] The generated service builds, runs, and returns `200` on `/healthz`.
+- [ ] `copier update` applies template changes without overwriting your local edits.
+- [ ] The CI matrix from this page renders every combination.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| `${{ github.sha }}` rendered as empty string | Jinja/Nunjucks consumed the expression | Wrap in `{% raw %}` or exclude path from templating |
-| `copier update` says "no changes" | Answers file missing or `_commit` not a tag | Commit `.copier-answers.yml`; tag template releases |
-| Many conflicts on update | Generated files heavily customized | Generate less; move logic into referenced workflows/libraries |
-| Tasks don't run | `--trust` not passed | Pass `--trust` for templates you own |
-| `map has no entry for key "name"` (Go) | Missing value with `missingkey=error` | Validate inputs against schema; supply defaults |
-| Generated YAML invalid when value has `:` | Unquoted interpolation | Quote values or use a `toYaml`/`quote` filter |
-| File written outside target dir | Unvalidated path input | Validate names; check rendered path prefix (see scaffolder) |
+### `${{ github.sha }}` rendered as empty string
+
+**Cause:** Jinja/Nunjucks consumed the expression
+
+**Fix:** Wrap in `{% raw %}` or exclude path from templating
+
+### `copier update` says "no changes"
+
+**Cause:** Answers file missing or `_commit` not a tag
+
+**Fix:** Commit `.copier-answers.yml`; tag template releases
+
+### Many conflicts on update
+
+**Cause:** Generated files heavily customized
+
+**Fix:** Generate less; move logic into referenced workflows/libraries
+
+### Tasks don't run
+
+**Cause:** `--trust` not passed
+
+**Fix:** Pass `--trust` for templates you own
+
+### `map has no entry for key "name"` (Go)
+
+**Cause:** Missing value with `missingkey=error`
+
+**Fix:** Validate inputs against schema; supply defaults
+
+### Generated YAML invalid when value has `:`
+
+**Cause:** Unquoted interpolation
+
+**Fix:** Quote values or use a `toYaml`/`quote` filter
+
+### File written outside target dir
+
+**Cause:** Unvalidated path input
+
+**Fix:** Validate names; check rendered path prefix (see scaffolder)
+
 
 ---
 

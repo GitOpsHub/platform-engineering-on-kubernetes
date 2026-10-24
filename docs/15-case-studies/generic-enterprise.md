@@ -295,7 +295,7 @@ These patterns recur in enterprise platform work. They are generalizations, not 
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Exercise: Run the assessment on your own organization
 

@@ -21,8 +21,8 @@ model extends from one cluster to a fleet.
 
 ## Related Code
 
-- [`code/helm-charts/`](../../code/helm-charts/) — the platform charts that GitOps tools deploy
-- [`code/tenant-operator/`](../../code/tenant-operator/) — the `Tenant` resources that GitOps repositories create per team
+- [`code/helm-charts/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/helm-charts/) — the platform charts that GitOps tools deploy
+- [`code/tenant-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/) — the `Tenant` resources that GitOps repositories create per team
 
 ## Where This Leads
 

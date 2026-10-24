@@ -474,50 +474,113 @@ Track these metrics for the environment service (see [Measuring Success](../14-p
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-Goal: provision a preview from a pull request, watch its status, and force an expiry.
+### Exercise 1: Provision a preview, watch it, and force an expiry
 
-1. **Create a test environment with a short TTL.** Apply an `Environment` with `ttl: 5m` in a lab cluster that runs the environment operator (see [Lab 03: Platform API](../../labs/lab-03-platform-api/README.md)).
+**Goal:** Create an `Environment` with a short TTL, confirm it becomes ready, and confirm it is deleted at `expiresAt`.
+
+**Before you start:** the kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md) with the environment operator running. Lab 03 does not install it, so deploy it from [`code/environment-operator`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/environment-operator/):
+
+```bash
+kubectl config use-context kind-platform-engineering
+make -C code/environment-operator install
+make -C code/environment-operator run     # keep this terminal open; the controller logs here
+```
+
+1. **Create the environment.** Save the `Environment` manifest from this page as `environment-checkout-pr-482.yaml`, set `ttl: 5m`, and apply it from a second terminal. Create the `team-payments` namespace first if it does not exist:
 
    ```bash
+   kubectl create namespace team-payments --dry-run=client -o yaml | kubectl apply -f -
    kubectl apply -f environment-checkout-pr-482.yaml
    kubectl get environment checkout-pr-482 -n team-payments -w
    ```
 
-2. **Verify the phase transitions.** The phase should move from `Pending` to `Ready`. Record the time it took.
+   Expected output: the phase moves from `Pending` to `Ready`. Record how long it took.
 
-3. **Verify the expiry schedule.** Compare `status.expiresAt` with `metadata.creationTimestamp`. They should differ by exactly the TTL.
+2. **Verify the expiry schedule.** `status.expiresAt` should be the creation time plus the TTL:
 
-4. **Wait for expiry and confirm deletion.** The environment and its namespace should disappear within a few seconds of `expiresAt`. If they linger, check the finalizer and the operator logs:
+   ```bash
+   kubectl get environment checkout-pr-482 -n team-payments \
+     -o jsonpath='{.metadata.creationTimestamp}{"\n"}{.status.expiresAt}{"\n"}'
+   ```
+
+   Expected output: two timestamps exactly five minutes apart.
+
+3. **Wait for expiry and confirm deletion.** The environment and its namespace disappear within a few seconds of `expiresAt`. If they linger, check the finalizer and the operator logs:
 
    ```bash
    kubectl describe environment checkout-pr-482 -n team-payments
-   kubectl logs -n platform-system deploy/environment-operator | grep checkout-pr-482
    ```
 
-5. **Break it on purpose.** Set `ttl: 9999h` and confirm the controller rejects it with `InvalidSpec` and does not create the namespace.
+4. **Break it on purpose.** Set `type: bogus` and apply with a server-side dry run. The CRD enum rejects it before the controller sees it:
 
-   > The environment operator is a stretch goal in Lab 03; if your lab cluster does not run it, apply the manifest against the lab's Platform API and verify the `Environment` schema with `kubectl apply --dry-run=server`, then skip to step 6.
+   ```bash
+   kubectl apply --dry-run=server -f environment-checkout-pr-482.yaml
+   ```
 
-6. **Stretch:** add the ApplicationSet from this document to a test Argo CD instance, open a PR with the `preview` label, and close it. Confirm the Application is removed.
+   Expected output: `Unsupported value: "bogus": supported values: "dev", "staging", "prod", "preview"`. The `maxTTL` guard described earlier on this page is a design pattern; the reference operator in `code/` does not enforce it, so add it to your own controller if you need it.
 
-**Success criteria:** every expiry happens at `expiresAt` (not at the next poll), invalid TTLs never create resources, and closing the PR removes the preview.
+5. **Stretch.** Add the ApplicationSet from this page to a test Argo CD instance, open a pull request with the `preview` label, and close it. Confirm the Application is removed.
+
+**Check:**
+
+- [ ] Every expiry happens at `expiresAt`, not at the next poll.
+- [ ] An invalid spec never creates resources.
+- [ ] Closing the pull request removes the preview.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| Environment stuck in `Provisioning` | Tenant quota exhausted, or template references a missing kind | Read `conditions[].message`; check the Tenant's status and the template's `owned` list |
-| Preview deleted before the PR closed | Shorter TTL than expected; `expiresAt` computed from creation | Extend `ttl`; check the type's `maxTTL` default |
-| Preview survives past `expiresAt` | Finalizer blocks deletion; external resource cleanup failing | `kubectl describe` for finalizers; check operator logs for the external API error |
-| ApplicationSet does not create an app for a PR | Missing `preview` label, fork PR, or token lacks `pull_requests:read` | Check labels, token scope, and ApplicationSet controller logs |
-| Application created but never syncs | `targetRevision` is a SHA that is not in the repo the controller can fetch | Verify repo credentials; check the Argo CD repo server logs |
-| `namespace` name too long | Branch slug plus prefix exceeds 63 characters | Truncate the slug with a stable hash suffix in the template |
-| Preview scales to zero while in use | Cooldown too short, or traffic bypasses the measured path | Lengthen `cooldownPeriod`; measure at the gateway |
-| Cost spike from previews | No TTL cap, or many PRs labelled `preview` | Enforce `maxTTL`; reduce the template's quota; check the label policy |
+### Environment stuck in `Provisioning`
+
+**Cause:** Tenant quota exhausted, or template references a missing kind
+
+**Fix:** Read `conditions[].message`; check the Tenant's status and the template's `owned` list
+
+### Preview deleted before the PR closed
+
+**Cause:** Shorter TTL than expected; `expiresAt` computed from creation
+
+**Fix:** Extend `ttl`; check the type's `maxTTL` default
+
+### Preview survives past `expiresAt`
+
+**Cause:** Finalizer blocks deletion; external resource cleanup failing
+
+**Fix:** `kubectl describe` for finalizers; check operator logs for the external API error
+
+### ApplicationSet does not create an app for a PR
+
+**Cause:** Missing `preview` label, fork PR, or token lacks `pull_requests:read`
+
+**Fix:** Check labels, token scope, and ApplicationSet controller logs
+
+### Application created but never syncs
+
+**Cause:** `targetRevision` is a SHA that is not in the repo the controller can fetch
+
+**Fix:** Verify repo credentials; check the Argo CD repo server logs
+
+### `namespace` name too long
+
+**Cause:** Branch slug plus prefix exceeds 63 characters
+
+**Fix:** Truncate the slug with a stable hash suffix in the template
+
+### Preview scales to zero while in use
+
+**Cause:** Cooldown too short, or traffic bypasses the measured path
+
+**Fix:** Lengthen `cooldownPeriod`; measure at the gateway
+
+### Cost spike from previews
+
+**Cause:** No TTL cap, or many PRs labelled `preview`
+
+**Fix:** Enforce `maxTTL`; reduce the template's quota; check the label policy
+
 
 ---
 
@@ -538,4 +601,4 @@ Goal: provision a preview from a pull request, watch its status, and force an ex
 1. **Measure the experience**: [Developer Experience](developer-experience.md) — feedback loops and DX metrics for provisioning
 2. **Build the API behind it**: [Kubernetes CRDs](../09-platform-apis/kubernetes-crds.md) and [Controller Runtime](../09-platform-apis/controller-runtime.md)
 3. **Protect the namespaces**: [Network Policies](../03-networking-fundamentals/network-policies.md) and [Policy Engine](../12-security-compliance/policy-engine.md)
-4. **Practice**: [Lab 03: Platform API](../../labs/lab-03-platform-api/README.md) and [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/README.md)
+4. **Practice**: [Lab 03: Platform API] (a CRD and controller walkthrough)(../../labs/lab-03-platform-api/README.md) and [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/README.md)

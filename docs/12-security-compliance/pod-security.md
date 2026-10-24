@@ -31,7 +31,7 @@ In a multi-tenant platform, any of these turns a compromised application into a 
 
 ```mermaid
 graph LR
-    Dev[Developer / GitOps] -->|kubectl apply| API[kube-apiserver]
+    Dev["Developer / GitOps"] -->|kubectl apply| API[kube-apiserver]
     API --> Authn[Authentication]
     Authn --> Authz[Authorization RBAC]
     Authz --> Mut[Mutating Admission<br/>Kyverno mutate, webhooks]
@@ -40,7 +40,7 @@ graph LR
     subgraph Val[Validating Admission]
         PSA[PodSecurity<br/>built-in plugin]
         VAP[ValidatingAdmissionPolicy<br/>CEL]
-        Kyv[Kyverno / Gatekeeper<br/>webhooks]
+        Kyv["Kyverno / Gatekeeper<br/>webhooks"]
     end
     Val --> ETCD[(etcd)]
 ```
@@ -548,9 +548,9 @@ spec:
 
 ```mermaid
 graph LR
-    T[Tenant CR<br/>podSecurityLevel: restricted] --> Op[Tenant Operator]
+    T["Tenant CR<br/>podSecurityLevel: restricted"] --> Op[Tenant Operator]
     E[Environment CR] --> Op
-    Op --> NS[Namespace<br/>pod-security.kubernetes.io/* labels]
+    Op --> NS["Namespace<br/>pod-security.kubernetes.io/* labels"]
     NS --> PSA[PodSecurity admission]
     K[Kyverno block-tenant-downgrade] -.guards.-> NS
 ```
@@ -561,7 +561,7 @@ graph LR
 | `baseline` | baseline | restricted@latest | Platform team review |
 | `privileged` | privileged | baseline | Security team + time-boxed |
 
-See the [tenant-operator](../../code/tenant-operator/) code for the reconciliation loop that applies these labels.
+See the [tenant-operator](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/) code for the reconciliation loop that applies these labels.
 
 ---
 
@@ -636,9 +636,12 @@ Commit labels through GitOps (or the Tenant spec) one namespace group at a time,
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Roll Out Restricted Pod Security on a Tenant Namespace
+### Exercise 1: Roll out restricted pod security on a tenant namespace
+
+Goal: move a namespace from audit and warn to enforcement without breaking a workload, using
+the dry-run label check first. Expect about 15 minutes.
 
 **Prerequisites:** Kind or k3d cluster (1.28+), `kubectl`, optionally Kyverno ([Lab 05](../../labs/lab-05-policy-engine/)).
 
@@ -698,6 +701,23 @@ kubectl -n psa-demo rollout status deployment secure
 kubectl -n psa-demo debug -it deploy/secure --image=busybox:1.36 --profile=restricted -- sh
 ```
 
+Expected output:
+
+```text
+# step 2
+Warning: would violate PodSecurity "restricted:latest": allowPrivilegeEscalation != false
+(container "nginx" must set securityContext.allowPrivilegeEscalation=false), ...
+# step 3
+Warning: existing pods in namespace "psa-demo" violate the new PodSecurity enforce level "restricted:latest"
+# step 4
+FailedCreate   replicaset/insecure-...   Error creating: pods "insecure-..." is forbidden: violates PodSecurity "restricted:latest"
+# step 5
+deployment "secure" successfully rolled out
+```
+
+Check: `kubectl -n psa-demo get pods` shows the `secure` pod `Running`, and
+`kubectl -n psa-demo get deploy insecure` returns `NotFound`.
+
 **Stretch goals:**
 1. Apply `vap-readonly-rootfs.yaml` with `validationActions: [Warn]`, then fix the `secure` deployment by adding `readOnlyRootFilesystem: true` and `emptyDir` mounts for `/tmp` and `/var/cache/nginx`.
 2. Install the `add-secure-pod-defaults` Kyverno policy and re-run `kubectl create deployment` with plain `nginxinc/nginx-unprivileged` — it should now pass without hand-written `securityContext`.
@@ -751,7 +771,7 @@ A namespace using `enforce-version: latest` picked up a tightened control. Pin `
 4. **Generate labels from platform APIs** (Tenant/Environment), never by hand, and block downgrades.
 5. **Prefer explicit `privileged` labels** for system namespaces over API server exemptions.
 6. **Layer CEL/Kyverno** for `readOnlyRootFilesystem`, registries, token automount and per-workload exceptions.
-7. **Ship secure defaults** in your [Helm charts](../../code/helm-charts/) and scaffolding templates so compliant is the path of least resistance.
+7. **Ship secure defaults** in your [Helm charts](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/helm-charts/) and scaffolding templates so compliant is the path of least resistance.
 
 ---
 
@@ -777,6 +797,6 @@ A namespace using `enforce-version: latest` picked up a tightened control. Pin `
 ## Next Steps
 
 1. **Complete Lab 05**: [Policy Engine lab](../../labs/lab-05-policy-engine/) — combine PSA with Kyverno and CEL
-2. **Read**: [Supply Chain Security](./supply-chain.md) — control *what* runs, not just *how* it runs
+2. **Read**: [Supply Chain Security](./supply-chain.md) — control *what* runs, and not only *how* it runs
 3. **Read**: [Compliance](./compliance.md) — turn PSA audit data into compliance evidence
 4. **Revisit**: [Policy Engine](./policy-engine.md) for deeper Kyverno/Gatekeeper/CEL patterns

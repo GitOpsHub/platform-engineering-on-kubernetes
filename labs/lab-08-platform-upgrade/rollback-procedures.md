@@ -20,12 +20,19 @@ helm history <release> -n <ns>
 helm rollback <release> <revision> -n <ns> --wait
 ```
 
+Replace `<release>` and `<ns>` with the release name and namespace, and `<revision>` with a number from
+`helm history`. Expected result: `Rollback was a success! Happy Helming!`. Check with `helm history`, which
+shows a new top revision described `Rollback to <revision>`.
+
 Example, rolling back Traefik on blue to revision 3:
 
 ```bash
 helm --kube-context kind-platform-engineering history traefik -n traefik
 helm --kube-context kind-platform-engineering rollback traefik 3 -n traefik --wait
 ```
+
+Expected result: the history lists at least three revisions before you roll back. If it does not, pick a
+revision that exists.
 
 Notes:
 - `--wait` returns only when the release's resources are ready. Without it, the command returns before pods are healthy.
@@ -46,6 +53,11 @@ git -C <platform-config-clone> push origin main
 argocd app sync <app-name>
 argocd app wait <app-name> --health --timeout 600
 ```
+
+Replace `<platform-config-clone>` with the path of your local clone of the GitOps repo, `<bad-commit-sha>` with
+the commit to undo, and `<app-name>` with the affected Argo CD application. Expected result: `git revert`
+creates a new commit, and `argocd app wait` returns with `Health Status: Healthy`. Check with
+`argocd app get <app-name>`, which shows `Sync Status: Synced` at the new revision.
 
 Argo CD syncs the reverted state and the cluster converges back to it. This is the rollback to use by default, because the history stays in Git and the next sync will not reintroduce the bad change.
 
@@ -107,6 +119,10 @@ aws --endpoint-url http://localhost:8333 s3 mb s3://velero
 aws --endpoint-url http://localhost:8333 s3 ls
 ```
 
+Expected result: `make_bucket: velero`, then a listing that includes `velero`. The `aws` CLI needs
+credentials set in your environment (`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`) that match the pair you
+create for SeaweedFS. Replace `<access-key>` and `<secret-key>` in the next block with that same pair.
+
 ### Install Velero into blue
 
 Install the Velero CLI (v1.18.x). Velero's own install step puts the server into the cluster, using the current kubectl context:
@@ -133,6 +149,9 @@ rm -f velero-credentials
 velero backup-location get       # should show Available
 ```
 
+Expected result: the location `default` shows `Available`. If it shows `Unavailable`, check the bucket name,
+credentials and that `velero-s3` is on the `kind` network (`docker network inspect kind`).
+
 Notes:
 - `--use-volume-snapshots=false` is required here: kind's default `local-path` StorageClass has no CSI snapshot support, so no volume snapshot class exists to use. The lab backs up API objects only. **Persistent volume data is not in these backups.** Do not treat a restore from them as a full data restore.
 - The `velero-s3` name is the container name on the `kind` network. Use `http://velero-s3:8333` from inside the cluster, not `localhost`.
@@ -152,6 +171,8 @@ velero backup describe hello-pre-upgrade --details
 velero backup get
 ```
 
+Expected result: the backup `hello-pre-upgrade` has status `Completed` with 0 errors.
+
 `describe --details` lists every resource in the backup. Check that the Deployment, Service, Ingress and Certificate are present before you trust it.
 
 ### Restore into a scratch namespace
@@ -168,15 +189,31 @@ velero restore describe hello-restore-test --details
 kubectl --context kind-platform-engineering -n platform-smoke-test-restore get deploy,svc,ingress
 ```
 
+Expected result: the restore shows `Phase: Completed`, and the scratch namespace holds the `hello`
+Deployment, Service and Ingress. The restored Ingress uses the same host name as the live one, so do not
+test through the front door while it exists.
+
 Clean up the scratch namespace when you are done:
 
 ```bash
 kubectl --context kind-platform-engineering delete namespace platform-smoke-test-restore
 ```
 
+Expected result: `namespace "platform-smoke-test-restore" deleted`.
+
 ### Restore to a real rollback
 
-To roll back a deleted or corrupted namespace in place, restore into the original namespace name. Delete the damaged objects first, or Velero skips existing ones. Do not run this against a namespace that is still in use without a second backup in hand.
+To roll back a deleted or corrupted namespace in place, restore into the original namespace name. Delete the damaged objects first, or Velero skips existing ones.
+
+> **Warning:** Restoring into the original namespace changes live state. Do not run it against a
+> namespace that is still in use without a second backup in hand.
+
+```bash
+velero restore create <restore-name> --from-backup hello-pre-upgrade --wait
+```
+
+Replace `<restore-name>` with a unique name. Expected result: `Phase: Completed` in
+`velero restore describe <restore-name>`.
 
 ### Before you decommission blue
 

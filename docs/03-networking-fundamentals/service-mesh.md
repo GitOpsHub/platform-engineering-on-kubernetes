@@ -36,7 +36,7 @@ infrastructure:
 graph LR
     subgraph CP[Control plane]
         CA[Certificate authority]
-        CFG[Config / xDS server]
+        CFG["Config / xDS server"]
     end
     subgraph DP[Data plane]
         A[Service A] --> PA[Proxy]
@@ -85,7 +85,7 @@ graph TB
         subgraph N2[Node 2]
             Z2[ztunnel L4] --> AA2[app pod]
         end
-        Z1 ==>|HBONE mTLS| WP[waypoint proxy L7<br/>optional, per namespace/service]
+        Z1 ==>|HBONE mTLS| WP["waypoint proxy L7<br/>optional, per namespace/service"]
         WP ==> Z2
     end
 ```
@@ -365,9 +365,9 @@ Linkerd (CNCF graduated) focuses on simplicity: a sidecar model using `linkerd2-
 ```mermaid
 graph TB
     subgraph CP[linkerd namespace]
-        DST[destination<br/>service discovery, policy]
-        ID[identity<br/>issues certs]
-        INJ[proxy-injector<br/>mutating webhook]
+        DST["destination<br/>service discovery, policy"]
+        ID["identity<br/>issues certs"]
+        INJ["proxy-injector<br/>mutating webhook"]
     end
     subgraph App[Meshed namespace]
         P1[app + linkerd-proxy] ==>|mTLS| P2[app + linkerd-proxy]
@@ -512,7 +512,7 @@ For cross-cluster meshes see [Multi-Cluster Networking](../13-multi-cluster/mult
 
 ```mermaid
 flowchart LR
-    Dev[Developer] -->|Workload spec<br/>mesh: true| WL[Workload CR<br/>platform.mycompany.io/v1alpha1]
+    Dev[Developer] -->|Workload spec<br/>mesh: true| WL["Workload CR<br/>platform.mycompany.io/v1alpha1"]
     WL --> OP[workload-operator]
     OP -->|label namespace<br/>istio.io/dataplane-mode=ambient| NS[Namespace]
     OP -->|create waypoint + default AuthorizationPolicy| Mesh[Mesh resources]
@@ -547,11 +547,11 @@ Platform responsibilities:
 | Defaults | Mesh-wide `STRICT` mTLS once adoption is complete; namespace `allow-nothing` + explicit allows |
 | Guardrails | Admission policies preventing tenants from creating mesh-wide resources in `istio-system` |
 | SLOs | Alert on control-plane push errors and proxy 5xx rates; see [Observability](../10-observability/tracing-stack.md) |
-| Code | The [workload-operator](../../code/workload-operator/) traits are a natural place for mesh enablement |
+| Code | The [workload-operator](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/workload-operator/) traits are a natural place for mesh enablement |
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Lab: Istio Ambient — mTLS and L7 Authorization Without Sidecars
 
@@ -681,4 +681,4 @@ linkerd diagnostics policy -n <ns> po/<pod> <port>
 1. **Read**: [Multi-Cluster Networking](../13-multi-cluster/multi-cluster-networking.md) — extending the mesh across clusters
 2. **Read**: [Tracing Stack](../10-observability/tracing-stack.md) — using mesh telemetry with OpenTelemetry
 3. **Read**: [API Gateway](../09-platform-apis/api-gateway.md) — north-south vs east-west responsibilities
-4. **Practice**: Add a `mesh` trait to the [workload-operator](../../code/workload-operator/)
+4. **Practice**: Add a `mesh` trait to the [workload-operator](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/workload-operator/)

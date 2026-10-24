@@ -435,7 +435,7 @@ spec:
 
 ```mermaid
 graph TB
-    Pod[Pod CREATE<br/>image: ghcr.io/mycompany/app:1.4.2] --> Adm{Admission Controller<br/>Kyverno or policy-controller}
+    Pod["Pod CREATE<br/>image: ghcr.io/mycompany/app:1.4.2"] --> Adm{Admission Controller<br/>Kyverno or policy-controller}
     Adm -->|1. resolve tag| Reg[(Registry)]
     Adm -->|2. fetch signature + attestations| Reg
     Adm -->|3. verify cert chain + Rekor proof| TUF[Sigstore TUF root]
@@ -593,8 +593,8 @@ graph LR
     Repo --> CI[Shared reusable workflow<br/>build, sign, SBOM, provenance, scan]
     CI --> Reg[(ghcr.io/mycompany)]
     CI --> GitOps[(GitOps repo<br/>digest-pinned)]
-    GitOps --> Argo[Argo CD / Flux]
-    Argo --> Adm[Admission:<br/>verifyImages + digest + registry]
+    GitOps --> Argo["Argo CD / Flux"]
+    Argo --> Adm["Admission:<br/>verifyImages + digest + registry"]
     Adm --> Run[Running Pod]
     Trivy[Trivy Operator] -.continuous rescans.-> Run
 ```
@@ -607,9 +607,13 @@ graph LR
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Sign, Attest and Enforce
+### Exercise 1: Sign, attest and enforce
+
+Goal: sign an image keylessly, attach an SBOM, and prove that admission accepts the signed image
+and rejects an unsigned one. Replace `you@example.com` with the email of the identity you log in
+with, and the issuer with the one your login uses (`cosign verify` prints it on failure).
 
 **Prerequisites:** Kind cluster with Kyverno installed ([Lab 05](../../labs/lab-05-policy-engine/)), `cosign`, `syft`, `crane`, a GitHub account.
 
@@ -652,6 +656,22 @@ UNSIGNED=ttl.sh/pe-k8s-demo-unsigned:1h
 crane copy cgr.dev/chainguard/busybox:latest "$UNSIGNED"
 kubectl -n supply-demo run unsigned --image="$UNSIGNED"   # expect: denied
 ```
+
+Expected output:
+
+```text
+# step 3
+Verification for ttl.sh/pe-k8s-demo-ab12cd34@sha256:... --
+The cosign claims were validated
+The code-transparency-log claims were verified
+# step 6
+ttl.sh/pe-k8s-demo-ab12cd34@sha256:...
+# step 7
+Error from server: admission webhook "mutate.kyverno.svc-fail" denied the request: ... no signatures found
+```
+
+Check: `kubectl -n supply-demo get pod signed` is `Running`, and `kubectl -n supply-demo get pod
+unsigned` returns `NotFound`. The `ttl.sh` images expire after one hour.
 
 **Stretch goals:**
 1. Push the lab repo to GitHub and run the `release.yml` workflow above; update the policy to the workflow identity.
@@ -697,7 +717,7 @@ Kyverno and policy-controller need the TUF root of your private Sigstore instanc
 ## Best Practices
 
 1. **Sign digests, deploy digests.** Never trust a tag in production.
-2. **Verify identities, not just signatures.** A valid Sigstore signature from *anyone* is worthless.
+2. **Verify identities, as well as signatures.** A valid Sigstore signature from *anyone* is worthless.
 3. **Centralize the release workflow** so there is one signing identity to trust.
 4. **Attest everything you'd want during an incident**: provenance, SBOM, scan results.
 5. **Roll out in `Audit`/`warn` first**, then enforce per environment.
@@ -730,5 +750,5 @@ Kyverno and policy-controller need the TUF root of your private Sigstore instanc
 
 1. **Read**: [Compliance](./compliance.md) — continuously scan what is already running and produce evidence
 2. **Revisit**: [Image Security](../02-container-runtime/image-security.md) for scanning internals
-3. **Practice**: Add `verifyImages` to the [Lab 05 policy set](../../labs/lab-05-policy-engine/) and the [policy-engine code](../../code/policy-engine/)
+3. **Practice**: Add `verifyImages` to the [Lab 05 policy set](../../labs/lab-05-policy-engine/) and the [policy-engine code](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/policy-engine/)
 4. **Explore**: [Pod Security](./pod-security.md) — combine "what runs" with "how it runs"

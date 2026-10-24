@@ -38,7 +38,7 @@ graph LR
         Run --> Edit
     end
     subgraph Middle["Middle loop (minutes to hours)"]
-        Commit[Commit + push] --> CI[CI: build, scan, test]
+        Commit[Commit + push] --> CI["CI: build, scan, test"]
         CI --> Review[Code review]
     end
     subgraph Outer["Outer loop (hours to days)"]
@@ -297,7 +297,7 @@ Question 8 is the most valuable and the hardest to analyze. Tag the free-text an
 | Lead time | Commit late, after work is done offline | Measure from the first commit on the branch, not from PR open |
 | Survey satisfaction | Managers coach responses | Anonymous, minimum group size, trend over absolute score |
 | Preview count | Create previews nobody uses | Measure preview-hours with real traffic |
-| Golden path adoption | Templates used but heavily modified | Measure drift from the template, not just use |
+| Golden path adoption | Templates used but heavily modified | Measure drift from the template, not only use |
 
 Practical rules:
 
@@ -328,32 +328,77 @@ A repeatable review keeps the numbers useful:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-Goal: produce a one-page DX baseline for one tenant.
+### Exercise 1: Produce a one-page DX baseline for one tenant
+
+**Goal:** Measure lead time, deployment frequency, and one feedback loop for one tenant, and write a one-page summary. You need read access to your Git provider, Argo CD, and Prometheus.
 
 1. **Pick a tenant and a 30-day window.** Choose a team with at least 10 production changes in the window.
-2. **Collect lead times.** Export commit and sync timestamps (from your Git provider and Argo CD). Feed them to the `LeadTime` function above and record count, p50, and p90.
-3. **Measure deployment frequency.** Use the PromQL above, adjusted to your label names, to get daily production syncs for the tenant.
-4. **Measure one feedback loop.** Pull CI run durations for the last 30 days and report p50 and p90, separating queue time from run time.
-5. **Run a 5-question pulse survey.** Use questions 1, 3, 5, 6, and 8 from the example set. Report results only if at least 5 people responded.
+2. **Collect lead times.** Export commit and sync timestamps from your Git provider and Argo CD. Feed them to the `LeadTime` function above. Record the count, p50, and p90. Expected: three numbers, with the count at least 10.
+3. **Measure deployment frequency.** Run the PromQL above, adjusted to your label names. Replace `<tenant>` with the tenant's name:
+
+   ```promql
+   sum(increase(argocd_app_sync_total{dest_namespace=~"<tenant>-.*"}[30d])) / 30
+   ```
+
+   Expected: a single value, the mean number of syncs per day.
+4. **Measure one feedback loop.** Pull CI run durations for the last 30 days and report p50 and p90, with queue time separate from run time.
+5. **Run a five-question pulse survey.** Use questions 1, 3, 5, 6, and 8 from the example set. Report results only if at least five people responded.
 6. **Write the summary.** One page: three numbers, one trend, the slowest loop, and one proposed investment with the metric you expect to move.
 
-**Success criteria:** every number has a stated source and window; the proposed investment names the metric it should move; nothing in the summary ranks individuals.
+**Check:**
+
+- [ ] Every number has a stated source and window.
+- [ ] The proposed investment names the metric it should move.
+- [ ] Nothing in the summary ranks individuals.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| Lead times look impossibly short | Measured from merge, not first commit | Use the first commit on the branch; keep the merge timestamp as a separate field |
-| Lead times negative for some changes | Backfilled deploys or clock skew across systems | Drop and count them; investigate if more than a few percent |
-| Deployment frequency spikes on one day | Argo CD resync or drift correction counted as deploys | Count only syncs with a new revision, not refresh-only syncs |
-| Survey response rate below 20% | Survey too long, or no visible follow-up from last time | Shorten to 5 questions; publish last quarter's actions first |
-| Survey scores look too good | Managers present results, or groups are too small to be anonymous | Anonymous collection, minimum group size, third-party collection |
-| Dashboards disagree with interviews | Telemetry measures a different path than developers use | Trace one real change end to end and compare |
-| Metric improved after a target was announced | Goodhart: the measure was gamed | Add a balancing metric; reset the target |
+### Lead times look impossibly short
+
+**Cause:** Measured from merge, not first commit
+
+**Fix:** Use the first commit on the branch; keep the merge timestamp as a separate field
+
+### Lead times negative for some changes
+
+**Cause:** Backfilled deploys or clock skew across systems
+
+**Fix:** Drop and count them; investigate if more than a few percent
+
+### Deployment frequency spikes on one day
+
+**Cause:** Argo CD resync or drift correction counted as deploys
+
+**Fix:** Count only syncs with a new revision, not refresh-only syncs
+
+### Survey response rate below 20%
+
+**Cause:** Survey too long, or no visible follow-up from last time
+
+**Fix:** Shorten to 5 questions; publish last quarter's actions first
+
+### Survey scores look too good
+
+**Cause:** Managers present results, or groups are too small to be anonymous
+
+**Fix:** Anonymous collection, minimum group size, third-party collection
+
+### Dashboards disagree with interviews
+
+**Cause:** Telemetry measures a different path than developers use
+
+**Fix:** Trace one real change end to end and compare
+
+### Metric improved after a target was announced
+
+**Cause:** Goodhart: the measure was gamed
+
+**Fix:** Add a balancing metric; reset the target
+
 
 ---
 

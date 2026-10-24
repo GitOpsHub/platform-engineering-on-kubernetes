@@ -43,7 +43,7 @@ Ad-hoc profiling (`go tool pprof` against a live Pod, async-profiler in a debug 
 
 ### Reading a Flame Graph
 
-```
+```text
  ┌───────────────────────────────────────────────────────────────────┐
  │ main.main                                                         │  ← root (100%)
  ├──────────────────────────────────────┬────────────────────────────┤
@@ -75,7 +75,7 @@ graph TB
         AL --- PULL
     end
     subgraph "Workloads"
-        GO[Go app<br/>/debug/pprof]
+        GO["Go app<br/>/debug/pprof"]
         JV[Java app<br/>Pyroscope Java agent]
         PY[Python app]
     end
@@ -84,7 +84,7 @@ graph TB
     JV -- push --> PS
     AL -- push --> PS[Pyroscope<br/>distributor → ingester]
     PS --> OS[(Object Storage)]
-    PS --> SG[store-gateway / querier]
+    PS --> SG["store-gateway / querier"]
     G[Grafana Explore Profiles] --> SG
     T[Tempo trace] -- "span → profile" --> G
 ```
@@ -394,10 +394,10 @@ Then in Grafana's Tempo data source, configure `tracesToProfiles` (see [Tracing 
 
 ```mermaid
 graph LR
-    A[SLO burn alert<br/>latency p99 ↑] --> B[Grafana: metrics show<br/>CPU ↑ 40% after v1.15]
+    A[SLO burn alert<br/>latency p99 ↑] --> B["Grafana: metrics show<br/>CPU ↑ 40% after v1.15"]
     B --> C[Pyroscope diff view<br/>version=1.14 vs 1.15]
-    C --> D[Red frame:<br/>regexp.Compile in hot path]
-    D --> E[Fix: precompile regex<br/>ship v1.15.1]
+    C --> D["Red frame:<br/>regexp.Compile in hot path"]
+    D --> E["Fix: precompile regex<br/>ship v1.15.1"]
     E --> F[Diff confirms<br/>CPU back to baseline]
 ```
 
@@ -405,7 +405,7 @@ graph LR
 
 Pyroscope uses Prometheus-style label selectors on a profile type:
 
-```
+```text
 process_cpu:cpu:nanoseconds:cpu:nanoseconds{service_name="cart", namespace="checkout"}
 memory:alloc_space:bytes:space:bytes{service_name="cart", version="1.15.0"}
 ```
@@ -459,9 +459,14 @@ spec:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Lab: Find a CPU Hotspot with eBPF and a Diff View
+### Exercise 1: Find a CPU hotspot with eBPF and a diff view
+
+Goal: profile a workload without changing it, ship a slower version, and find the regression in a
+diff flame graph. Before you start, save the Alloy configuration from
+[eBPF Profiling for Every Workload](#ebpf-profiling-for-every-workload) as `alloy-values.yaml`.
+You need a Linux-kernel kind or k3d cluster with Grafana from [Metrics Stack](./metrics-stack.md).
 
 ```bash
 # 1. Install Pyroscope (single binary) and Alloy with the config above
@@ -513,6 +518,12 @@ kubectl -n demo patch deploy hasher --type=json -p='[
 #      comparison: last 10 min after the patch
 #    The sha256 frames should show up red (growth).
 ```
+
+Expected output: in step 3 the `hasher` flame graph is dominated by `hashlib` frames. In step 5
+the diff view colors the `sha256` frames red and the root shows roughly 10x more CPU.
+
+Check: `kubectl -n demo top pod -l app=hasher` shows CPU near the 500m limit after step 4, and
+`curl -s localhost:4040/ready` returns `ready`. Clean up with `kubectl delete ns demo; kill %1`.
 
 > The eBPF profiler uses Pod labels via your relabel rules. Here the `version` label is not mapped, so compare by **time range**. Add a relabel rule for `__meta_kubernetes_pod_label_version` to compare by version instead.
 

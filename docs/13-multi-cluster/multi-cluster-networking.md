@@ -49,7 +49,7 @@ Five problems must be solved, and different tools solve different subsets:
 
 ```mermaid
 graph TB
-    Users((Users)) -->|North-South: GSLB / Anycast / DNS| LB1 & LB2
+    Users((Users)) -->|"North-South: GSLB / Anycast / DNS"| LB1 & LB2
     subgraph A["Cluster A"]
         LB1[Gateway] --> SvcA[frontend]
         SvcA --> CartA[cart]
@@ -58,7 +58,7 @@ graph TB
         LB2[Gateway] --> SvcB[frontend]
         SvcB --> CartB[cart]
     end
-    CartA <-->|East-West: service-to-service across clusters| CartB
+    CartA <-->|"East-West: service-to-service across clusters"| CartB
 ```
 
 - **North-south** (users → platform): global DNS / GSLB, anycast, cloud global load balancers, multi-cluster Gateway implementations. Covered in [Workload Distribution](./workload-distribution.md).
@@ -88,7 +88,7 @@ reserved:
   future-regions: 10.50.0.0/12
 ```
 
-Feed these values into Cluster API `spec.clusterNetwork` (see [Cluster Federation](./cluster-federation.md)) or the Terraform modules in [`code/terraform-modules/networking/`](../../code/terraform-modules/).
+Feed these values into Cluster API `spec.clusterNetwork` (see [Cluster Federation](./cluster-federation.md)) or the Terraform modules in [`code/terraform-modules/networking/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/terraform-modules/).
 
 ### When CIDRs already overlap
 
@@ -152,11 +152,11 @@ Implementations include **Submariner Lighthouse**, **GKE Multi-cluster Services*
 ```mermaid
 graph LR
     subgraph Broker["Broker (often on hub cluster)"]
-        BR[(Broker CRDs:<br/>Endpoints, Clusters,<br/>exported services)]
+        BR[("Broker CRDs:<br/>Endpoints, Clusters,<br/>exported services")]
     end
     subgraph A["Cluster A"]
         GA[Gateway Engine] 
-        RA[Route Agent<br/>on every node]
+        RA["Route Agent<br/>on every node"]
         LA[Lighthouse agent + CoreDNS plugin]
     end
     subgraph B["Cluster B"]
@@ -164,7 +164,7 @@ graph LR
         RB[Route Agent]
         LB[Lighthouse agent + CoreDNS plugin]
     end
-    GA <-->|IPsec / WireGuard / VXLAN tunnel| GB
+    GA <-->|"IPsec / WireGuard / VXLAN tunnel"| GB
     GA --- BR
     GB --- BR
     LA --- BR
@@ -213,21 +213,21 @@ If your fleet already standardizes on [Cilium](https://cilium.io/) as the CNI, *
 graph LR
     subgraph A["Cluster A (cluster.id=1)"]
         CA[cilium agents]
-        AA[clustermesh-apiserver<br/>+ etcd]
+        AA["clustermesh-apiserver<br/>+ etcd"]
     end
     subgraph B["Cluster B (cluster.id=2)"]
         CB[cilium agents]
-        AB[clustermesh-apiserver<br/>+ etcd]
+        AB["clustermesh-apiserver<br/>+ etcd"]
     end
     CA -->|watch identities, endpoints, services| AB
     CB -->|watch| AA
-    CA <-->|direct pod-to-pod<br/>native routing or tunnel| CB
+    CA <-->|"direct pod-to-pod<br/>native routing or tunnel"| CB
 ```
 
 ### Requirements
 - Unique `cluster.name` and `cluster.id` (1–255 by default) per cluster
 - Non-overlapping pod CIDRs
-- Node-to-node IP reachability between clusters (VPC peering, transit gateway, etc.)
+- Node-to-node IP reachability between clusters (for example VPC peering or a transit gateway)
 - Same Cilium version range across clusters
 
 ```bash
@@ -315,15 +315,15 @@ graph LR
     subgraph N1["network1 — Cluster A"]
         IA[istiod]
         FA[frontend + sidecar]
-        EWA[east-west gateway :15443]
+        EWA["east-west gateway :15443"]
     end
     subgraph N2["network2 — Cluster B"]
         IB[istiod]
         CB[cart + sidecar]
-        EWB[east-west gateway :15443]
+        EWB["east-west gateway :15443"]
     end
-    IA -.->|remote secret: watch B's endpoints| N2
-    IB -.->|remote secret: watch A's endpoints| N1
+    IA -.->|"remote secret: watch B's endpoints"| N2
+    IB -.->|"remote secret: watch A's endpoints"| N1
     FA -->|mTLS, SNI routed| EWB --> CB
 ```
 
@@ -409,15 +409,15 @@ Locality comes from node labels `topology.kubernetes.io/region` and `topology.ku
 
 ```mermaid
 flowchart TD
-    Q1{Need pod/service-level<br/>cross-cluster calls?}
-    Q1 -->|No| L7[Expose via per-cluster<br/>Gateway/Ingress + GSLB]
-    Q1 -->|Yes| Q2{Already running<br/>a service mesh?}
-    Q2 -->|Istio/Linkerd| MESH[Mesh multi-cluster<br/>east-west gateways]
-    Q2 -->|No| Q3{Cilium as CNI<br/>fleet-wide?}
+    Q1{"Need pod/service-level<br/>cross-cluster calls?"}
+    Q1 -->|No| L7["Expose via per-cluster<br/>Gateway/Ingress + GSLB"]
+    Q1 -->|Yes| Q2{"Already running<br/>a service mesh?"}
+    Q2 -->|"Istio/Linkerd"| MESH["Mesh multi-cluster<br/>east-west gateways"]
+    Q2 -->|No| Q3{"Cilium as CNI<br/>fleet-wide?"}
     Q3 -->|Yes| CM[Cilium Cluster Mesh]
-    Q3 -->|No| Q4{CIDRs non-overlapping<br/>& L3 reachable?}
-    Q4 -->|Yes| SUB[Submariner<br/>MCS API]
-    Q4 -->|No| SUBG[Submariner Globalnet<br/>or mesh with gateways]
+    Q3 -->|No| Q4{"CIDRs non-overlapping<br/>& L3 reachable?"}
+    Q4 -->|Yes| SUB["Submariner<br/>MCS API"]
+    Q4 -->|No| SUBG["Submariner Globalnet<br/>or mesh with gateways"]
 ```
 
 | Criteria | Submariner | Cilium Cluster Mesh | Istio multi-cluster | Linkerd multicluster |
@@ -435,12 +435,12 @@ flowchart TD
 
 - **Trust domain design:** decide whether all clusters share one SPIFFE trust domain or use federation between trust domains. Sharing is simpler; separate domains limit blast radius.
 - **Least connectivity:** connecting clusters at L3 lets *any* pod reach *any* pod unless policy prevents it. Apply default-deny NetworkPolicies in every cluster before enabling cross-cluster routing. See [Network Policies](../03-networking-fundamentals/network-policies.md) and the isolation examples in [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/).
-- **Namespace sameness is a trust statement:** only include clusters in a ClusterSet when the same namespace truly has the same owner everywhere. Tenant namespaces created by the platform (`Tenant` CRD from [`code/tenant-operator/`](../../code/tenant-operator/)) should be named consistently fleet-wide.
+- **Namespace sameness is a trust statement:** only include clusters in a ClusterSet when the same namespace truly has the same owner everywhere. Tenant namespaces created by the platform (`Tenant` CRD from [`code/tenant-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/)) should be named consistently fleet-wide.
 - **Egress cost and data residency:** cross-region traffic costs money and may move regulated data across borders. Use policy to prevent regulated services from being exported.
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Lab: Cilium Cluster Mesh between two kind clusters
 

@@ -115,7 +115,7 @@ The CNCF model is deliberately technology-neutral. Platform teams also need a ca
 | **Policy & security** | Reviews by hand | Admission policies in audit mode | Enforced policies, signed images | Policy-as-code with exceptions workflow, continuous compliance evidence |
 | **Developer portal** | Wiki pages | Service catalog | Software templates, TechDocs | Portal as the integrated front door with scorecards |
 
-Cross-references: [Cluster Federation](../13-multi-cluster/cluster-federation.md), [Multi-Cluster GitOps](../13-multi-cluster/multi-cluster-gitops.md), [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/), [`code/tenant-operator/`](../../code/tenant-operator/), [`code/environment-operator/`](../../code/environment-operator/), [External Secrets](../06-secrets-management/external-secrets.md), [Policy Engine](../12-security-compliance/policy-engine.md), [Backstage](../07-internal-developer-platform/backstage.md).
+Cross-references: [Cluster Federation](../13-multi-cluster/cluster-federation.md), [Multi-Cluster GitOps](../13-multi-cluster/multi-cluster-gitops.md), [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/), [`code/tenant-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/), [`code/environment-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/environment-operator/), [External Secrets](../06-secrets-management/external-secrets.md), [Policy Engine](../12-security-compliance/policy-engine.md), [Backstage](../07-internal-developer-platform/backstage.md).
 
 ---
 
@@ -239,9 +239,11 @@ Re-assess every 6 months. Track the trend, not the absolute number.
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
 ### Exercise: Assess your (or a sample) platform
+
+**Goal:** produce an evidence-based scorecard and a gap table that points at one constraint.
 
 **Time:** 60–90 minutes. **Materials:** the scorecard template above, a whiteboard or doc.
 
@@ -270,6 +272,21 @@ done
 chmod +x scripts/maturity-gaps.sh
 ./scripts/maturity-gaps.sh assessments/2026-q4-platform-maturity.yaml
 ```
+
+Expected output: a five-row table with one row per aspect. The values below are illustrative and
+depend on your scorecard.
+
+```text
+ASPECT         CURRENT  TARGET   GAP
+investment     2        3        1
+adoption       2        3        1
+interfaces     1        2        1
+operations     2        3        1
+measurement    1        2        1
+```
+
+Check: every row has a numeric `CURRENT` and `TARGET`. If `yq` prints `null`, the key name in your
+scorecard does not match the script (`level`, `target_next_2q`), so fix the YAML before you continue.
 
 **If you don't have a real platform to assess**, use the composite organization described in [Generic Enterprise](../15-case-studies/generic-enterprise.md) and score it from the narrative.
 

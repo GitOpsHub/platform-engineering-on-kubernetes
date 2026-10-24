@@ -28,7 +28,7 @@ controller-runtime packages the pattern every Kubernetes controller uses:
 
 ```mermaid
 graph LR
-    API[API server] -->|watch events| Informer[Shared informers<br/>local cache]
+    API[API server] -->|watch events| Informer["Shared informers<br/>local cache"]
     Informer -->|enqueue key| Queue[(Work queue<br/>rate-limited)]
     Queue --> R[Reconcile key]
     R -->|read| Informer
@@ -481,7 +481,7 @@ Choices that matter:
 | Return value | Meaning | When to use |
 |--------------|---------|-------------|
 | `Result{}, nil` | Done; wait for the next event | Steady state |
-| `Result{Requeue: true}, nil` | Run again soon, with rate limiting | You just wrote and want to see the result |
+| `Result{Requeue: true}, nil` | Run again soon, with rate limiting | You wrote the object a moment ago and want to see the result |
 | `Result{RequeueAfter: d}, nil` | Run again at a specific time | TTL expiry, scheduled rotation, external system polling |
 | `Result{}, err` | Failed; retry with exponential backoff | Transient errors |
 
@@ -712,7 +712,7 @@ func eventually(t *testing.T, timeout time.Duration, f func() bool) {
 | Conversion round trip between versions | Requires the real conversion webhook path (with a test server) |
 | RBAC: the controller's service account can do what it needs | Use a user with a restricted ClusterRole in a separate test |
 
-What envtest does **not** do: run pods, schedule workloads, or check kubelet behavior. Keep those in end-to-end tests on kind (see [Lab 03](../../labs/lab-03-platform-api/README.md)).
+What envtest does **not** do: run pods, schedule workloads, or check kubelet behavior. Keep those in end-to-end tests on kind (Lab 03 builds and deploys a controller there: [Lab 03](../../labs/lab-03-platform-api/README.md)).
 
 ---
 
@@ -725,34 +725,100 @@ What envtest does **not** do: run pods, schedule workloads, or check kubelet beh
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-Goal: add a finalizer and a TTL to a small controller, and prove both with envtest.
+### Exercise 1: Add a finalizer and a TTL, and prove both with envtest
 
-1. **Scaffold.** Create a Kubebuilder project with an `Environment` kind as shown above. Run `make manifests generate` and confirm the CRD appears in `config/crd/bases`.
-2. **Add the reconcile steps in order:** fetch, deletion path, finalizer, TTL, status. Use the sketch as the reference.
-3. **Write the envtest.** Create an `Environment` with `type: preview` and `ttl: 5m`, reconcile until `Ready`, and assert `status.expiresAt` is 5 minutes after creation.
-4. **Test the finalizer.** Create an environment, reconcile once (finalizer added), delete it, and confirm `deletionTimestamp` is set but the object still exists. Reconcile again and confirm it disappears.
-5. **Break the finalizer on purpose.** Make `cleanupExternal` return an error. Confirm the object stays in `Terminating`, the error appears in logs with backoff, and the object is removed once the error is cleared.
-6. **Stretch:** add a `Tenant` watch with a map function that reconciles all environments of a tenant when its quota changes. Write a test that changes the quota and asserts the environment's status updates.
+**Goal:** Build a small `Environment` controller with a finalizer and TTL, and test both without waiting on the clock.
 
-**Success criteria:** `make test` passes; the finalizer test shows `Terminating` before the fix and deletion after; no reconcile sleeps on wall-clock time (the TTL test checks the computed value, not a real 5-minute wait).
+**Before you start:** Go 1.22 or later, [Kubebuilder v4](https://book.kubebuilder.io/quick-start), and `setup-envtest` (`go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest`). The finished reference is [`code/environment-operator`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/environment-operator/).
+
+1. **Scaffold.** Create a Kubebuilder project with an `Environment` kind as shown above, then generate the manifests:
+
+   ```bash
+   make manifests generate
+   ls config/crd/bases
+   ```
+
+   Expected output: a file ending in `_environments.yaml`.
+2. **Add the reconcile steps in order:** fetch, deletion path, finalizer, TTL, status. Use the sketch above as the reference.
+3. **Write the envtest.** Create an `Environment` with `type: preview` and `ttl: 5m`, reconcile until `Ready`, and assert `status.expiresAt` is five minutes after creation.
+4. **Test the finalizer.** Create an environment, reconcile once (the finalizer is added), delete it, and assert `deletionTimestamp` is set but the object still exists. Reconcile again and assert it is gone.
+5. **Break the finalizer on purpose.** Make `cleanupExternal` return an error. The object stays in `Terminating` and the error appears in the logs with backoff. Clear the error and confirm the object is removed.
+6. **Stretch.** Add a `Tenant` watch with a map function that reconciles all environments of a tenant when its quota changes, and test it.
+7. **Run the suite:**
+
+   ```bash
+   export KUBEBUILDER_ASSETS="$(setup-envtest use -p path)"
+   make test
+   ```
+
+   Expected output: `ok` for the controller package.
+
+**Check:**
+
+- [ ] `make test` passes.
+- [ ] The finalizer test shows `Terminating` before the fix and deletion after.
+- [ ] No test sleeps on the wall clock; the TTL test checks the computed value.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| Object stuck in `Terminating` | Finalizer cleanup failing or the controller is not running | Check controller logs; check whether the external dependency is reachable; use the documented escape hatch only after confirming cleanup is safe |
-| `Owns` triggers reconciles for unrelated objects | Child lacks a controller reference, or the owner is matched too broadly | Set `SetControllerReference`; restrict the cache to labelled objects |
-| Reconcile loops forever | Each reconcile updates the object (for example, a timestamp in spec), which triggers the next | Update only when content changes; use status and `GenerationChangedPredicate` |
-| `the object has been modified; please apply your changes` | Status write from a stale copy | Expected occasionally; check that the error returns and triggers a retry, not a crash |
-| Creates fail with `AlreadyExists` after a restart | Create was not idempotent | Use `CreateOrUpdate` or server-side apply |
-| Owner reference rejected with `cluster-scoped resource must not have a namespace-scoped owner` | Cluster-scoped dependent, namespaced owner | Use a finalizer and explicit deletion instead |
-| envtest fails with `unable to start control plane` | Missing `KUBEBUILDER_ASSETS` or incompatible binaries | Set the variable with `setup-envtest use -p path`; match the Kubernetes minor |
-| Controller ignores changes to a CRD field | CRD not regenerated or redeployed | Run `make manifests`; apply `config/crd`; restart if the cache held an old schema |
-| Queue depth grows without bound | Reconciles slower than events, or a key failing forever | Profile the slow step; check error rate per key; add backoff |
+### Object stuck in `Terminating`
+
+**Cause:** Finalizer cleanup failing or the controller is not running
+
+**Fix:** Check controller logs; check whether the external dependency is reachable; use the documented escape hatch only after confirming cleanup is safe
+
+### `Owns` triggers reconciles for unrelated objects
+
+**Cause:** Child lacks a controller reference, or the owner is matched too broadly
+
+**Fix:** Set `SetControllerReference`; restrict the cache to labelled objects
+
+### Reconcile loops forever
+
+**Cause:** Each reconcile updates the object (for example, a timestamp in spec), which triggers the next
+
+**Fix:** Update only when content changes; use status and `GenerationChangedPredicate`
+
+### `the object has been modified; please apply your changes`
+
+**Cause:** Status write from a stale copy
+
+**Fix:** Expected occasionally; check that the error returns and triggers a retry, not a crash
+
+### Creates fail with `AlreadyExists` after a restart
+
+**Cause:** Create was not idempotent
+
+**Fix:** Use `CreateOrUpdate` or server-side apply
+
+### Owner reference rejected with `cluster-scoped resource must not have a namespace-scoped owner`
+
+**Cause:** Cluster-scoped dependent, namespaced owner
+
+**Fix:** Use a finalizer and explicit deletion instead
+
+### envtest fails with `unable to start control plane`
+
+**Cause:** Missing `KUBEBUILDER_ASSETS` or incompatible binaries
+
+**Fix:** Set the variable with `setup-envtest use -p path`; match the Kubernetes minor
+
+### Controller ignores changes to a CRD field
+
+**Cause:** CRD not regenerated or redeployed
+
+**Fix:** Run `make manifests`; apply `config/crd`; restart if the cache held an old schema
+
+### Queue depth grows without bound
+
+**Cause:** Reconciles slower than events, or a key failing forever
+
+**Fix:** Profile the slow step; check error rate per key; add backoff
+
 
 ---
 

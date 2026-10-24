@@ -23,9 +23,9 @@ A gateway sits at the edge of the cluster and handles traffic coming in from out
 
 ```mermaid
 graph LR
-    Client[Browser / CLI / CI] -->|HTTPS| DNS[(DNS: *.preview.dev.mycompany.io)]
+    Client["Browser / CLI / CI"] -->|HTTPS| DNS[(DNS: *.preview.dev.mycompany.io)]
     DNS --> LB[Cloud load balancer]
-    LB --> GW[Gateway proxy<br/>Envoy / Kong / Traefik]
+    LB --> GW["Gateway proxy<br/>Envoy / Kong / Traefik"]
     GW -->|JWT check| Auth[(OIDC issuer JWKS)]
     GW -->|rate limit| Limits[(Counters)]
     GW -->|HTTPRoute match| Svc1[Platform API]
@@ -73,9 +73,9 @@ The ownership split is the point. The platform team owns *where traffic enters* 
 
 ```mermaid
 graph TB
-    GC[GatewayClass<br/>controllerName: implementation] --> GW[Gateway platform-external<br/>listeners, TLS, allowedRoutes]
-    GW -->|parentRef| R1[HTTPRoute platform-api<br/>ns: platform-system]
-    GW -->|parentRef| R2[HTTPRoute checkout-pr-482<br/>ns: preview-checkout-pr-482]
+    GC["GatewayClass<br/>controllerName: implementation"] --> GW["Gateway platform-external<br/>listeners, TLS, allowedRoutes"]
+    GW -->|parentRef| R1["HTTPRoute platform-api<br/>ns: platform-system"]
+    GW -->|parentRef| R2["HTTPRoute checkout-pr-482<br/>ns: preview-checkout-pr-482"]
     R1 --> S1[Service platform-api]
     R2 --> S2[Service checkout]
     R2 -.->|cross-namespace backend<br/>needs ReferenceGrant| S3[Service in other ns]
@@ -499,43 +499,108 @@ Weights are for traffic shifting between versions of one logical service. For fu
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-Goal: expose a preview environment through the gateway with a generated route, and prove the guardrails.
+### Exercise 1: Expose a preview through the gateway and prove the guardrails
 
-1. **Install the gateway** on a lab cluster (kind with a load balancer such as cloud-provider-kind or MetalLB; see [Lab 01](../../labs/lab-01-cluster-setup/README.md)). Apply `gateway/platform-external.yaml` and confirm the `Gateway` condition `Programmed` is `True`:
+**Goal:** Serve a preview environment through a generated route, and show that each guardrail rejects what it should.
+
+**Before you start:** a kind cluster with a load balancer such as cloud-provider-kind or MetalLB (see [Lab 01](../../labs/lab-01-cluster-setup/README.md)), Envoy Gateway installed as shown in the Worked Example, and `kubectl` 1.28 or later.
+
+1. **Apply the gateway** manifest `gateway/platform-external.yaml` from this page and check that it is programmed:
 
    ```bash
-   kubectl get gateway platform-external -n platform-gateway -o jsonpath='{.status.conditions[?(@.type=="Programmed")].status}'
+   kubectl get gateway platform-external -n platform-gateway \
+     -o jsonpath='{.status.conditions[?(@.type=="Programmed")].status}{"\n"}'
    ```
 
-2. **Attach a route** from a namespace without the label. Apply the preview `HTTPRoute` into a namespace that lacks `platform.mycompany.io/gateway-access: preview`. Confirm the route shows `Accepted: False` on its parent status.
+   Expected output: `True`.
+2. **Attach a route from an unlabelled namespace.** Apply the preview `HTTPRoute` into a namespace that lacks `platform.mycompany.io/gateway-access: preview`, then read its parent status:
 
-3. **Add the label** and confirm the route is accepted and `ResolvedRefs` is `True`.
+   ```bash
+   kubectl get httproute <route-name> -n <namespace> \
+     -o jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}{"\n"}'
+   ```
 
-4. **Test a cross-namespace reference.** Point the route at a Service in another namespace without a `ReferenceGrant`. Confirm `ResolvedRefs: False`. Add the grant and confirm it resolves.
+   Replace `<route-name>` and `<namespace>` with the route and namespace you applied. Expected output: `False`.
+3. **Add the label** and repeat the command. Expected output: `True`. Check `ResolvedRefs` the same way; it should also be `True`.
+4. **Test a cross-namespace reference.** Point the route at a Service in another namespace without a `ReferenceGrant`. Expected: `ResolvedRefs` is `False` with reason `RefNotPermitted`. Add the grant and confirm it becomes `True`.
+5. **Test the JWT policy.** Replace `<gateway-address>` with the address from `kubectl get gateway platform-external -n platform-gateway`, and `<token>` with a valid token:
 
-5. **Test the JWT policy.** Send a request to `api.platform.mycompany.io/api/v1alpha1/tenants` without a token (expect `401`), then with a token for a different audience (expect `401`), then with a valid token (expect the upstream response).
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: api.platform.mycompany.io' \
+     http://<gateway-address>/api/v1alpha1/tenants
+   curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: api.platform.mycompany.io' \
+     -H 'Authorization: Bearer <token>' http://<gateway-address>/api/v1alpha1/tenants
+   ```
 
-6. **Break the hostname rule on purpose.** Create a route for `evil.example.com` and confirm it does not attach to the preview listener.
+   Expected output: `401` without a token, `401` with a token for a different audience, and the upstream's status (`200`) with a valid token.
+6. **Break the hostname rule on purpose.** Create a route for `evil.example.com` and confirm its `Accepted` condition is `False`.
 
-**Success criteria:** each rejection shows the expected condition or status code; the valid request reaches the platform API; the hostname guardrail holds.
+**Check:**
+
+- [ ] Each rejection shows the expected condition or status code.
+- [ ] The valid request reaches the platform API.
+- [ ] The hostname guardrail holds.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| Route status `Accepted: False`, reason `NotAllowedByListeners` | Namespace missing the `allowedRoutes` label, or `sectionName` points to a listener with a different hostname | Check the namespace labels and the listener's `hostname` |
-| `ResolvedRefs: False`, reason `RefNotPermitted` | Cross-namespace backend without a `ReferenceGrant` | Add a grant in the target namespace |
-| `Gateway` not `Programmed` | No load balancer address; GatewayClass controller not running; invalid TLS secret | Check the controller logs and `kubectl describe gateway` |
-| TLS handshake fails for the wildcard host | Certificate does not cover the hostname, or the secret name does not match `certificateRefs` | Check the cert-manager `Certificate` status and the SAN list |
-| `401` for valid tokens | Wrong `issuer` (trailing slash), audience mismatch, or JWKS unreachable from the proxy | Decode the token; compare `iss` and `aud`; check egress to the JWKS URL |
-| `429` from the platform API | Local rate limit reached | Confirm the client identity; raise the limit for that client, or fix the caller |
-| `504` on preview routes | Backend slower than `backendRequest`, or readiness not reached | Check the preview's pod readiness and the route timeouts |
-| Two routes claim the same host and one stops working | Conflicting hostnames in permitted namespaces | Enforce hostname ownership in the operator; remove the duplicate |
-| Gateway config changes do not take effect | Stale controller cache or a conflicting policy on the same target | Check policy status conditions; look for a second policy targeting the same route |
+### Route status `Accepted: False`, reason `NotAllowedByListeners`
+
+**Cause:** Namespace missing the `allowedRoutes` label, or `sectionName` points to a listener with a different hostname
+
+**Fix:** Check the namespace labels and the listener's `hostname`
+
+### `ResolvedRefs: False`, reason `RefNotPermitted`
+
+**Cause:** Cross-namespace backend without a `ReferenceGrant`
+
+**Fix:** Add a grant in the target namespace
+
+### `Gateway` not `Programmed`
+
+**Cause:** No load balancer address; GatewayClass controller not running; invalid TLS secret
+
+**Fix:** Check the controller logs and `kubectl describe gateway`
+
+### TLS handshake fails for the wildcard host
+
+**Cause:** Certificate does not cover the hostname, or the secret name does not match `certificateRefs`
+
+**Fix:** Check the cert-manager `Certificate` status and the SAN list
+
+### `401` for valid tokens
+
+**Cause:** Wrong `issuer` (trailing slash), audience mismatch, or JWKS unreachable from the proxy
+
+**Fix:** Decode the token; compare `iss` and `aud`; check egress to the JWKS URL
+
+### `429` from the platform API
+
+**Cause:** Local rate limit reached
+
+**Fix:** Confirm the client identity; raise the limit for that client, or fix the caller
+
+### `504` on preview routes
+
+**Cause:** Backend slower than `backendRequest`, or readiness not reached
+
+**Fix:** Check the preview's pod readiness and the route timeouts
+
+### Two routes claim the same host and one stops working
+
+**Cause:** Conflicting hostnames in permitted namespaces
+
+**Fix:** Enforce hostname ownership in the operator; remove the duplicate
+
+### Gateway config changes do not take effect
+
+**Cause:** Stale controller cache or a conflicting policy on the same target
+
+**Fix:** Check policy status conditions; look for a second policy targeting the same route
+
 
 ---
 
