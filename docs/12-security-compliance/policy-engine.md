@@ -25,6 +25,20 @@
 | Ecosystem | Large | Growing | Built-in |
 | Learning Curve | High | Low | Medium |
 
+### Where Policies Run
+
+```mermaid
+graph LR
+    Req[kubectl apply] --> API[kube-apiserver]
+    API --> Mutate[Mutating webhooks: Kyverno mutate]
+    Mutate --> CEL[ValidatingAdmissionPolicy: CEL]
+    CEL --> Webhooks[Validating webhooks: Gatekeeper, Kyverno validate]
+    Webhooks -->|allowed| Etcd[(etcd)]
+    Webhooks -->|denied| Reject[403 with policy message]
+```
+
+Kyverno generate rules run asynchronously after admission, so they never block a request.
+
 ---
 
 ## OPA Gatekeeper
@@ -554,6 +568,31 @@ kyverno test test-policy.yaml
 # Or test with kubectl dry-run
 kubectl apply -f resource.yaml --dry-run=server
 ```
+
+---
+
+## Hands-On Exercises
+
+### Exercise 1: Audit Before You Enforce
+```bash
+# Install the CEL policies from Lab 05 (their bindings use validationActions: ["Deny"])
+kubectl apply -f labs/lab-05-policy-engine/cel-policies/
+
+# Edit a binding so validationActions is ["Warn", "Audit"], then apply a non-compliant pod
+kubectl apply -f labs/lab-05-policy-engine/tests/fixtures/pod-latest-tag.yaml
+```
+
+Keep the binding on `Warn` and `Audit` until the warnings are clean across your namespaces, then switch it back to `Deny`.
+
+### Exercise 2: Prove a Policy Blocks What It Should
+1. Run the Gatekeeper suite in `labs/lab-05-policy-engine/gatekeeper-policies/tests/`.
+2. Add one new fixture that violates the required-labels rule in a way the suite does not cover, such as a label with an empty value.
+3. Confirm the suite fails, then tighten the Rego until it passes.
+
+### Exercise 3: Write a Kyverno Mutation Instead of a Denial
+1. Take the `require-labels` policy from `labs/lab-05-policy-engine/kyverno-policies/`.
+2. Change the action from validate to mutate so it adds a default `team` label instead of rejecting the pod.
+3. Run the Kyverno CLI test in `labs/lab-05-policy-engine/kyverno-policies/tests/` and explain why mutation is harder to audit than validation.
 
 ---
 

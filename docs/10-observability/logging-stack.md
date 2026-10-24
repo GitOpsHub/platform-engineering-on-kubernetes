@@ -618,6 +618,37 @@ kubectl top pods -n monitoring -l app.kubernetes.io/name=loki
 
 ---
 
+## Hands-On Exercises
+
+### Exercise 1: Ship Logs from a Workload
+```bash
+# Run a pod that writes JSON logs, then confirm they reach Loki with labels
+kubectl run log-demo -n default --image=busybox --restart=Never -- \
+  sh -c 'while true; do echo "{\"level\":\"info\",\"msg\":\"hello\"}"; sleep 2; done'
+
+# Port-forward Loki and query through its HTTP API
+kubectl port-forward -n monitoring svc/loki 3100:3100 &
+curl -G -s http://localhost:3100/loki/api/v1/query_range \
+  --data-urlencode 'query={pod="log-demo"}' | jq '.data.result[0].stream'
+```
+
+### Exercise 2: Parse and Filter with LogQL
+```logql
+# Parse JSON lines and keep only warnings and errors
+{pod="log-demo"} | json | level=~"warn|error"
+
+# Count errors per namespace over five minutes
+sum by (namespace) (count_over_time({namespace=~".+"} | json | level="error" [5m]))
+```
+
+### Exercise 3: Break and Fix Ingestion
+1. Stop the log writer: `kubectl delete pod log-demo`.
+2. Re-run Exercise 1 with a pod label you have not used before, such as `app=log-demo-2`.
+3. Query by that label and confirm the stream appears within one scrape interval.
+4. Explain why a high-cardinality label (for example, a request ID) would hurt Loki and how you would remove it.
+
+---
+
 ## Further Reading
 
 - [Loki Documentation](https://grafana.com/docs/loki/)

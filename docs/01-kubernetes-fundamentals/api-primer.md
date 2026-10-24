@@ -15,6 +15,17 @@
 
 ## API Structure
 
+```mermaid
+graph LR
+    Client[kubectl / client-go] -->|"PUT /apis/apps/v1/namespaces/team-a/deployments/web"| API[kube-apiserver]
+    API --> Authn[Authentication]
+    Authn --> Authz[Authorization: RBAC]
+    Authz --> Mutate[Mutating admission]
+    Mutate --> Validate[Validating admission]
+    Validate --> Etcd[(etcd)]
+    Etcd -->|watch event| Informers[Controllers and informers]
+```
+
 ### Group/Version/Resource (GVR)
 ```
 Group/Version/Resource (GVR)
@@ -376,6 +387,37 @@ kubectl patch deployment myapp --type=json -p='[{"op":"replace","path":"/spec/re
 
 # Merge patch
 kubectl patch deployment myapp --type=merge -p='{"spec":{"replicas":5}}'
+```
+
+---
+
+## Troubleshooting
+
+### Resource Rejected With a Conflict (409)
+```bash
+# The object changed since you read it. Re-read, then retry with the new resourceVersion
+kubectl get deployment web -o jsonpath='{.metadata.resourceVersion}{"\n"}'
+```
+
+### Field Silently Dropped
+```bash
+# The field is not in the schema for this API version. Check what the server accepts
+kubectl explain deployment.spec.template.spec --api-version=apps/v1
+kubectl apply -f deploy.yaml --dry-run=server -o yaml   # compare the output with your manifest
+```
+
+### Forbidden (403) on a Call That Should Work
+```bash
+# Ask the API server what the current identity may do
+kubectl auth can-i update deployments -n team-a --as system:serviceaccount:team-a:ci-bot
+kubectl auth can-i --list -n team-a
+```
+
+### Discovery Is Slow or Stale
+```bash
+# Clear the local discovery cache after installing a CRD
+rm -rf ~/.kube/cache/discovery
+kubectl api-resources | grep platform.mycompany.io
 ```
 
 ---

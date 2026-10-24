@@ -81,6 +81,7 @@ About 30 minutes of that is image pulls and two cluster bootstraps. Velero and t
 | [`canary-upgrade.md`](canary-upgrade.md) | Canary add-on rollout, minor upgrade ordering, skew, deprecated APIs |
 | [`rollback-procedures.md`](rollback-procedures.md) | Helm, Argo CD, control-plane limits, Velero |
 | [`upgrade-automation.sh`](upgrade-automation.sh) | Read-only pre-flight checks; `--execute` gates every cordon/drain |
+| [`teardown.sh`](teardown.sh) | Deletes green, the Velero store and the smoke-test leftovers; leaves blue running |
 
 ### Pinned versions
 
