@@ -1,0 +1,173 @@
+# catalog-entities.yaml - the entities that describe this lab's platform in Backstage.
+#
+# Registered by backstage-config.yaml (catalog.locations). Every reference
+# (owner, system, providesApis, dependsOn, memberOf, members) must point at an
+# entity in this file or the Software Templates' output, or the catalog shows
+# it as an unresolved relation.
+#
+# The people are sample data. Replace them with real users from your identity
+# provider before using this file for anything else.
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: platform-team
+  description: Builds and runs the platform APIs, clusters and this portal.
+spec:
+  type: team
+  profile:
+    displayName: Platform Team
+  children: []
+  members:
+    - jane.doe
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: storefront-team
+  description: Application team that owns the storefront services.
+spec:
+  type: team
+  profile:
+    displayName: Storefront Team
+  children: []
+  members:
+    - sam.lee
+---
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: jane.doe
+  description: Sample platform engineer.
+spec:
+  profile:
+    displayName: Jane Doe
+    email: jane.doe@example.com
+  memberOf:
+    - platform-team
+---
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: sam.lee
+  description: Sample application developer.
+spec:
+  profile:
+    displayName: Sam Lee
+    email: sam.lee@example.com
+  memberOf:
+    - storefront-team
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: platform-lab
+  description: Everything built in labs 01-04 of this repository.
+spec:
+  owner: group:platform-team
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: platform-api
+  description: WebApp controller from Lab 03. Turns WebApp objects into Deployments and Services.
+  tags:
+    - kubernetes
+    - operator
+    - go
+  annotations:
+    github.com/project-slug: GitOpsHub/platform-engineering-on-kubernetes
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:platform-team
+  system: platform-lab
+  providesApis:
+    - webapp-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: backstage
+  description: This developer portal (Lab 04).
+  tags:
+    - backstage
+    - portal
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:platform-team
+  system: platform-lab
+  dependsOn:
+    - resource:backstage-postgres
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: guestbook
+  description: Sample website deployed by Argo CD in Lab 02.
+  tags:
+    - website
+    - gitops
+spec:
+  type: website
+  lifecycle: production
+  owner: group:storefront-team
+  system: platform-lab
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: webapp-api
+  description: The platform.mycompany.io/v1alpha1 WebApp resource (Lab 03), described as an OpenAPI document.
+  tags:
+    - kubernetes
+    - crd
+spec:
+  type: openapi
+  lifecycle: experimental
+  owner: group:platform-team
+  system: platform-lab
+  definition: |
+    openapi: 3.0.3
+    info:
+      title: WebApp (platform.mycompany.io/v1alpha1)
+      version: v1alpha1
+      description: |
+        A Kubernetes custom resource, not an HTTP API. The paths below are empty on
+        purpose. The schema describes the fields a developer sets in spec.
+    paths: {}
+    components:
+      schemas:
+        WebAppSpec:
+          type: object
+          required:
+            - image
+          properties:
+            image:
+              type: string
+              description: Container image. An explicit tag is required, and :latest is rejected.
+              example: nginxinc/nginx-unprivileged:1.29-alpine
+            replicas:
+              type: integer
+              minimum: 0
+              maximum: 10
+              default: 1
+            port:
+              type: integer
+              minimum: 1
+              maximum: 65535
+              default: 8080
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: backstage-postgres
+  description: PostgreSQL database holding the Backstage catalog and scaffolder state.
+  tags:
+    - database
+    - postgres
+spec:
+  type: database
+  owner: group:platform-team
+  system: platform-lab

@@ -1,0 +1,27 @@
+// Command {{ .name }} serves HTTP traffic for {{ .owner }}.
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+)
+
+func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "{{ .port }}"
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintln(w, "ok")
+	})
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintln(w, "hello from {{ .name }}")
+	})
+
+	log.Printf("{{ .name }} listening on :%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, mux))
+}

@@ -1,5 +1,6 @@
 # ConstraintTemplate: require a set of labels (optionally matching a regex).
 # Adapted from the OPA Gatekeeper library (k8srequiredlabels).
+# Rego uses the OPA v1 syntax (`contains` / `if`), which current Gatekeeper releases require.
 apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
@@ -35,7 +36,7 @@ spec:
       rego: |
         package k8srequiredlabels
 
-        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+        violation contains {"msg": msg, "details": {"missing_labels": missing}} if {
           provided := {label | input.review.object.metadata.labels[label]}
           required := {label | label := input.parameters.labels[_].key}
           missing := required - provided
@@ -43,7 +44,7 @@ spec:
           msg := sprintf("[gatekeeper] missing required labels: %v", [missing])
         }
 
-        violation[{"msg": msg}] {
+        violation contains {"msg": msg} if {
           value := input.review.object.metadata.labels[key]
           expected := input.parameters.labels[_]
           expected.key == key

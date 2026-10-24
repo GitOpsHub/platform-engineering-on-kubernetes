@@ -1,0 +1,44 @@
+# Tempo for Lab 06: chart grafana-community/tempo 3.2.1 (app Tempo 3.1.1), single binary.
+# The old grafana/tempo chart (1.24.4) is marked deprecated upstream and is no longer used.
+# This is the successor chart, published by the Grafana community, and its values schema
+# is different: receivers, retention and metrics-generator settings live under `tempo:`.
+#
+# Install (from setup.sh):
+#   helm upgrade --install tempo tempo --repo https://grafana-community.github.io/helm-charts \
+#     --version 3.2.1 -n platform-monitoring -f tempo-stack.yaml --wait
+#
+# OTLP receivers: gRPC 4317, HTTP 4318 (Service "tempo"). The chart's default jaeger
+# receivers stay enabled because Helm merges maps with the chart defaults; the lab only
+# sends OTLP.
+# Local storage on a small PVC (chart default path /var/tempo), 12h retention.
+tempo:
+  retention: 12h
+  reportingEnabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
+  # Span metrics (service graph + RED metrics) are remote-written to Prometheus,
+  # which needs enableRemoteWriteReceiver (see prometheus-stack.yaml).
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: "http://prometheus-operated.platform-monitoring.svc:9090/api/v1/write"
+  overrides:
+    defaults:
+      metrics_generator:
+        processors:
+          - service-graphs
+          - span-metrics
+
+persistence:
+  enabled: true
+  size: 2Gi

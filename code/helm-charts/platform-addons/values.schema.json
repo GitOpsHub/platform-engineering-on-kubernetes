@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "platform-addons values",
+  "type": "object",
+  "definitions": {
+    "toggle": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": { "enabled": { "type": "boolean" } }
+    }
+  },
+  "properties": {
+    "cert-manager": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "crds": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "keep": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "external-secrets": { "$ref": "#/definitions/toggle" },
+    "ingress-nginx": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "controller": {
+          "type": "object",
+          "properties": {
+            "replicaCount": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "kube-prometheus-stack": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "grafana": {
+          "type": "object",
+          "properties": {
+            "admin": {
+              "type": "object",
+              "properties": {
+                "existingSecret": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": ["cert-manager", "external-secrets", "ingress-nginx", "kube-prometheus-stack"]
+}

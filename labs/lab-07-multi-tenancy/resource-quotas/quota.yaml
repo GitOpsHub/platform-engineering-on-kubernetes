@@ -1,0 +1,34 @@
+# Per-namespace budget for every tenant namespace (applied with `kubectl -n <ns>`).
+# The keys and values match what tenant-operator derives from Tenant.spec.quota
+# (cpu -> requests.cpu/limits.cpu, memory -> requests.memory/limits.memory,
+#  storage -> requests.storage, pods -> pods). The operator replaces spec.hard
+# wholesale, so no other keys are set here.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tenant-quota
+spec:
+  hard:
+    requests.cpu: "4"
+    limits.cpu: "4"
+    requests.memory: 8Gi
+    limits.memory: 8Gi
+    requests.storage: 20Gi
+    pods: "20"
+---
+# Defaults for containers that omit requests/limits. A ResourceQuota on requests.* or
+# limits.* rejects pods that do not set them, so these defaults are needed. The values
+# match the LimitRange tenant-operator creates (default, defaultRequest, no max/min).
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: tenant-limits
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: 500m
+        memory: 512Mi
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi

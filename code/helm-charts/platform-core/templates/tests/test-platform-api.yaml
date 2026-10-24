@@ -1,0 +1,31 @@
+{{- if .Values.platformApi.enabled }}
+# helm test: checks that platform-api answers /healthz through its Service.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-test-platform-api
+  namespace: {{ .Values.controlPlane.namespace }}
+  labels:
+    {{- include "platform-core.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    {{- include "platform-core.podSecurityContext" . | nindent 4 }}
+  containers:
+    - name: curl
+      image: curlimages/curl:8.10.1
+      securityContext:
+        {{- include "platform-core.containerSecurityContext" . | nindent 8 }}
+      command: ["curl"]
+      args:
+        - --fail
+        - --silent
+        - --show-error
+        - --max-time
+        - "5"
+        - http://platform-api:{{ .Values.platformApi.service.port }}/healthz
+{{- end }}

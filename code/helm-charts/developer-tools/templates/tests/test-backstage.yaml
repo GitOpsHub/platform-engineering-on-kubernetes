@@ -1,0 +1,37 @@
+{{- if .Values.backstage.enabled }}
+# helm test: the Backstage health endpoint answers. Assumes the subchart's default Service name
+# (<release>-backstage on port 7007). Adjust if you set fullnameOverride in the backstage block.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-test-backstage
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "developer-tools.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: curl
+      image: curlimages/curl:8.10.1
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      command: ["curl"]
+      args:
+        - --fail
+        - --silent
+        - --show-error
+        - --max-time
+        - "10"
+        - http://{{ .Release.Name }}-backstage:7007/.backstage/health/v1/liveness
+{{- end }}

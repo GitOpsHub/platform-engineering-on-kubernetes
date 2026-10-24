@@ -1,0 +1,122 @@
+# Software Template: a containerised HTTP service plus the Workload that deploys it.
+#
+# Steps: fetch the skeleton -> publish a new GitHub repository -> register it in the catalog.
+# The Workload CR (platform.mycompany.io/v1alpha1) in the skeleton is what the platform
+# turns into Deployments, Services and so on. The developer never writes those directly.
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: workload-service
+  title: Service with a Workload
+  description: A containerised HTTP service, plus the platform Workload that runs it.
+  tags:
+    - recommended
+    - kubernetes
+    - service
+spec:
+  owner: group:platform-team
+  type: service
+  parameters:
+    - title: Describe the service
+      required:
+        - name
+        - owner
+        - system
+      properties:
+        name:
+          title: Name
+          type: string
+          description: Unique name. Lowercase letters, digits and dashes.
+          maxLength: 40
+          pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+          ui:field: EntityNamePicker
+        description:
+          title: Description
+          type: string
+          description: What the service does, in one sentence.
+        owner:
+          title: Owner
+          type: string
+          description: Team that owns the service.
+          ui:field: OwnerPicker
+          ui:options:
+            catalogFilter:
+              kind:
+                - Group
+        system:
+          title: System
+          type: string
+          description: The system this service belongs to.
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: System
+    - title: Describe the workload
+      required:
+        - image
+      properties:
+        image:
+          title: Image repository
+          type: string
+          description: Registry and namespace, without the name or tag. The tag is set to 0.1.0 by the template.
+          default: ghcr.io/example
+        replicas:
+          title: Replicas
+          type: integer
+          default: 2
+          minimum: 1
+          maximum: 10
+        port:
+          title: Container port
+          type: integer
+          default: 8080
+          minimum: 1
+          maximum: 65535
+    - title: Choose where the repository goes
+      required:
+        - repoUrl
+      properties:
+        repoUrl:
+          title: Repository location
+          type: string
+          ui:field: RepoUrlPicker
+          ui:options:
+            allowedHosts:
+              - github.com
+  steps:
+    - id: fetch-base
+      name: Fetch skeleton
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          name: ${{ parameters.name }}
+          description: ${{ parameters.description }}
+          owner: ${{ parameters.owner }}
+          system: ${{ parameters.system }}
+          image: ${{ parameters.image }}
+          replicas: ${{ parameters.replicas }}
+          port: ${{ parameters.port }}
+    - id: publish
+      name: Publish to GitHub
+      action: publish:github
+      input:
+        allowedHosts:
+          - github.com
+        description: ${{ parameters.description }}
+        repoUrl: ${{ parameters.repoUrl }}
+        defaultBranch: main
+        repoVisibility: private
+    - id: register
+      name: Register in the catalog
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps.publish.output.repoContentsUrl }}
+        catalogInfoPath: /catalog-info.yaml
+  output:
+    links:
+      - title: Repository
+        url: ${{ steps.publish.output.remoteUrl }}
+      - title: Open the component in the catalog
+        icon: catalog
+        entityRef: ${{ steps.register.output.entityRef }}

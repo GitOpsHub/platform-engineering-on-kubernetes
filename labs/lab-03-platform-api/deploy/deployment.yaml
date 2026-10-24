@@ -1,0 +1,57 @@
+# The controller. `make deploy` replaces the placeholder image below with IMG.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp-controller
+  labels:
+    app.kubernetes.io/name: webapp-controller
+    app.kubernetes.io/part-of: lab-03
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: webapp-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: webapp-controller
+    spec:
+      serviceAccountName: webapp-controller
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: manager
+          image: controller:dev            # replaced by `make deploy`
+          imagePullPolicy: IfNotPresent
+          args:
+            - --leader-elect
+          ports:
+            - name: metrics
+              containerPort: 8080
+            - name: health
+              containerPort: 8081
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

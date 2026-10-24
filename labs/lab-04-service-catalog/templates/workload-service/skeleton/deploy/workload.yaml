@@ -1,0 +1,31 @@
+# The Workload is the only Kubernetes object this service owns.
+# The platform controller turns it into a Deployment, a Service and an Ingress.
+apiVersion: platform.mycompany.io/v1alpha1
+kind: Workload
+metadata:
+  name: ${{ values.name }}
+  labels:
+    app.kubernetes.io/name: ${{ values.name }}
+    platform.mycompany.io/owner: ${{ values.owner }}
+    platform.mycompany.io/system: ${{ values.system }}
+spec:
+  image: ${{ values.image }}/${{ values.name }}:0.1.0
+  replicas: ${{ values.replicas }}
+  port: ${{ values.port }}
+  env:
+    - name: LOG_LEVEL
+      value: info
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  traits:
+    - type: ingress
+      config:
+        host: ${{ values.name }}.example.com
+    - type: pdb
+      config:
+        minAvailable: 1

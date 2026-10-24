@@ -1,4 +1,5 @@
 # ConstraintTemplate: forbid mutable image tags (e.g. ":latest") and untagged images.
+# Rego uses the OPA v1 syntax (`contains` / `if`), which current Gatekeeper releases require.
 apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
@@ -33,7 +34,7 @@ spec:
       rego: |
         package k8sdisallowedtags
 
-        violation[{"msg": msg}] {
+        violation contains {"msg": msg} if {
           container := input_containers[_]
           not is_exempt(container.image)
           tag := input.parameters.tags[_]
@@ -41,7 +42,7 @@ spec:
           msg := sprintf("[gatekeeper] container <%v> uses disallowed tag <%v> (image %v)", [container.name, tag, container.image])
         }
 
-        violation[{"msg": msg}] {
+        violation contains {"msg": msg} if {
           container := input_containers[_]
           not is_exempt(container.image)
           not contains(container.image, "@")
@@ -51,19 +52,19 @@ spec:
           msg := sprintf("[gatekeeper] container <%v> image <%v> must specify a tag or digest", [container.name, container.image])
         }
 
-        is_exempt(image) {
+        is_exempt(image) if {
           prefix := input.parameters.exemptImages[_]
           startswith(image, prefix)
         }
 
-        input_containers[c] {
+        input_containers contains c if {
           c := input.review.object.spec.containers[_]
         }
 
-        input_containers[c] {
+        input_containers contains c if {
           c := input.review.object.spec.initContainers[_]
         }
 
-        input_containers[c] {
+        input_containers contains c if {
           c := input.review.object.spec.ephemeralContainers[_]
         }

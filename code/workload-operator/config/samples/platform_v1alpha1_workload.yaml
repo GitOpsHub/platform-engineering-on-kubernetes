@@ -1,0 +1,34 @@
+apiVersion: platform.mycompany.io/v1alpha1
+kind: Workload
+metadata:
+  name: checkout-api
+  namespace: team-payments-prod
+  labels:
+    platform.mycompany.io/tenant: team-payments
+    platform.mycompany.io/environment: prod
+spec:
+  image: ghcr.io/example/checkout-api:1.4.2
+  replicas: 2
+  port: 8080
+  env:
+  - name: LOG_LEVEL
+    value: info
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+  traits:
+  - type: ingress
+    config:
+      host: checkout.payments.apps.example.internal
+      path: /
+  - type: autoscaling
+    config:
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+  - type: pdb
+    config:
+      minAvailable: 1

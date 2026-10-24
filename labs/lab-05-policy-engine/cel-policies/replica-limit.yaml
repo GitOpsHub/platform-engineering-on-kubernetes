@@ -51,7 +51,7 @@ metadata:
 spec:
   policyName: lab05-replica-limit
   # Deny blocks the request; Audit additionally records the violation in the
-  # API server audit log. (Deny and Warn must not be combined.)
+  # API server audit log.
   validationActions: ["Deny", "Audit"]
   paramRef:
     name: replica-limit

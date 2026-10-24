@@ -1,0 +1,16 @@
+apiVersion: v2
+name: developer-tools
+description: Developer-facing tooling - Backstage developer portal and the platform-cli documentation ConfigMap.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.28.0-0"
+keywords:
+  - backstage
+  - developer-portal
+  - platform-cli
+dependencies:
+  - name: backstage
+    version: 2.10.2
+    repository: https://backstage.github.io/charts
+    condition: backstage.enabled

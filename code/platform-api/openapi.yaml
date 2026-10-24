@@ -3,7 +3,12 @@ info:
   title: Platform API
   version: v1alpha1
   description: |
-    REST front door for the Internal Developer Platform. Each resource maps 1:1 onto a
+    REST front door for the Internal Developer Platform.
+
+    Authorization: every resource request is executed AS the authenticated caller
+    (Kubernetes impersonation), so cluster RBAC decides what each user can see or change.
+    Requests without a valid bearer token get 401. Tenant create and delete additionally
+    require membership of the platform-admin group (403 otherwise). Each resource maps 1:1 onto a
     `platform.mycompany.io/v1alpha1` custom resource reconciled by the platform operators
     (tenant-operator, environment-operator, workload-operator).
 servers:
@@ -63,6 +68,7 @@ paths:
         - $ref: "#/components/parameters/labelSelector"
         - $ref: "#/components/parameters/limit"
         - $ref: "#/components/parameters/continue"
+        - $ref: "#/components/parameters/watch"
       responses:
         "200":
           description: Tenant list
@@ -72,7 +78,8 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     post:
       tags: [tenants]
-      summary: Create a tenant
+      summary: Create a tenant (platform-admin group only)
+      description: Requires membership of the platform-admin group; otherwise 403.
       requestBody:
         required: true
         content:
@@ -102,9 +109,31 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     delete:
       tags: [tenants]
-      summary: Delete a tenant (foreground propagation)
+      summary: Delete a tenant (foreground propagation, platform-admin group only)
       responses:
         "204": { description: Deleted }
+        "403": { description: Caller is not in the platform-admin group }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/v1alpha1/access-reviews:
+    post:
+      tags: [operations]
+      summary: Can the caller do this? (SelfSubjectAccessReview as the caller)
+      description: |
+        Creates a SelfSubjectAccessReview with the caller's impersonated client, so the
+        answer is Kubernetes RBAC's answer for that user. Use it for "Can I?" buttons.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AccessReviewRequest" }
+      responses:
+        "200":
+          description: Decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccessReviewResult" }
+        "401": { $ref: "#/components/responses/Error" }
         default: { $ref: "#/components/responses/Error" }
 
   /api/v1alpha1/environments:
@@ -115,6 +144,7 @@ paths:
         - $ref: "#/components/parameters/labelSelector"
         - $ref: "#/components/parameters/limit"
         - $ref: "#/components/parameters/continue"
+        - $ref: "#/components/parameters/watch"
       responses:
         "200":
           description: Environment list
@@ -132,6 +162,7 @@ paths:
         - $ref: "#/components/parameters/labelSelector"
         - $ref: "#/components/parameters/limit"
         - $ref: "#/components/parameters/continue"
+        - $ref: "#/components/parameters/watch"
       responses:
         "200":
           description: Environment list
@@ -183,6 +214,7 @@ paths:
         - $ref: "#/components/parameters/labelSelector"
         - $ref: "#/components/parameters/limit"
         - $ref: "#/components/parameters/continue"
+        - $ref: "#/components/parameters/watch"
       responses:
         "200":
           description: Workload list
@@ -200,6 +232,7 @@ paths:
         - $ref: "#/components/parameters/labelSelector"
         - $ref: "#/components/parameters/limit"
         - $ref: "#/components/parameters/continue"
+        - $ref: "#/components/parameters/watch"
       responses:
         "200":
           description: Workload list
@@ -273,6 +306,14 @@ components:
       name: continue
       in: query
       schema: { type: string }
+    watch:
+      name: watch
+      in: query
+      description: |
+        Set to `true` to stream changes as newline-delimited JSON, one
+        `{"type": "ADDED|MODIFIED|DELETED", "object": {...}}` per line. The stream
+        is opened as the caller, so it only contains objects RBAC lets the caller see.
+      schema: { type: boolean }
 
   responses:
     Error:
@@ -284,6 +325,22 @@ components:
           schema: { $ref: "#/components/schemas/ErrorBody" }
 
   schemas:
+    AccessReviewRequest:
+      type: object
+      required: [verb, resource]
+      additionalProperties: false
+      properties:
+        verb: { type: string, example: create }
+        group: { type: string, example: platform.mycompany.io }
+        resource: { type: string, example: workloads }
+        namespace: { $ref: "#/components/schemas/DNSLabel" }
+        name: { type: string }
+    AccessReviewResult:
+      type: object
+      properties:
+        allowed: { type: boolean }
+        denied: { type: boolean }
+        reason: { type: string }
     DNSLabel:
       type: string
       pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"

@@ -690,9 +690,69 @@ groups:
 
 ---
 
+## Hands-On Exercise
+
+**Goal**: Install Argo CD, register a project-scoped Application, and watch it self-heal drift.
+
+```bash
+# 1. Install Argo CD into a local cluster (any kind cluster from Lab 01 works)
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl -n argocd rollout status deploy/argocd-server
+
+# 2. Get the initial admin password and port-forward the API server
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+kubectl -n argocd port-forward svc/argocd-server 8080:443 &
+
+# 3. Apply a project and an Application that tracks a Git path
+kubectl apply -f - <<'EOF'
+# argocd-exercise.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: guestbook
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/argoproj/argocd-example-apps.git
+    targetRevision: HEAD
+    path: guestbook
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: guestbook
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+EOF
+
+# 4. Check status
+kubectl -n argocd get applications
+```
+
+**Verify**:
+1. `kubectl -n argocd get application guestbook` reports `Synced` and `Healthy`.
+2. Scale the Deployment by hand (`kubectl -n guestbook scale deploy/guestbook-ui --replicas=5`) and confirm Argo CD restores the replica count from Git within a few minutes (`selfHeal: true`).
+3. Remove the `automated` block, repeat step 2, and observe that the drift is reported as `OutOfSync` but not corrected. This is the difference between detection and remediation.
+
+**Cleanup**: `kubectl -n argocd delete application guestbook` and `kubectl delete namespace guestbook`.
+
+---
+
 ## Further Reading
 
 - [ArgoCD Documentation](https://argo-cd.readthedocs.io/)
 - [ArgoCD Operator](https://github.com/argoproj-labs/argocd-operator)
 - [Argo Rollouts](https://argoproj.github.io/argo-rollouts/)
 - [ApplicationSet Controller](https://github.com/argoproj/applicationset)
+
+---
+
+## Next Steps
+
+1. **Complete Lab 02**: [GitOps Bootstrap](../../labs/lab-02-gitops-bootstrap/README.md) with App of Apps
+2. **Compare**: [Flux Deep Dive](./flux-deep-dive.md) for the pull-based alternative
+3. **Scale out**: [Multi-Cluster GitOps](./multi-cluster-gitops.md) for ApplicationSets across a fleet

@@ -1,0 +1,10 @@
+# Adds namespace to all resources.
+namespace: workload-operator-system
+# Prefixes all resource names, e.g. "controller-manager" -> "workload-operator-controller-manager".
+namePrefix: workload-operator-
+
+resources:
+- ../crd
+- ../rbac
+- ../manager
+- metrics_service.yaml

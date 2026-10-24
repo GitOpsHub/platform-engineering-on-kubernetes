@@ -1,0 +1,46 @@
+# Generates traffic against /checkout for DURATION_SECONDS. Re-run by deleting the Job first:
+#   kubectl -n checkout delete job checkout-loadgen && kubectl apply -f k8s/40-loadgen-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: checkout-loadgen
+  namespace: checkout
+  labels:
+    app: checkout-loadgen
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: checkout-loadgen
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: loadgen
+          image: checkout-api:0.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["python", "loadgen.py"]
+          env:
+            - name: TARGET_URL
+              value: http://checkout-api.checkout.svc:8080/checkout
+            - name: RPS
+              value: "5"
+            - name: DURATION_SECONDS
+              value: "300"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

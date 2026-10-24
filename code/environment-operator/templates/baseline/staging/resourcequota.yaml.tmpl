@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: env-quota
+  namespace: "{{ .Namespace }}"
+  labels:
+    platform.mycompany.io/tenant: "{{ .Tenant }}"
+    platform.mycompany.io/environment: "{{ .Name }}"
+    platform.mycompany.io/managed-by: environment-operator
+  annotations:
+    platform.mycompany.io/owner-uid: "{{ .OwnerUID }}"
+spec:
+  hard:
+    requests.cpu: "4"
+    limits.cpu: "8"
+    requests.memory: 8Gi
+    limits.memory: 16Gi
+    pods: "40"
+    persistentvolumeclaims: "10"

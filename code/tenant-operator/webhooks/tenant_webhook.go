@@ -9,7 +9,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -30,6 +29,9 @@ import (
 // webhook was installed).
 type TenantValidator struct {
 	Reader client.Reader
+
+	// OperatorNamespace is never allowed as a tenant namespace.
+	OperatorNamespace string
 }
 
 var _ admission.Validator[*platformv1alpha1.Tenant] = &TenantValidator{}
@@ -70,6 +72,20 @@ func (v *TenantValidator) validate(ctx context.Context, t *platformv1alpha1.Tena
 		errs = append(errs, field.Invalid(spec.Child("quota"), t.Spec.Quota, err.Error()))
 	}
 
+	// User labels/annotations are copied onto generated namespaces; reserved
+	// prefixes could override operator-owned or Kubernetes-owned metadata.
+	metaPath := field.NewPath("metadata")
+	for k := range t.Labels {
+		if platformv1alpha1.IsReservedKey(k) {
+			errs = append(errs, field.Forbidden(metaPath.Child("labels").Key(k), "reserved label prefix"))
+		}
+	}
+	for k := range t.Annotations {
+		if platformv1alpha1.IsReservedKey(k) {
+			errs = append(errs, field.Forbidden(metaPath.Child("annotations").Key(k), "reserved annotation prefix"))
+		}
+	}
+
 	for i, o := range t.Spec.Owners {
 		if strings.TrimSpace(strings.TrimPrefix(o, "group:")) == "" {
 			errs = append(errs, field.Invalid(spec.Child("owners").Index(i), o, "owner must not be empty"))
@@ -88,8 +104,8 @@ func (v *TenantValidator) validate(ctx context.Context, t *platformv1alpha1.Tena
 	nsPath := spec.Child("namespaces")
 	for i, ns := range t.Spec.Namespaces {
 		p := nsPath.Index(i)
-		for _, msg := range validation.IsDNS1123Label(ns) {
-			errs = append(errs, field.Invalid(p, ns, msg))
+		if err := platformv1alpha1.ValidateNamespaceName(ns, v.OperatorNamespace); err != nil {
+			errs = append(errs, field.Invalid(p, ns, err.Error()))
 		}
 		if seen[ns] {
 			errs = append(errs, field.Duplicate(p, ns))
@@ -108,11 +124,11 @@ func (v *TenantValidator) validate(ctx context.Context, t *platformv1alpha1.Tena
 		case err != nil:
 			return warnings, apierrors.NewInternalError(err)
 		default:
-			if owner := existing.Labels[platformv1alpha1.LabelTenant]; owner != t.Name {
-				if owner == "" {
-					errs = append(errs, field.Forbidden(p, fmt.Sprintf("namespace %q already exists and is not managed by any tenant", ns)))
-				} else {
+			if !platformv1alpha1.CanAdoptNamespace(existing, t) {
+				if owner := existing.Labels[platformv1alpha1.LabelTenant]; owner != "" && owner != t.Name {
 					errs = append(errs, field.Forbidden(p, fmt.Sprintf("namespace %q belongs to tenant %q", ns, owner)))
+				} else {
+					errs = append(errs, field.Forbidden(p, fmt.Sprintf("namespace %q already exists and is not managed by tenant %q", ns, t.Name)))
 				}
 			}
 		}

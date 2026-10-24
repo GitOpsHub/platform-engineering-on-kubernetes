@@ -1,0 +1,17 @@
+# Scraped by the kube-prometheus-stack Prometheus (serviceMonitorSelectorNilUsesHelmValues: false).
+# The job label defaults to the Service name (checkout-api), which the Tempo tracesToMetrics mapping uses.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: checkout-api
+  namespace: checkout
+  labels:
+    app: checkout-api
+spec:
+  selector:
+    matchLabels:
+      app: checkout-api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

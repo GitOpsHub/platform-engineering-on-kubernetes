@@ -1,0 +1,12 @@
+# Composite-resource form of claims.yaml's Environment, used by `crossplane render`.
+apiVersion: platform.mycompany.io/v1alpha1
+kind: XEnvironment
+metadata:
+  name: orders-staging-xr
+spec:
+  parameters:
+    tenant: orders
+    environment: staging
+    cpuRequests: "8"
+    memoryRequests: 16Gi
+    maxPods: 100

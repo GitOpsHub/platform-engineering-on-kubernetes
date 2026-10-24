@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "platform-core values",
+  "type": "object",
+  "required": [
+    "controlPlane",
+    "platformApi",
+    "operators"
+  ],
+  "properties": {
+    "controlPlane": {
+      "type": "object",
+      "required": [
+        "namespace"
+      ],
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "platformApi": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "replicaCount",
+        "image",
+        "containerPort",
+        "service",
+        "impersonation"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "replicaCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "image": {
+          "$ref": "#/$defs/image"
+        },
+        "imagePullSecrets": {
+          "type": "array"
+        },
+        "containerPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "service": {
+          "type": "object",
+          "required": [
+            "port"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "ClusterIP",
+                "NodePort",
+                "LoadBalancer"
+              ]
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          }
+        },
+        "logLevel": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ]
+        },
+        "platformAdminGroup": {
+          "type": "string",
+          "minLength": 1
+        },
+        "podDisruptionBudget": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "minAvailable": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "impersonation": {
+          "type": "object",
+          "required": [
+            "users",
+            "groups",
+            "allowAnyUser"
+          ],
+          "properties": {
+            "users": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "not": {
+                  "pattern": "^system:"
+                }
+              }
+            },
+            "allowAnyUser": {
+              "type": "boolean"
+            },
+            "groups": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "not": {
+                  "pattern": "^system:"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "operators": {
+      "type": "object",
+      "properties": {
+        "tenant": {
+          "$ref": "#/$defs/operator"
+        },
+        "environment": {
+          "$ref": "#/$defs/operator"
+        },
+        "workload": {
+          "$ref": "#/$defs/operator"
+        }
+      },
+      "required": [
+        "tenant",
+        "environment",
+        "workload"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "image": {
+      "type": "object",
+      "required": [
+        "repository"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
+      }
+    },
+    "operator": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "image",
+        "replicaCount",
+        "healthPort",
+        "rules"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "image": {
+          "$ref": "#/$defs/image"
+        },
+        "replicaCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "healthPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "apiGroups",
+              "resources",
+              "verbs"
+            ],
+            "properties": {
+              "apiGroups": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "resources": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "verbs": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

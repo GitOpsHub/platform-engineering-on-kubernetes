@@ -21,8 +21,8 @@ CHART       := deploy/chart/$(BINARY_NAME)
 ##@ Development
 
 .PHONY: run
-run: ## Run locally against the current kubeconfig (auth disabled)
-	$(GO) run -ldflags "$(LDFLAGS)" . --kubeconfig=$${KUBECONFIG:-$$HOME/.kube/config} --log-level=debug
+run: ## Run locally against the current kubeconfig (DEV ONLY: --insecure-skip-authz, no tokens)
+	$(GO) run -ldflags "$(LDFLAGS)" . --kubeconfig=$${KUBECONFIG:-$$HOME/.kube/config} --log-level=debug --insecure-skip-authz
 
 .PHONY: fmt
 fmt: ## Format code
@@ -71,11 +71,11 @@ docker-push: docker-build ## Push the container image
 
 .PHONY: helm-lint
 helm-lint: ## Lint the Helm chart
-	$(HELM) lint $(CHART)
+	$(HELM) lint $(CHART) -f $(CHART)/ci/lint-values.yaml
 
 .PHONY: helm-template
 helm-template: ## Render the Helm chart
-	$(HELM) template $(BINARY_NAME) $(CHART) --namespace $(NAMESPACE) --set image.repository=$(IMAGE) --set image.tag=$(TAG)
+	$(HELM) template $(BINARY_NAME) $(CHART) -f $(CHART)/ci/lint-values.yaml --namespace $(NAMESPACE) --set image.repository=$(IMAGE) --set image.tag=$(TAG)
 
 .PHONY: helm-install
 helm-install: ## Install/upgrade the Helm release

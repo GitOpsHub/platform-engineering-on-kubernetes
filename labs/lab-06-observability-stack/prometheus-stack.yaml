@@ -1,0 +1,105 @@
+# kube-prometheus-stack for Lab 06 (chart prometheus-community/kube-prometheus-stack 91.4.1).
+# Install: helm upgrade --install kps kube-prometheus-stack \
+#            --repo https://prometheus-community.github.io/helm-charts --version 91.4.1 \
+#            -n platform-monitoring -f prometheus-stack.yaml --wait
+#
+# Grafana is ENABLED here (it is the UI for all four signals). Its datasources come from
+# grafana/datasources-configmap.yaml through the Grafana sidecar, not from the chart's
+# built-in Prometheus datasource (defaultDatasourceEnabled: false avoids a duplicate uid).
+#
+# Thanos: the sidecar runs next to Prometheus and serves the Thanos StoreAPI. Without
+# objectStorageConfig it does NOT upload blocks, so this is sidecar-only. Uploading to
+# object storage (S3/GCS/MinIO) needs a bucket and a Secret; see the commented block below.
+
+alertmanager:
+  # Lab scope: alert routing is covered in docs/10-observability/alerting.md, not here.
+  enabled: false
+
+# Control-plane scrapers that do not expose a scrapeable endpoint on kind.
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false # Cilium replaces kube-proxy (Lab 01)
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      memory: 192Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 96Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      memory: 64Mi
+
+grafana:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+  sidecar:
+    datasources:
+      enabled: true
+      label: grafana_datasource
+      labelValue: "1"
+      defaultDatasourceEnabled: false
+
+prometheus:
+  prometheusSpec:
+    replicas: 1
+    retention: 12h
+    retentionSize: 3GB
+    scrapeInterval: 30s
+    # Select ServiceMonitors/PodMonitors from every namespace, not only this release.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    # Receives span metrics from Tempo's metrics generator (tempo-stack.yaml).
+    enableRemoteWriteReceiver: true
+    # Receives OTLP metrics from the collector (otel-collector.yaml, remote write).
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+    thanos:
+      # Thanos v0.42.4 (sidecar only, no object storage).
+      image: quay.io/thanos/thanos
+      version: v0.42.4
+      resources:
+        requests:
+          cpu: 25m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
+      # Uncomment to upload blocks. The Secret must hold the objstore config under key objstore.yml.
+      # objectStorageConfig:
+      #   name: thanos-objstore-config
+      #   key: objstore.yml

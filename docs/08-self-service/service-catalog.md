@@ -489,7 +489,7 @@ POST /api/v1/catalog/offerings/{name}:render      -> dry-run: return manifests
 POST /api/v1/catalog/offerings/{name}:provision   -> render + open GitOps PR or apply
 ```
 
-And through the CLI:
+And through the CLI (**planned**: `platform-cli` has no `catalog` command yet; these commands show the intended interface):
 
 ```bash
 platform-cli catalog list
@@ -539,7 +539,7 @@ This exercise complements [Lab 04: Service Catalog](../../labs/lab-04-service-ca
    go test ./... -run TestRender -update
    go test ./...
    ```
-3. **Render via CLI** and validate against the cluster:
+3. **Render via CLI** (planned command; `platform-cli catalog` does not exist yet) and validate against the cluster:
    ```bash
    platform-cli catalog provision postgres \
      --set name=orders-db --set tenant=payments --set environment=dev --dry-run -o yaml \

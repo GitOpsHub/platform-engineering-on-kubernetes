@@ -1,0 +1,23 @@
+# Serving certificate for the webhook. cert-manager writes the key pair to the
+# Secret policy-engine-tls, which the Deployment mounts at /tls.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: policy-engine-tls
+  namespace: policy-system
+spec:
+  secretName: policy-engine-tls
+  duration: 2160h      # 90 days
+  renewBefore: 360h    # renew 15 days before expiry
+  commonName: policy-engine.policy-system.svc
+  dnsNames:
+    - policy-engine
+    - policy-engine.policy-system
+    - policy-engine.policy-system.svc
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: platform-ca
+    kind: ClusterIssuer
+    group: cert-manager.io

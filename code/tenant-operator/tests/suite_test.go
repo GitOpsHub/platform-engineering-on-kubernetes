@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	platformv1alpha1 "github.com/GitOpsHub/platform-engineering-on-kubernetes/code/tenant-operator/api/v1alpha1"
-	"github.com/GitOpsHub/platform-engineering-on-kubernetes/code/tenant-operator/controllers"
+	"github.com/GitOpsHub/platform-engineering-on-kubernetes/code/tenant-operator/internal/controller"
 	"github.com/GitOpsHub/platform-engineering-on-kubernetes/code/tenant-operator/webhooks"
 )
 
@@ -79,7 +79,7 @@ func runWithEnvtest(m *testing.M) int {
 		fmt.Fprintf(os.Stderr, "creating manager: %v\n", err)
 		return 1
 	}
-	if err := (&controllers.TenantReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager(mgr); err != nil {
+	if err := (&controller.TenantReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}).SetupWithManager(mgr); err != nil {
 		fmt.Fprintf(os.Stderr, "setting up controller: %v\n", err)
 		return 1
 	}

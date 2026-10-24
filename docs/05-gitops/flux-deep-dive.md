@@ -572,9 +572,80 @@ flux diff helmrelease prometheus -n monitoring
 
 ---
 
+## Hands-On Exercise
+
+**Goal**: Bootstrap Flux against a Git repository, add a Kustomization, and observe reconciliation.
+
+```bash
+# 1. Install the Flux CLI and pre-check the cluster
+flux check --pre
+
+# 2. Bootstrap Flux into a Git repo (creates the repo layout and commits it)
+export GITHUB_USER=<your-user>
+flux bootstrap github \
+  --owner=$GITHUB_USER \
+  --repository=flux-exercise \
+  --branch=main \
+  --path=clusters/local \
+  --personal
+
+# 3. Add a Kustomization that reconciles a podinfo overlay (run inside the cloned repo)
+cd flux-exercise
+cat <<'EOF' > clusters/local/podinfo.yaml
+# clusters/local/podinfo.yaml
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  interval: 5m
+  url: https://github.com/stefanprodan/podinfo
+  ref:
+    branch: master
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: podinfo
+  namespace: flux-system
+spec:
+  interval: 10m
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: podinfo
+  path: ./kustomize
+  targetNamespace: podinfo
+  createNamespace: true
+EOF
+git add clusters/local/podinfo.yaml && git commit -m "Add podinfo" && git push
+
+# 4. Watch reconciliation
+flux get sources git
+flux get kustomizations
+```
+
+**Verify**:
+1. `flux get kustomizations` shows `podinfo` as `Ready=True` after the first interval.
+2. Change `replicaCount` in the upstream overlay (or a local patch) and confirm the cluster converges on the next reconcile.
+3. Run `flux reconcile kustomization podinfo --with-source` to force an immediate sync and compare the timestamps.
+
+**Cleanup**: `flux uninstall --namespace=flux-system` after removing the bootstrap repo.
+
+---
+
 ## Further Reading
 
 - [Flux Documentation](https://fluxcd.io/docs/)
 - [Flux GitOps Toolkit](https://toolkit.fluxcd.io/)
 - [Image Automation](https://fluxcd.io/docs/guides/image-update/)
 - [Multi-tenancy](https://fluxcd.io/docs/guides/multi-tenancy/)
+
+---
+
+## Next Steps
+
+1. **Complete Lab 02**: [GitOps Bootstrap](../../labs/lab-02-gitops-bootstrap/README.md) with Flux or Argo CD
+2. **Compare**: [Argo CD Deep Dive](./argocd-deep-dive.md) against the same workload
+3. **Scale out**: [Multi-Cluster GitOps](./multi-cluster-gitops.md) for fleet-level Flux patterns

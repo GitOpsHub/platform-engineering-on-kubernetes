@@ -1,0 +1,72 @@
+# OpenTelemetry Collector for Lab 06 (chart open-telemetry/opentelemetry-collector 0.173.1,
+# collector 0.160.0). Install:
+#   helm upgrade --install otel-collector opentelemetry-collector \
+#     --repo https://open-telemetry.github.io/opentelemetry-helm-charts --version 0.173.1 \
+#     -n platform-monitoring -f otel-collector.yaml --wait
+#
+# Receives OTLP (gRPC 4317 / HTTP 4318) from applications and fans out:
+#   traces  -> Tempo (OTLP gRPC)
+#   logs    -> Loki (native OTLP endpoint, /otlp)
+#   metrics -> Prometheus (remote write receiver)
+mode: deployment
+fullnameOverride: otel-collector
+replicaCount: 1
+
+# The chart refuses to render without an explicit image. The k8s distribution includes
+# the otlphttp, prometheusremotewrite, memory_limiter and batch components used below.
+# Tag defaults to the chart appVersion (0.160.0).
+image:
+  repository: otel/opentelemetry-collector-k8s
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+# Only OTLP is used; disable the Jaeger/Zipkin ports the chart exposes by default.
+ports:
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+
+config:
+  receivers:
+    jaeger: null
+    zipkin: null
+    prometheus: null
+  processors:
+    memory_limiter:
+      check_interval: 5s
+      limit_percentage: 80
+      spike_limit_percentage: 25
+    batch: {}
+  exporters:
+    otlp_grpc/tempo:
+      endpoint: tempo.platform-monitoring.svc:4317
+      tls:
+        insecure: true
+    otlp_http/loki:
+      endpoint: http://loki.platform-monitoring.svc:3100/otlp
+    prometheusremotewrite:
+      endpoint: http://prometheus-operated.platform-monitoring.svc:9090/api/v1/write
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlp_grpc/tempo]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlp_http/loki]
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [prometheusremotewrite]

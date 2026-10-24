@@ -1,0 +1,29 @@
+# Example claims. A developer applies these in their own namespace. Crossplane creates the
+# composite (XDatabase / XEnvironment) and the managed or Kubernetes resources behind it.
+apiVersion: platform.mycompany.io/v1alpha1
+kind: Database
+metadata:
+  name: orders-db
+  namespace: team-orders
+spec:
+  parameters:
+    tier: medium
+    storageGB: 50
+    version: "16"
+    region: eu-west-1
+    backupRetentionDays: 14
+  writeConnectionSecretToRef:
+    name: orders-db-connection
+---
+apiVersion: platform.mycompany.io/v1alpha1
+kind: Environment
+metadata:
+  name: orders-staging
+  namespace: team-orders
+spec:
+  parameters:
+    tenant: orders
+    environment: staging
+    cpuRequests: "8"
+    memoryRequests: 16Gi
+    maxPods: 100

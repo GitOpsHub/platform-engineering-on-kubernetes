@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	platformv1alpha1 "github.com/GitOpsHub/platform-engineering-on-kubernetes/code/tenant-operator/api/v1alpha1"
-	"github.com/GitOpsHub/platform-engineering-on-kubernetes/code/tenant-operator/controllers"
+	"github.com/GitOpsHub/platform-engineering-on-kubernetes/code/tenant-operator/internal/controller"
 	"github.com/GitOpsHub/platform-engineering-on-kubernetes/code/tenant-operator/webhooks"
 )
 
@@ -39,6 +39,7 @@ func main() {
 		secureMetrics        bool
 		enableHTTP2          bool
 		enableWebhooks       bool
+		operatorNamespace    string
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -51,9 +52,14 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers (disabled by default, see CVE-2023-44487).")
 	flag.BoolVar(&enableWebhooks, "enable-webhooks", os.Getenv("ENABLE_WEBHOOKS") != "false",
 		"Serve the validating admission webhook. Requires serving certs in /tmp/k8s-webhook-server/serving-certs.")
+	flag.StringVar(&operatorNamespace, "operator-namespace", os.Getenv("POD_NAMESPACE"),
+		"Namespace the operator runs in; it is never used as a tenant namespace. Defaults to $POD_NAMESPACE.")
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+	if operatorNamespace == "" {
+		operatorNamespace = "tenant-operator-system"
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
@@ -84,16 +90,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controllers.TenantReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+	if err := (&controller.TenantReconciler{
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		OperatorNamespace: operatorNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Tenant")
 		os.Exit(1)
 	}
 
 	if enableWebhooks {
-		if err := (&webhooks.TenantValidator{}).SetupWithManager(mgr); err != nil {
+		if err := (&webhooks.TenantValidator{OperatorNamespace: operatorNamespace}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Tenant")
 			os.Exit(1)
 		}

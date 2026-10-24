@@ -1,0 +1,12 @@
+openapi: 3.0.3
+info:
+  title: ${{ values.name }}
+  version: 0.1.0
+  description: ${{ values.description }}
+paths:
+  /health:
+    get:
+      summary: Liveness check
+      responses:
+        "200":
+          description: The service is up

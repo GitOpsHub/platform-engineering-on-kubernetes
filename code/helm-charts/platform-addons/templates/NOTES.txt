@@ -1,0 +1,20 @@
+platform-addons {{ .Chart.Version }} is installed.
+
+Enabled add-ons:
+{{- if index .Values "cert-manager" "enabled" }}
+  - cert-manager          (kubectl get certificates -A)
+{{- end }}
+{{- if index .Values "external-secrets" "enabled" }}
+  - external-secrets      (kubectl get externalsecrets -A)
+{{- end }}
+{{- if index .Values "ingress-nginx" "enabled" }}
+  - ingress-nginx         (kubectl -n {{ .Release.Namespace }} get svc -l app.kubernetes.io/name=ingress-nginx)
+{{- end }}
+{{- if index .Values "kube-prometheus-stack" "enabled" }}
+  - kube-prometheus-stack (Grafana admin credentials are read from the existing Secret "grafana-admin")
+{{- end }}
+
+Run the smoke test:
+  helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }}
+
+NOTE: ingress-nginx upstream was retired in March 2026. See README.md for the migration path.

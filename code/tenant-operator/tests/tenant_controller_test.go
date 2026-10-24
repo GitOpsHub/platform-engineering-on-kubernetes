@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	platformv1alpha1 "github.com/GitOpsHub/platform-engineering-on-kubernetes/code/tenant-operator/api/v1alpha1"
-	"github.com/GitOpsHub/platform-engineering-on-kubernetes/code/tenant-operator/controllers"
+	"github.com/GitOpsHub/platform-engineering-on-kubernetes/code/tenant-operator/internal/controller"
 )
 
 const timeout = 20 * time.Second
@@ -64,11 +64,11 @@ func TestTenantProvisioning(t *testing.T) {
 			t.Errorf("namespace %s labels = %v", ns, n.Labels)
 		}
 		checks := []client.Object{
-			&corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: controllers.ResourceQuotaName}},
-			&corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: controllers.LimitRangeName}},
-			&networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: controllers.DefaultDenyPolicyName}},
-			&networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: controllers.AllowDNSPolicyName}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: controllers.OwnersRoleBindingName}},
+			&corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: controller.ResourceQuotaName}},
+			&corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: controller.LimitRangeName}},
+			&networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: controller.DefaultDenyPolicyName}},
+			&networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: controller.AllowDNSPolicyName}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: controller.OwnersRoleBindingName}},
 		}
 		for _, obj := range checks {
 			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {

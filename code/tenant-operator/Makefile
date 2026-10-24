@@ -4,9 +4,9 @@ IMG ?= ghcr.io/gitopshub/tenant-operator:latest
 ENVTEST_K8S_VERSION ?= 1.34.x
 
 # Packages compiled/tested by this module.
-PKGS ?= ./api/v1alpha1/... ./cmd/... ./controllers/... ./webhooks/... ./tests/...
+PKGS ?= ./api/v1alpha1/... ./cmd/... ./internal/... ./webhooks/... ./tests/...
 # Packages scanned by controller-gen for markers.
-GEN_PATHS ?= "./api/v1alpha1/...;./controllers/...;./webhooks/..."
+GEN_PATHS ?= "./api/v1alpha1/...;./internal/controller/...;./webhooks/..."
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))

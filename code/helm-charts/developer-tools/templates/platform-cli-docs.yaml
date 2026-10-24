@@ -1,0 +1,15 @@
+{{- if .Values.platformCli.docs.enabled }}
+# Markdown docs for platform-cli, one key per file in files/.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.platformCli.docs.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "developer-tools.labels" . | nindent 4 }}
+    {{- with .Values.platformCli.docs.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  {{- (.Files.Glob "files/*.md").AsConfig | nindent 2 }}
+{{- end }}

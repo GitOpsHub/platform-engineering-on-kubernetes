@@ -1,0 +1,40 @@
+# Binds the controller's ServiceAccount to:
+#   - the ClusterRole "webapp-controller" (role.yaml, generated), which lets it
+#     manage WebApps, Deployments and Services across namespaces; and
+#   - a namespaced Role for leader election (Leases and Events in platform-system).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: webapp-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: webapp-controller
+subjects:
+  - kind: ServiceAccount
+    name: webapp-controller
+    namespace: platform-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: webapp-controller-leader-election
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: webapp-controller-leader-election
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: webapp-controller-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: webapp-controller

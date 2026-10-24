@@ -1,0 +1,14 @@
+# Rendered example of rbac/tenant-owner.yaml for tenant "acme" (what setup.sh applies to
+# namespace tenant-acme-dev). Apply with `kubectl -n tenant-acme-dev`.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tenant-owners
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: tenant:acme:owners

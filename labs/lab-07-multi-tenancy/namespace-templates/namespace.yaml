@@ -1,0 +1,24 @@
+# Tenant namespace template. setup.sh renders the two placeholders with sed:
+#   __NAMESPACE__  -> the namespace name, e.g. tenant-acme-dev
+#   __TENANT__     -> the tenant name, e.g. acme (value of platform.mycompany.io/tenant)
+#
+# The tenant and managed-by labels are the same ones tenant-operator uses. Its
+# adoption rule (api/v1alpha1/ownership.go CanAdoptNamespace) accepts a namespace
+# that carries managed-by=tenant-operator and tenant=<name>, so a namespace created
+# here can be adopted by the operator without being recreated.
+#
+# Pod Security Admission runs the "restricted" profile at the v1.35 policy version.
+# The operator does not set these PSA labels; this template is the only source of them.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: __NAMESPACE__
+  labels:
+    platform.mycompany.io/tenant: __TENANT__
+    platform.mycompany.io/managed-by: tenant-operator
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.35
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: v1.35
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.35

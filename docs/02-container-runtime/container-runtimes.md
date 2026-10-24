@@ -506,7 +506,7 @@ sudo crictl info | jq '.status.conditions'
 kubectl uncordon node-1
 ```
 
-For fleets, prefer replacing nodes over in-place upgrades — see [Lab 08: Platform Upgrade](../../labs/lab-08-platform-upgrade/README.md).
+For fleets, prefer replacing nodes over in-place upgrades — see [Lab 08: Platform Upgrade](../../labs/lab-08-platform-upgrade/).
 
 ---
 

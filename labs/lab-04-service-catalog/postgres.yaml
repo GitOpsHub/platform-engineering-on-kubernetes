@@ -1,0 +1,100 @@
+# Postgres for Backstage (catalog, scaffolder and auth state).
+#
+# Lab use only: one replica, one PersistentVolumeClaim on the kind default
+# StorageClass. The password is NOT in this file. deploy.sh creates the
+# backstage-postgres Secret before applying it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backstage-postgres
+  namespace: developer-platform
+  labels:
+    app.kubernetes.io/name: backstage-postgres
+    platform.mycompany.io/managed: "true"
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backstage-postgres
+  namespace: developer-platform
+  labels:
+    app.kubernetes.io/name: backstage-postgres
+    platform.mycompany.io/managed: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # the PVC is ReadWriteOnce: stop the old pod before starting the new one
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backstage-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: backstage-postgres
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70        # the postgres user in the alpine image
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: backstage
+            - name: POSTGRES_USER
+              value: backstage
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backstage-postgres
+                  key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "backstage", "-d", "backstage"]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: backstage-postgres
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backstage-postgres
+  namespace: developer-platform
+  labels:
+    app.kubernetes.io/name: backstage-postgres
+spec:
+  selector:
+    app.kubernetes.io/name: backstage-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

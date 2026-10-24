@@ -10,7 +10,7 @@ RUN go mod download
 
 COPY cmd/ cmd/
 COPY api/ api/
-COPY controllers/ controllers/
+COPY internal/ internal/
 COPY webhooks/ webhooks/
 
 # GOARCH has no default so the binary is built for the platform of the host

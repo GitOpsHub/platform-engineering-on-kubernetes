@@ -1,0 +1,48 @@
+# Default values for platform-addons. Each block below is passed to the subchart of the same name.
+# Set `<name>.enabled: false` to skip that add-on. Everything else under the block goes to the subchart,
+# so see each upstream chart's values.yaml for the full list of keys.
+
+cert-manager:
+  # Toggle the whole subchart.
+  enabled: true
+  # CRDs ship with the release, so `helm uninstall` removes them. Set to false and
+  # install CRDs separately if other tools depend on them.
+  crds:
+    enabled: true
+    keep: true
+
+external-secrets:
+  enabled: true
+  installCRDs: true
+
+ingress-nginx:
+  # NOTE: upstream ingress-nginx was retired in March 2026 and no longer receives fixes.
+  # Keep this for existing clusters, but plan a migration to Gateway API or another controller.
+  enabled: true
+  controller:
+    replicaCount: 2
+    service:
+      type: LoadBalancer
+    metrics:
+      enabled: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+
+kube-prometheus-stack:
+  enabled: true
+  # Do not ship the chart's default Grafana password. Reference an existing Secret instead.
+  grafana:
+    admin:
+      existingSecret: grafana-admin
+      userKey: admin-user
+      passwordKey: admin-password
+  prometheus:
+    prometheusSpec:
+      retention: 15d
+      # Discover ServiceMonitors and PodMonitors from every namespace.
+      serviceMonitorSelectorNilUsesHelmValues: false
+      podMonitorSelectorNilUsesHelmValues: false

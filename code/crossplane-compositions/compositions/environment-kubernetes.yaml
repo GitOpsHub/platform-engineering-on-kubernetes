@@ -1,0 +1,121 @@
+# Composition: XEnvironment -> Namespace + ResourceQuota, through provider-kubernetes Object resources.
+# Pipeline mode with function-patch-and-transform (rendering and patching) and function-auto-ready (readiness).
+#
+# Tenant handling. spec.parameters.tenant is still a claim parameter, and it is not derived from the
+# namespace. Why: a Crossplane pipeline step cannot read a Namespace's labels without
+# function-extra-resources, and ValidatingAdmissionPolicy CEL cannot read other objects either. So the
+# parameter is checked two ways: the XRD enforces a strict DNS-label pattern, and the Kyverno policy in
+# ../policies/tenant-namespace-match.yaml denies any claim whose tenant differs from the
+# platform.mycompany.io/tenant label on the claim's namespace.
+#
+# managementPolicies lists the four verbs explicitly, with no "*". Note what this does NOT do: Crossplane
+# still adopts a pre-existing object with the same name (Observe finds it, and Update reconciles it). The
+# verbs limit what the provider can do to it, but they do not prevent adoption. Blocking adoption needs an
+# admission check that refuses Namespaces without the crossplane managed-by label, and that check is not
+# in this repo yet.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: environment-kubernetes
+  labels:
+    platform.mycompany.io/cloud: kubernetes
+    platform.mycompany.io/component: crossplane-compositions
+spec:
+  compositeTypeRef:
+    apiVersion: platform.mycompany.io/v1alpha1
+    kind: XEnvironment
+  mode: Pipeline
+  pipeline:
+    - step: render-namespace-and-quota
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: namespace
+            base:
+              apiVersion: kubernetes.crossplane.io/v1alpha2
+              kind: Object
+              spec:
+                providerConfigRef:
+                  name: environment-provisioner
+                deletionPolicy: Delete
+                managementPolicies: ["Create", "Observe", "Update", "Delete"]
+                forProvider:
+                  manifest:
+                    apiVersion: v1
+                    kind: Namespace
+                    metadata:
+                      labels:
+                        platform.mycompany.io/managed-by: crossplane
+                        platform.mycompany.io/component: environment
+            patches:
+              - type: CombineFromComposite
+                combine:
+                  variables:
+                    - fromFieldPath: spec.parameters.tenant
+                    - fromFieldPath: spec.parameters.environment
+                  strategy: string
+                  string:
+                    fmt: "%s-%s"
+                toFieldPath: spec.forProvider.manifest.metadata.name
+              - type: CombineFromComposite
+                combine:
+                  variables:
+                    - fromFieldPath: spec.parameters.tenant
+                    - fromFieldPath: spec.parameters.environment
+                  strategy: string
+                  string:
+                    fmt: "%s-%s"
+                toFieldPath: status.namespace
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.tenant
+                toFieldPath: spec.forProvider.manifest.metadata.labels[platform.mycompany.io/tenant]
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.environment
+                toFieldPath: spec.forProvider.manifest.metadata.labels[platform.mycompany.io/environment]
+          - name: resource-quota
+            base:
+              apiVersion: kubernetes.crossplane.io/v1alpha2
+              kind: Object
+              spec:
+                providerConfigRef:
+                  name: environment-provisioner
+                deletionPolicy: Delete
+                managementPolicies: ["Create", "Observe", "Update", "Delete"]
+                forProvider:
+                  manifest:
+                    apiVersion: v1
+                    kind: ResourceQuota
+                    metadata:
+                      name: tenant-quota
+                    spec:
+                      hard:
+                        pods: "50"
+            patches:
+              - type: CombineFromComposite
+                combine:
+                  variables:
+                    - fromFieldPath: spec.parameters.tenant
+                    - fromFieldPath: spec.parameters.environment
+                  strategy: string
+                  string:
+                    fmt: "%s-%s"
+                toFieldPath: spec.forProvider.manifest.metadata.namespace
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.maxPods
+                toFieldPath: spec.forProvider.manifest.spec.hard.pods
+                transforms:
+                  - type: convert
+                    convert:
+                      toType: string
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.cpuRequests
+                toFieldPath: spec.forProvider.manifest.spec.hard[requests.cpu]
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.memoryRequests
+                toFieldPath: spec.forProvider.manifest.spec.hard[requests.memory]
+    - step: auto-ready
+      functionRef:
+        name: function-auto-ready

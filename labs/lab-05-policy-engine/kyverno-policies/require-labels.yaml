@@ -1,7 +1,6 @@
 # Kyverno VALIDATE: Pods must carry a team label.
-# kyverno.io/v1 ClusterPolicy is still served by Kyverno 1.19 but is deprecated
-# in favour of the CEL-based policies.kyverno.io types; see
-# validatingpolicy-disallow-privileged.yaml for the new style.
+# Uses the kyverno.io/v1 ClusterPolicy (pattern-based) style. For the CEL-based
+# style see validatingpolicy-disallow-privileged.yaml.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:

@@ -43,11 +43,11 @@ Background reading: [Kubernetes Architecture](../../docs/01-kubernetes-fundament
 | Component | Version | Installed by |
 |-----------|---------|--------------|
 | Kubernetes (kind) | v1.35.8 (`kindest/node`) | `kind-cluster.yaml` |
-| Kubernetes (k3d) | v1.35.5 (`rancher/k3s:v1.35.5-k3s1`) | `k3d-cluster.yaml` |
-| Cilium | 1.20.2 | Helm, kind only |
+| Kubernetes (k3d) | v1.35.9 (`rancher/k3s:v1.35.9-k3s1`) | `k3d-cluster.yaml` |
+| Cilium | 1.20.4 | Helm, kind only |
 | Traefik | chart 42.1.3 (Traefik v3.7) | Helm |
-| cert-manager | v1.21.2 | Helm |
-| External Secrets Operator | 2.10.0 | Helm |
+| cert-manager | v1.21.3 | Helm |
+| External Secrets Operator | 2.14.0 | Helm |
 | Sealed Secrets | v0.41.1 | Release manifest |
 | metrics-server | chart 3.14.0 (v0.9.0) | Helm |
 
@@ -122,7 +122,7 @@ inside the nodes).
 
 ```bash
 helm upgrade --install cilium cilium \
-  --repo https://helm.cilium.io --version 1.20.2 \
+  --repo https://helm.cilium.io --version 1.20.4 \
   --namespace kube-system -f values/cilium.yaml --wait
 
 kubectl wait --for=condition=Ready nodes --all --timeout=300s
@@ -161,7 +161,7 @@ versions as on kind.
 # k3d-cluster.yaml (excerpt)
 apiVersion: k3d.io/v1alpha5
 kind: Simple
-image: rancher/k3s:v1.35.5-k3s1
+image: rancher/k3s:v1.35.9-k3s1
 ports:
   - port: 127.0.0.1:8080:30080     # host 8080 -> Traefik NodePort
     nodeFilters: [loadbalancer]
@@ -215,7 +215,7 @@ maps to `127.0.0.1:8080/8443` on your laptop.
 
 ```bash
 helm upgrade --install cert-manager cert-manager \
-  --repo https://charts.jetstack.io --version v1.21.2 \
+  --repo https://charts.jetstack.io --version v1.21.3 \
   --namespace cert-manager --create-namespace -f values/cert-manager.yaml --wait
 ```
 
@@ -227,7 +227,7 @@ every Certificate in the cluster.
 
 ```bash
 helm upgrade --install external-secrets external-secrets \
-  --repo https://charts.external-secrets.io --version 2.10.0 \
+  --repo https://charts.external-secrets.io --version 2.14.0 \
   --namespace external-secrets --create-namespace -f values/external-secrets.yaml --wait
 ```
 
@@ -296,6 +296,10 @@ Platform baseline
 
 === 24 passed, 0 failed ===
 ```
+
+The count depends on the provider. The kind run (Cilium checks included) reports
+**24 passed**. The k3d run skips the four Cilium/Hubble checks and reports **20 passed**
+(`./verify.sh --provider k3d`).
 
 Manual checks:
 

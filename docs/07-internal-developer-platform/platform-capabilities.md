@@ -128,7 +128,7 @@ spec:
       group: platform.mycompany.io
       kind: Workload
       versions: [v1alpha1]
-    cli: platform-cli deployment create
+    cli: platform-cli -n <namespace> workload create
     portal: Backstage template "go-grpc-service", entity page "Kubernetes" tab
     gitops: tenants/<tenant>/workloads/<name>/workload.yaml
   guarantees:
@@ -330,7 +330,7 @@ Score candidate capabilities to choose what's next:
    # API
    kubectl apply --dry-run=server -f tenants/payments/workloads/payments-api/workload.yaml
    # CLI
-   platform-cli deployment list --tenant payments
+   platform-cli -n payments-dev workload list
    # GitOps
    ls platform-gitops/tenants/payments/workloads/
    ```

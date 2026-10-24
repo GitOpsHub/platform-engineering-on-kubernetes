@@ -7,6 +7,8 @@
 // lightweight for consumers.
 package types
 
+import "fmt"
+
 // API group/version served by the CRDs this API fronts.
 const (
 	Group      = "platform.mycompany.io"
@@ -237,4 +239,37 @@ type KubeInfo struct {
 	Version  string `json:"version,omitempty"`
 	Platform string `json:"platform,omitempty"`
 	Error    string `json:"error,omitempty"`
+}
+
+// AccessReviewRequest asks whether the caller may perform Verb on Resource.
+type AccessReviewRequest struct {
+	Verb      string `json:"verb"`
+	Group     string `json:"group,omitempty"`
+	Resource  string `json:"resource"`
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name,omitempty"`
+}
+
+// Validate checks the request before it is sent to the API server.
+func (r AccessReviewRequest) Validate() error {
+	if r.Verb == "" || r.Resource == "" {
+		return &ValidationError{Problems: []string{"verb and resource are required"}}
+	}
+	if r.Namespace != "" && !IsDNSLabel(r.Namespace) {
+		return &ValidationError{Problems: []string{fmt.Sprintf("invalid namespace %q", r.Namespace)}}
+	}
+	return nil
+}
+
+// AccessReviewResult is the caller's answer from Kubernetes RBAC.
+type AccessReviewResult struct {
+	Allowed bool   `json:"allowed"`
+	Denied  bool   `json:"denied,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+}
+
+// WatchEvent is one line of a ?watch=true stream.
+type WatchEvent[T any] struct {
+	Type   string `json:"type"`
+	Object *T     `json:"object"`
 }

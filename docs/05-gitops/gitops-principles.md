@@ -786,6 +786,19 @@ groups:
 
 ---
 
+## Troubleshooting
+
+| Symptom | Likely Cause | Diagnose | Fix |
+|---------|--------------|----------|-----|
+| Resource is `OutOfSync` right after a sync | Controller-mutated field (e.g. `status`, defaulted fields, HPA-managed `replicas`) | `argocd app diff <app>` / `flux diff kustomization <name>` | Add `ignoreDifferences` (Argo CD) or drop the field from the manifest (Flux) |
+| Changes merged to Git but never reach the cluster | Reconciliation suspended, or source pointing at the wrong branch/path | `flux get all -A`, `argocd app get <app>` | Resume the Kustomization/Application; correct `targetRevision` or `path` |
+| Resources reappear after deletion from Git | `prune` disabled, so the agent does not delete removed objects | Check `prune` in the Application/Kustomization spec | Enable prune; use `PruneLast=true` when dependencies must go last |
+| Secret values show up in Git history | Plaintext secret committed | `git log -p -- <path>` | Rotate the credential first, then move the value into an external store (see [External Secrets](../06-secrets-management/external-secrets.md)) |
+| Reconciliation failing on every cycle with `dependency not ready` | Dependency ordering not declared | Inspect `dependsOn` / sync waves | Add `dependsOn` (Flux) or sync-wave annotations (Argo CD) |
+| Agent cannot reach Git | Credentials expired or deploy key revoked | Controller logs; `flux get sources git` shows auth errors | Rotate the token or deploy key and update the referenced Secret |
+
+---
+
 ## Further Reading
 
 ### Official Documentation

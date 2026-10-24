@@ -1,0 +1,87 @@
+# CompositeResourceDefinition: a developer-facing PostgreSQL database API.
+# Crossplane 1.x style (apiextensions.crossplane.io/v1) with a namespaced Claim.
+# Developers create a `Database` claim in their namespace; the platform composes an XDatabase.
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xdatabases.platform.mycompany.io
+  labels:
+    platform.mycompany.io/component: crossplane-compositions
+spec:
+  group: platform.mycompany.io
+  names:
+    kind: XDatabase
+    plural: xdatabases
+  claimNames:
+    kind: Database
+    plural: databases
+  # Developers only see the claim; the XR is an implementation detail.
+  connectionSecretKeys:
+    - endpoint
+    - port
+    - username
+    - password
+  defaultCompositionRef:
+    name: database-aws-postgres
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: A managed PostgreSQL database on AWS RDS.
+          properties:
+            spec:
+              type: object
+              required:
+                - parameters
+              properties:
+                parameters:
+                  type: object
+                  required:
+                    - tier
+                  properties:
+                    tier:
+                      type: string
+                      description: Size class. Maps to an RDS instance class in the composition.
+                      enum: [small, medium, large]
+                    storageGB:
+                      type: integer
+                      description: Allocated storage in GiB.
+                      default: 20
+                      minimum: 20
+                      maximum: 1000
+                    version:
+                      type: string
+                      description: PostgreSQL major version.
+                      enum: ["15", "16"]
+                      default: "16"
+                    region:
+                      type: string
+                      description: AWS region. Restricted to the regions the platform supports.
+                      enum: [eu-west-1, eu-central-1, us-east-1]
+                      default: eu-west-1
+                    backupRetentionDays:
+                      type: integer
+                      description: Automated backup retention in days.
+                      default: 7
+                      minimum: 1
+                      maximum: 35
+                    compositionSelector:
+                      type: object
+                      description: Optional label selector for choosing a composition.
+                      properties:
+                        matchLabels:
+                          type: object
+                          additionalProperties:
+                            type: string
+              x-kubernetes-validations:
+                - rule: "self.parameters.tier != 'large' || self.parameters.storageGB >= 100"
+                  message: "large databases need at least 100 GiB of storage"
+            status:
+              type: object
+              properties:
+                endpoint:
+                  type: string
+                  description: Hostname of the database endpoint, once the instance is available.

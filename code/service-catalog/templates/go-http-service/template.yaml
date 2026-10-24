@@ -1,0 +1,36 @@
+name: go-http-service
+title: Go HTTP service
+description: A Go net/http service with a distroless image, a Workload CR and a catalog entry.
+owner: platform-team
+tags: [go, http, service]
+parameters:
+  - name: name
+    description: Service name (DNS-1123 label)
+    required: true
+    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+  - name: owner
+    description: Owning team, written to catalog-info.yaml
+    required: true
+    pattern: '^[a-z0-9][a-z0-9-]*$'
+  - name: description
+    description: One-line service description
+    default: A Go HTTP service
+  - name: namespace
+    description: Kubernetes namespace for the Workload
+    default: default
+    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+  - name: image
+    description: Registry prefix for the container image
+    default: ghcr.io/acme
+  - name: port
+    description: Container port
+    default: "8080"
+    pattern: '^[0-9]+$'
+  - name: replicas
+    description: Desired replicas
+    default: "2"
+    pattern: '^[0-9]+$'
+  - name: lifecycle
+    description: Catalog lifecycle stage
+    default: experimental
+    enum: [experimental, production, deprecated]

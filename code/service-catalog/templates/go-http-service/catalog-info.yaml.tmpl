@@ -1,0 +1,12 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: {{ .name }}
+  description: {{ .description | quote }}
+  tags:
+    - go
+    - http
+spec:
+  type: service
+  lifecycle: {{ .lifecycle }}
+  owner: {{ .owner }}

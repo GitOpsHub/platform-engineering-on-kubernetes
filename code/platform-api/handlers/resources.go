@@ -41,18 +41,29 @@ type objPtr[T any] interface {
 
 // resource implements list/get/create/delete for one CRD kind.
 type resource[T any, PT objPtr[T]] struct {
-	client     dynamic.Interface
+	clientFor  func(*http.Request) (dynamic.Interface, error) // caller-scoped client
 	gvr        schema.GroupVersionResource
 	kind       string
 	namespaced bool
 }
 
-func (rs *resource[T, PT]) ri(namespace string) dynamic.ResourceInterface {
-	nri := rs.client.Resource(rs.gvr)
+func (rs *resource[T, PT]) ri(client dynamic.Interface, namespace string) dynamic.ResourceInterface {
+	nri := client.Resource(rs.gvr)
 	if rs.namespaced {
 		return nri.Namespace(namespace) // "" lists across all namespaces
 	}
 	return nri
+}
+
+// client resolves the caller-scoped client for r, writing the error response
+// itself when there is none.
+func (rs *resource[T, PT]) client(w http.ResponseWriter, r *http.Request) (dynamic.Interface, bool) {
+	c, err := rs.clientFor(r)
+	if err != nil {
+		writeClientError(w, r, err)
+		return nil, false
+	}
+	return c, true
 }
 
 // namespace extracts and validates the {namespace} path segment (if any).
@@ -74,6 +85,10 @@ func (rs *resource[T, PT]) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
+	if q.Get("watch") == "true" {
+		rs.watch(w, r, ns)
+		return
+	}
 	opts := metav1.ListOptions{LabelSelector: q.Get("labelSelector"), Continue: q.Get("continue")}
 	if l := q.Get("limit"); l != "" {
 		n, err := strconv.ParseInt(l, 10, 64)
@@ -83,7 +98,11 @@ func (rs *resource[T, PT]) list(w http.ResponseWriter, r *http.Request) {
 		}
 		opts.Limit = n
 	}
-	ul, err := rs.ri(ns).List(r.Context(), opts)
+	client, ok := rs.client(w, r)
+	if !ok {
+		return
+	}
+	ul, err := rs.ri(client, ns).List(r.Context(), opts)
 	if err != nil {
 		writeKubeError(w, r, err)
 		return
@@ -106,8 +125,12 @@ func (rs *resource[T, PT]) get(w http.ResponseWriter, r *http.Request) {
 		mw.WriteError(w, r, http.StatusBadRequest, "BadRequest", err.Error())
 		return
 	}
+	client, ok := rs.client(w, r)
+	if !ok {
+		return
+	}
 	name := r.PathValue("name")
-	u, err := rs.ri(ns).Get(r.Context(), name, metav1.GetOptions{})
+	u, err := rs.ri(client, ns).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		writeKubeError(w, r, err)
 		return
@@ -165,7 +188,11 @@ func (rs *resource[T, PT]) create(w http.ResponseWriter, r *http.Request) {
 		writeKubeError(w, r, err)
 		return
 	}
-	created, err := rs.ri(ns).Create(r.Context(), u, metav1.CreateOptions{FieldManager: "platform-api"})
+	client, ok := rs.client(w, r)
+	if !ok {
+		return
+	}
+	created, err := rs.ri(client, ns).Create(r.Context(), u, metav1.CreateOptions{FieldManager: "platform-api"})
 	if err != nil {
 		writeKubeError(w, r, err)
 		return
@@ -189,8 +216,12 @@ func (rs *resource[T, PT]) delete(w http.ResponseWriter, r *http.Request) {
 		mw.WriteError(w, r, http.StatusBadRequest, "BadRequest", err.Error())
 		return
 	}
+	client, ok := rs.client(w, r)
+	if !ok {
+		return
+	}
 	policy := metav1.DeletePropagationForeground
-	if err := rs.ri(ns).Delete(r.Context(), r.PathValue("name"), metav1.DeleteOptions{PropagationPolicy: &policy}); err != nil {
+	if err := rs.ri(client, ns).Delete(r.Context(), r.PathValue("name"), metav1.DeleteOptions{PropagationPolicy: &policy}); err != nil {
 		writeKubeError(w, r, err)
 		return
 	}

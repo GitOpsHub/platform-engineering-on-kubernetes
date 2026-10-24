@@ -1,0 +1,56 @@
+# Scoped identity for the environment composition's provider-kubernetes Objects.
+#
+# The default provider-kubernetes identity is the provider pod's own ServiceAccount, which can
+# do much more than create Namespaces. This file gives the environment composition its own
+# ServiceAccount with a ClusterRole limited to namespaces and resourcequotas. The ProviderConfig
+# below uses that identity's kubeconfig, so the provider cannot act with any other permission.
+#
+# Install order: this file, then create the Secret (see README.md), then compositions.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: environment-provisioner
+  namespace: crossplane-system
+  labels:
+    platform.mycompany.io/component: crossplane-providers
+    platform.mycompany.io/managed-by: crossplane
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: environment-provisioner
+  labels:
+    platform.mycompany.io/component: crossplane-providers
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "resourcequotas"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: environment-provisioner
+  labels:
+    platform.mycompany.io/component: crossplane-providers
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: environment-provisioner
+subjects:
+  - kind: ServiceAccount
+    name: environment-provisioner
+    namespace: crossplane-system
+---
+# Used only by the environment compositions. Credentials come from a kubeconfig Secret.
+apiVersion: kubernetes.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: environment-provisioner
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: environment-provisioner-kubeconfig
+      key: kubeconfig

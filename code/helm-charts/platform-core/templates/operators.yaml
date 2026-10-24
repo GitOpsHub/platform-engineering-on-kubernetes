@@ -1,0 +1,91 @@
+{{- /*
+One ServiceAccount, ClusterRole, ClusterRoleBinding and Deployment per enabled operator.
+Each operator's image, args, resources and RBAC rules come from .Values.operators.<name>.
+*/ -}}
+{{- range $name, $op := .Values.operators }}
+{{- if $op.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}-operator
+  namespace: {{ $.Values.controlPlane.namespace }}
+  labels:
+    {{- include "platform-core.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: {{ $name }}-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $name }}-operator
+  labels:
+    {{- include "platform-core.labels" $ | nindent 4 }}
+rules:
+  {{- toYaml $op.rules | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $name }}-operator
+  labels:
+    {{- include "platform-core.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $name }}-operator
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}-operator
+    namespace: {{ $.Values.controlPlane.namespace }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-operator
+  namespace: {{ $.Values.controlPlane.namespace }}
+  labels:
+    {{- include "platform-core.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: {{ $name }}-operator
+spec:
+  replicas: {{ $op.replicaCount }}
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "platform-core.selectorLabels" (dict "name" (printf "%s-operator" $name) "root" $) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "platform-core.labels" $ | nindent 8 }}
+        {{- include "platform-core.selectorLabels" (dict "name" (printf "%s-operator" $name) "root" $) | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}-operator
+      securityContext:
+        {{- include "platform-core.podSecurityContext" $ | nindent 8 }}
+      containers:
+        - name: manager
+          image: {{ include "platform-core.image" (dict "image" $op.image "root" $) | quote }}
+          imagePullPolicy: {{ $op.image.pullPolicy }}
+          args:
+            {{- toYaml $op.args | nindent 12 }}
+          securityContext:
+            {{- include "platform-core.containerSecurityContext" $ | nindent 12 }}
+          ports:
+            - name: health
+              containerPort: {{ $op.healthPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml $op.resources | nindent 12 }}
+{{- end }}
+{{- end }}

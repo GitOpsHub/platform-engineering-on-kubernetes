@@ -1,0 +1,10 @@
+# Adds namespace to all resources.
+namespace: environment-operator-system
+# Prefixes all resource names, e.g. "controller-manager" -> "environment-operator-controller-manager".
+namePrefix: environment-operator-
+
+resources:
+- ../crd
+- ../rbac
+- ../manager
+- metrics_service.yaml

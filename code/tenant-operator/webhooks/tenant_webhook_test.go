@@ -21,7 +21,10 @@ func validator(t *testing.T, objs ...client.Object) *TenantValidator {
 	s := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(s)
 	_ = platformv1alpha1.AddToScheme(s)
-	return &TenantValidator{Reader: fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build()}
+	return &TenantValidator{
+		Reader:            fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build(),
+		OperatorNamespace: "tenant-operator-system",
+	}
 }
 
 func tenant(name string, namespaces ...string) *platformv1alpha1.Tenant {
@@ -40,7 +43,14 @@ func TestValidateCreate(t *testing.T) {
 	other := tenant("team-b", "shared")
 	unmanaged := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "legacy"}}
 	mine := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-		Name: "team-a-existing", Labels: map[string]string{platformv1alpha1.LabelTenant: "team-a"},
+		Name: "team-a-existing", Labels: map[string]string{
+			platformv1alpha1.LabelTenant:    "team-a",
+			platformv1alpha1.LabelManagedBy: platformv1alpha1.ManagedByValue,
+		},
+	}}
+	// A tenant label alone is not proof of ownership.
+	spoofed := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+		Name: "team-a-spoofed", Labels: map[string]string{platformv1alpha1.LabelTenant: "team-a"},
 	}}
 
 	tests := []struct {
@@ -51,7 +61,30 @@ func TestValidateCreate(t *testing.T) {
 		{name: "valid", tenant: tenant("team-a", "team-a-dev")},
 		{name: "re-adopts own namespace", tenant: tenant("team-a", "team-a-existing")},
 		{name: "collision with other tenant", tenant: tenant("team-a", "shared"), wantErr: `claimed by tenant "team-b"`},
-		{name: "unmanaged namespace", tenant: tenant("team-a", "legacy"), wantErr: "not managed by any tenant"},
+		{name: "unmanaged namespace", tenant: tenant("team-a", "legacy"), wantErr: "not managed by tenant"},
+		{name: "tenant label without managed-by is not adoptable", tenant: tenant("team-a", "team-a-spoofed"), wantErr: "not managed by tenant"},
+		{name: "reserved kube- prefix", tenant: tenant("team-a", "kube-system"), wantErr: "reserved"},
+		{name: "reserved default", tenant: tenant("team-a", "default"), wantErr: "reserved"},
+		{name: "reserved platform-system", tenant: tenant("team-a", "platform-system"), wantErr: "reserved"},
+		{name: "reserved operator namespace", tenant: tenant("team-a", "tenant-operator-system"), wantErr: "reserved"},
+		{
+			name: "reserved label prefix",
+			tenant: func() *platformv1alpha1.Tenant {
+				tn := tenant("team-a", "a")
+				tn.Labels = map[string]string{"pod-security.kubernetes.io/enforce": "privileged"}
+				return tn
+			}(),
+			wantErr: "reserved label prefix",
+		},
+		{
+			name: "reserved annotation prefix",
+			tenant: func() *platformv1alpha1.Tenant {
+				tn := tenant("team-a", "a")
+				tn.Annotations = map[string]string{"platform.mycompany.io/managed-by": "x"}
+				return tn
+			}(),
+			wantErr: "reserved annotation prefix",
+		},
 		{name: "duplicate", tenant: tenant("team-a", "x", "x"), wantErr: "Duplicate value"},
 		{name: "invalid DNS label", tenant: tenant("team-a", "Team_A"), wantErr: "spec.namespaces[0]"},
 		{
@@ -76,7 +109,7 @@ func TestValidateCreate(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			v := validator(t, other, unmanaged, mine)
+			v := validator(t, other, unmanaged, mine, spoofed)
 			_, err := v.ValidateCreate(context.Background(), tc.tenant)
 			if tc.wantErr == "" {
 				if err != nil {

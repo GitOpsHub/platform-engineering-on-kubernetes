@@ -1,0 +1,78 @@
+{{- if .Values.platformApi.enabled }}
+{{- $sa := .Values.platformApi.serviceAccount }}
+{{- if $sa.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $sa.name | default "platform-api" }}
+  namespace: {{ .Values.controlPlane.namespace }}
+  labels:
+    {{- include "platform-core.labels" . | nindent 4 }}
+    app.kubernetes.io/name: platform-api
+  {{- with $sa.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+# The token must be mounted: platform-api authenticates to the API server with it.
+automountServiceAccountToken: true
+---
+{{- end }}
+{{- $imp := .Values.platformApi.impersonation }}
+{{- if not $imp.groups }}
+{{- fail "platformApi.impersonation.groups must list every group platform-api acts for" }}
+{{- end }}
+{{- range $imp.groups }}
+{{- if hasPrefix "system:" . }}
+{{- fail (printf "platformApi.impersonation.groups must not contain system: subjects (got %q)" .) }}
+{{- end }}
+{{- end }}
+{{- range $imp.users }}
+{{- if hasPrefix "system:" . }}
+{{- fail (printf "platformApi.impersonation.users must not contain system: subjects (got %q)" .) }}
+{{- end }}
+{{- end }}
+{{- if and (not $imp.allowAnyUser) (not $imp.users) }}
+{{- fail "platformApi.impersonation.users must list the subjects platform-api acts as, or set allowAnyUser=true" }}
+{{- end }}
+# platform-api acts as the caller. It may impersonate only the subjects and groups listed in
+# platformApi.impersonation, and it may read namespaces. It cannot CRUD platform CRDs itself:
+# those requests run as the impersonated user, so cluster RBAC for that user decides.
+# system:* subjects are rejected at render time, and an unscoped grant needs allowAnyUser=true.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-api-impersonator
+  labels:
+    {{- include "platform-core.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["users"]
+    {{- if $imp.allowAnyUser }}
+    # Unscoped by explicit opt-in (platformApi.impersonation.allowAnyUser=true).
+    {{- else }}
+    resourceNames: {{ toJson $imp.users }}
+    {{- end }}
+    verbs: ["impersonate"]
+  - apiGroups: [""]
+    resources: ["groups"]
+    resourceNames: {{ toJson $imp.groups }}
+    verbs: ["impersonate"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-api-impersonator
+  labels:
+    {{- include "platform-core.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: platform-api-impersonator
+subjects:
+  - kind: ServiceAccount
+    name: {{ $sa.name | default "platform-api" }}
+    namespace: {{ .Values.controlPlane.namespace }}
+{{- end }}

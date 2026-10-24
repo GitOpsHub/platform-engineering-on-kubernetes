@@ -1,5 +1,6 @@
 # ConstraintTemplate: only allow images from approved registries/repositories.
 # Adapted from the OPA Gatekeeper library (k8sallowedrepos).
+# Rego uses the OPA v1 syntax (`contains` / `if`), which current Gatekeeper releases require.
 apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
@@ -30,21 +31,21 @@ spec:
       rego: |
         package k8sallowedrepos
 
-        violation[{"msg": msg}] {
+        violation contains {"msg": msg} if {
           container := input_containers[_]
           satisfied := [good | repo := input.parameters.repos[_]; good := startswith(container.image, repo)]
           not any(satisfied)
           msg := sprintf("[gatekeeper] container <%v> image <%v> is not from an allowed registry: %v", [container.name, container.image, input.parameters.repos])
         }
 
-        input_containers[c] {
+        input_containers contains c if {
           c := input.review.object.spec.containers[_]
         }
 
-        input_containers[c] {
+        input_containers contains c if {
           c := input.review.object.spec.initContainers[_]
         }
 
-        input_containers[c] {
+        input_containers contains c if {
           c := input.review.object.spec.ephemeralContainers[_]
         }

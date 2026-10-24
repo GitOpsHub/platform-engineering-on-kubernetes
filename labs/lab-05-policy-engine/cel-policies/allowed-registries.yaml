@@ -53,7 +53,7 @@ spec:
   paramRef:
     name: allowed-registries
     namespace: policy-test-cel
-    # Required in v1: what to do when the ConfigMap does not exist.
+    # What to do when the ConfigMap is missing: Deny fails closed.
     parameterNotFoundAction: Deny
   matchResources:
     namespaceSelector:

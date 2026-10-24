@@ -40,7 +40,9 @@ kubectl apply -f "$LAB_DIR/kyverno-policies/rbac-generate.yaml"
 for p in require-labels disallow-latest-tag restrict-registries add-default-labels generate-tenant-defaults validatingpolicy-disallow-privileged; do
   kubectl apply -f "$LAB_DIR/kyverno-policies/${p}.yaml"
 done
-$WITH_VERIFY_IMAGES && kubectl apply -f "$LAB_DIR/kyverno-policies/verify-images.yaml"
+if [[ "$WITH_VERIFY_IMAGES" == "true" ]]; then
+  kubectl apply -f "$LAB_DIR/kyverno-policies/verify-images.yaml"
+fi
 kubectl wait --for=condition=Ready clusterpolicy --all --timeout=120s || true
 
 echo "==> Applying CEL ValidatingAdmissionPolicies (requires Kubernetes >= 1.30)"

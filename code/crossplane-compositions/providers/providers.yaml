@@ -1,0 +1,33 @@
+# Providers and ProviderConfigs used by the compositions.
+# Versions are pinned. Verify each package tag against the registry before applying:
+#   https://marketplace.upbound.io (provider-aws-rds) and https://github.com/crossplane-contrib/provider-kubernetes
+# provider-aws-rds runs with IRSA (EKS) or Workload Identity equivalents; see README.md.
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-rds
+  labels:
+    platform.mycompany.io/component: crossplane-providers
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-rds:v2.0.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-kubernetes
+  labels:
+    platform.mycompany.io/component: crossplane-providers
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/provider-kubernetes:v0.16.0
+---
+# AWS credentials come from the provider's ServiceAccount (IRSA), not from a static secret.
+apiVersion: aws.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: WebIdentity
+---
+# provider-kubernetes ProviderConfigs are in environment-provisioner.yaml. There is no default one,
+# so nothing can use the provider's own identity by accident.

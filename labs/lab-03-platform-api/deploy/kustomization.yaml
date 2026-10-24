@@ -1,0 +1,10 @@
+# `kubectl kustomize deploy` renders everything the controller needs.
+# The CRD lives in ../crds and is applied separately (make install).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: platform-system
+resources:
+  - serviceaccount.yaml
+  - role.yaml
+  - rbac.yaml
+  - deployment.yaml

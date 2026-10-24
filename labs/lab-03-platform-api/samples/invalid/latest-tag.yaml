@@ -1,0 +1,8 @@
+# REJECTED by the CEL rule on spec.image: the :latest tag is not allowed.
+apiVersion: platform.mycompany.io/v1alpha1
+kind: WebApp
+metadata:
+  name: bad-latest
+  namespace: developer-platform
+spec:
+  image: nginxinc/nginx-unprivileged:latest

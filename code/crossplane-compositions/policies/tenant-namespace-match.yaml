@@ -1,0 +1,43 @@
+# Kyverno policy: an Environment claim may only name the tenant that owns its namespace.
+#
+# The claim's namespace carries the label platform.mycompany.io/tenant. The rule fetches that
+# namespace and denies the claim when spec.parameters.tenant differs, including when the label
+# is missing. Kyverno is needed because CEL in ValidatingAdmissionPolicy cannot read other objects.
+# Requires Kyverno 1.11+ (apiCall in context). Install Kyverno separately; it is not in this repo.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: environment-tenant-matches-namespace
+  annotations:
+    policies.kyverno.io/title: Environment tenant must match the namespace tenant label
+    policies.kyverno.io/description: >-
+      An Environment claim's spec.parameters.tenant must equal the platform.mycompany.io/tenant
+      label on the namespace the claim is created in.
+  labels:
+    platform.mycompany.io/component: crossplane-compositions
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: tenant-matches-namespace-label
+      match:
+        any:
+          - resources:
+              kinds:
+                - platform.mycompany.io/v1alpha1/Environment
+              operations:
+                - CREATE
+                - UPDATE
+      context:
+        - name: nsTenant
+          apiCall:
+            urlPath: "/api/v1/namespaces/{{request.namespace}}"
+            jmesPath: 'metadata.labels."platform.mycompany.io/tenant"'
+      validate:
+        message: "spec.parameters.tenant must match the platform.mycompany.io/tenant label on this namespace."
+        deny:
+          conditions:
+            any:
+              - key: "{{ request.object.spec.parameters.tenant || '' }}"
+                operator: NotEquals
+                value: "{{ nsTenant || '' }}"

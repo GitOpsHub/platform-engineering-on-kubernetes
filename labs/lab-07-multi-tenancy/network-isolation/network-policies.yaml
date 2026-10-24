@@ -1,0 +1,75 @@
+# Three NetworkPolicies per tenant namespace, named and scoped as tenant-operator
+# creates them. setup.sh renders __TENANT__ (the tenant name) into the same-tenant
+# selectors. Requires a CNI that enforces NetworkPolicy (Cilium in Lab 01).
+#
+# 1. tenant-default-deny: all ingress and egress is denied unless another policy allows it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-default-deny
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# 2. tenant-allow-same-tenant: pods may talk to pods in any namespace carrying
+#    platform.mycompany.io/tenant=__TENANT__ (both directions).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-allow-same-tenant
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              platform.mycompany.io/tenant: __TENANT__
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              platform.mycompany.io/tenant: __TENANT__
+---
+# 3. tenant-allow-dns: egress to any pod in kube-system on UDP and TCP 53. This is the
+#    same scope tenant-operator uses. It is broader than selecting only k8s-app=kube-dns;
+#    see the README for the tighter variant.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-allow-dns
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# 4. tenant-allow-ingress-from-traefik: lab-only addition (not created by the operator).
+#    Lets the ingress controller in namespace traefik reach tenant pods. Traffic from
+#    other namespaces stays blocked. Its name does not collide with any operator object.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tenant-allow-ingress-from-traefik
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik

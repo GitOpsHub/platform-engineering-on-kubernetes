@@ -1,0 +1,91 @@
+# Software Template: register a new API. It creates a repository holding the OpenAPI
+# contract and an API entity in the catalog. Nothing is deployed.
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: openapi-api
+  title: OpenAPI contract
+  description: Create a repository with an OpenAPI contract and register it as an API.
+  tags:
+    - api
+    - openapi
+spec:
+  owner: group:platform-team
+  type: api
+  parameters:
+    - title: Describe the API
+      required:
+        - name
+        - owner
+        - system
+      properties:
+        name:
+          title: Name
+          type: string
+          description: Unique name. Lowercase letters, digits and dashes.
+          maxLength: 40
+          pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+          ui:field: EntityNamePicker
+        description:
+          title: Description
+          type: string
+        owner:
+          title: Owner
+          type: string
+          ui:field: OwnerPicker
+          ui:options:
+            catalogFilter:
+              kind:
+                - Group
+        system:
+          title: System
+          type: string
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: System
+    - title: Choose where the repository goes
+      required:
+        - repoUrl
+      properties:
+        repoUrl:
+          title: Repository location
+          type: string
+          ui:field: RepoUrlPicker
+          ui:options:
+            allowedHosts:
+              - github.com
+  steps:
+    - id: fetch-base
+      name: Fetch skeleton
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          name: ${{ parameters.name }}
+          description: ${{ parameters.description }}
+          owner: ${{ parameters.owner }}
+          system: ${{ parameters.system }}
+    - id: publish
+      name: Publish to GitHub
+      action: publish:github
+      input:
+        allowedHosts:
+          - github.com
+        description: ${{ parameters.description }}
+        repoUrl: ${{ parameters.repoUrl }}
+        defaultBranch: main
+        repoVisibility: private
+    - id: register
+      name: Register in the catalog
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps.publish.output.repoContentsUrl }}
+        catalogInfoPath: /catalog-info.yaml
+  output:
+    links:
+      - title: Repository
+        url: ${{ steps.publish.output.remoteUrl }}
+      - title: Open the API in the catalog
+        icon: catalog
+        entityRef: ${{ steps.register.output.entityRef }}

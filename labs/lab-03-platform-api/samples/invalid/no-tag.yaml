@@ -1,0 +1,8 @@
+# REJECTED by the CEL rule on spec.image: an explicit tag or digest is required.
+apiVersion: platform.mycompany.io/v1alpha1
+kind: WebApp
+metadata:
+  name: bad-untagged
+  namespace: developer-platform
+spec:
+  image: nginxinc/nginx-unprivileged

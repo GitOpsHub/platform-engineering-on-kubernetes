@@ -1,0 +1,11 @@
+apiVersion: platform.mycompany.io/v1alpha1
+kind: Environment
+metadata:
+  name: pr-123
+  namespace: platform-envs
+spec:
+  tenant: team-payments
+  type: preview
+  ttl: 72h
+  template: baseline
+  cluster: ""

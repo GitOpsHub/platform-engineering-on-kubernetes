@@ -1,0 +1,80 @@
+# ConfigMap picked up by the kube-prometheus-stack Grafana sidecar (label grafana_datasource: "1").
+# The data block mirrors grafana/datasources.yaml; edit both files together.
+# Apply: kubectl apply -f grafana/datasources-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources-lab06
+  namespace: platform-monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  datasources.yaml: |
+    # Grafana datasource provisioning (apiVersion 1) for Lab 06.
+    apiVersion: 1
+    datasources:
+      # Metrics -> traces: exemplar trace_id on the histogram links to Tempo.
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus
+        access: proxy
+        url: http://prometheus-operated.platform-monitoring.svc:9090
+        isDefault: true
+        editable: false
+        jsonData:
+          httpMethod: POST
+          exemplarTraceIdDestinations:
+            - name: trace_id
+              datasourceUid: tempo
+
+      # Logs -> traces: the trace_id field in the JSON log line becomes a link to Tempo.
+      - name: Loki
+        type: loki
+        uid: loki
+        access: proxy
+        url: http://loki.platform-monitoring.svc:3100
+        editable: false
+        jsonData:
+          maxLines: 1000
+          derivedFields:
+            - name: TraceID
+              matcherType: regex
+              matcherRegex: '"trace_id":\s*"(\w+)"'
+              url: '$${__value.raw}'
+              datasourceUid: tempo
+              urlDisplayLabel: View trace
+
+      # Traces -> logs and metrics, plus service map and node graph.
+      - name: Tempo
+        type: tempo
+        uid: tempo
+        access: proxy
+        url: http://tempo.platform-monitoring.svc:3200
+        editable: false
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: loki
+            spanStartTimeShift: "-1m"
+            spanEndTimeShift: "1m"
+            filterByTraceID: true
+            filterBySpanID: false
+            customQuery: false
+            tags:
+              - key: service.name
+                value: app
+          tracesToMetrics:
+            datasourceUid: prometheus
+            spanStartTimeShift: "-1m"
+            spanEndTimeShift: "1m"
+            tags:
+              - key: service.name
+                value: job
+            queries:
+              - name: Request rate
+                query: 'sum(rate(http_request_duration_seconds_count{$$__tags}[5m]))'
+          serviceMap:
+            datasourceUid: prometheus
+          nodeGraph:
+            enabled: true
+          lokiSearch:
+            datasourceUid: loki

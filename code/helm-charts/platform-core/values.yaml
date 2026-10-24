@@ -1,0 +1,186 @@
+# Default values for platform-core.
+# Every image is set through a values block: repository, tag and pullPolicy.
+# An empty tag falls back to .Chart.AppVersion.
+
+# The control-plane namespace. Created by this chart and labelled with the
+# Pod Security Standard "restricted" profile, so every workload must set a
+# restricted securityContext (the templates do).
+controlPlane:
+  namespace: platform-system
+  labels: {}
+
+# platform-api: the HTTP/gRPC front door. It never uses its own identity to read
+# or write platform resources. It impersonates the authenticated caller, so
+# cluster RBAC is evaluated for the real user.
+platformApi:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/gitopshub/platform-api
+    tag: ""
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+
+  # Port the process listens on (PLATFORM_API_ADDR). Service port maps to it.
+  containerPort: 8080
+  service:
+    type: ClusterIP
+    port: 80
+
+  logLevel: info
+  cors:
+    # Comma-separated browser origins allowed by CORS. Empty = same-origin only.
+    origins: ""
+    credentials: false
+
+  auth:
+    # Name of an existing Secret with a key "tokens" in 'token,subject[,groups]' lines.
+    # Without it every resource request is rejected with 401 (the server still starts).
+    existingSecret: ""
+
+  # Members of this group may create and delete Tenants (checked by platform-api
+  # before impersonation). Everything else is decided by Kubernetes RBAC.
+  platformAdminGroup: platform-admins
+
+  # platform-api acts as the caller, so it needs `impersonate` on the caller's subject and groups.
+  # RBAC cannot express "any user except system:*", so the grant is an explicit allowlist:
+  #   users:  every subject platform-api may act as (required; empty fails the render)
+  #   groups: every group platform-api may act for (non-empty; must include every group a caller can hold)
+  # Entries must not start with "system:". The chart fails if they do.
+  # allowAnyUser: true renders an unscoped grant on users. Use it only if you accept that every
+  # authenticated subject can be impersonated. The default is false.
+  impersonation:
+    users: []
+    allowAnyUser: false
+    groups:
+      - platform-admins
+
+  serviceAccount:
+    create: true
+    name: platform-api
+    annotations: {}
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# The three operators. Each block is rendered as a ServiceAccount, a ClusterRole
+# (from `rules`), a ClusterRoleBinding and a Deployment. Set `enabled: false` to
+# skip one, for example when a cluster only runs the tenant operator.
+operators:
+  tenant:
+    enabled: true
+    image:
+      repository: ghcr.io/gitopshub/tenant-operator
+      tag: ""
+      pullPolicy: IfNotPresent
+    replicaCount: 1
+    # Flags passed to the manager binary. tenant-operator accepts these.
+    args:
+      - --health-probe-bind-address=:8081
+      - --metrics-bind-address=0
+    healthPort: 8081
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+    rules:
+      - apiGroups: ["platform.mycompany.io"]
+        resources: ["tenants", "tenants/status", "tenants/finalizers"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiGroups: [""]
+        resources: ["namespaces"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      # RoleBindings: full CRUD, so the operator can grant tenant access.
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        resources: ["rolebindings"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      # ClusterRoles: read only. The operator never creates or edits them.
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        resources: ["clusterroles"]
+        verbs: ["get", "list", "watch"]
+      # Bind is needed to reference a ClusterRole from a RoleBinding. Limited to the
+      # built-in tenant roles by name. No wildcard.
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        resources: ["clusterroles"]
+        resourceNames: ["admin", "edit", "view"]
+        verbs: ["bind"]
+      - apiGroups: ["networking.k8s.io"]
+        resources: ["networkpolicies"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  environment:
+    enabled: true
+    image:
+      repository: ghcr.io/gitopshub/environment-operator
+      tag: ""
+      pullPolicy: IfNotPresent
+    replicaCount: 1
+    args:
+      - --health-probe-bind-address=:8081
+      - --metrics-bind-address=0
+    healthPort: 8081
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+    rules:
+      - apiGroups: ["platform.mycompany.io"]
+        resources: ["environments", "environments/status", "environments/finalizers"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiGroups: [""]
+        resources: ["resourcequotas", "limitranges"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  workload:
+    enabled: true
+    image:
+      repository: ghcr.io/gitopshub/workload-operator
+      tag: ""
+      pullPolicy: IfNotPresent
+    replicaCount: 1
+    args:
+      - --health-probe-bind-address=:8081
+      - --metrics-bind-address=0
+    healthPort: 8081
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+    rules:
+      - apiGroups: ["platform.mycompany.io"]
+        resources: ["workloads", "workloads/status", "workloads/finalizers"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiGroups: ["apps"]
+        resources: ["deployments"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiGroups: [""]
+        resources: ["services", "configmaps"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

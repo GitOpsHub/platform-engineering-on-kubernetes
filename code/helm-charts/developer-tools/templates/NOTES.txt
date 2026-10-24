@@ -1,0 +1,9 @@
+developer-tools {{ .Chart.Version }} is installed in namespace "{{ .Release.Namespace }}".
+
+{{- if .Values.platformCli.docs.enabled }}
+platform-cli docs: kubectl -n {{ .Release.Namespace }} get configmap {{ .Values.platformCli.docs.name }} -o jsonpath='{.data.platform-cli\.md}'
+{{- end }}
+{{- if .Values.backstage.enabled }}
+Backstage: kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/name=backstage
+Run `helm test {{ .Release.Name }} -n {{ .Release.Namespace }}` after the portal is ready.
+{{- end }}

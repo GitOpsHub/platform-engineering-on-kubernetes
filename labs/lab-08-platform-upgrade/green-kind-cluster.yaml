@@ -1,0 +1,54 @@
+# green-kind-cluster.yaml
+# The "green" cluster for Lab 08: the same shape as Lab 01's kind-cluster.yaml,
+# but on the next Kubernetes minor (v1.36) and on different host ports so it can
+# run next to the "blue" cluster from Lab 01.
+#
+# - Default CNI (kindnet) and kube-proxy are disabled, as in Lab 01. Install
+#   Cilium on green the same way Lab 01 does, but override the API server host
+#   (see blue-green-deploy.md, step 1).
+# - Host ports 9080/9443 map to the Traefik NodePorts 30080/30443. Blue uses
+#   8080/8443, so both clusters can run on the same laptop.
+# - Pod and service subnets differ from Lab 01 so the two clusters never share
+#   CIDRs (this matters if you later peer them, e.g. with Cilium cluster mesh).
+#
+# Usage: kind create cluster --config green-kind-cluster.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: platform-engineering-green
+networking:
+  apiServerAddress: "127.0.0.1"
+  podSubnet: "10.245.0.0/16"
+  serviceSubnet: "10.97.0.0/16"
+  disableDefaultCNI: true # Cilium is installed by the runbook
+  kubeProxyMode: "none"   # Cilium replaces kube-proxy
+nodes:
+  - role: control-plane
+    # Next Kubernetes minor after Lab 01 (v1.35.8). Bump together with the kind
+    # binary; see https://github.com/kubernetes-sigs/kind/releases. No digest is
+    # pinned yet: add one with `docker buildx imagetools inspect kindest/node:v1.36.4`
+    # once you have checked it on your architecture.
+    image: kindest/node:v1.36.4
+    labels:
+      platform.mycompany.io/role: control-plane
+      platform.mycompany.io/cluster: green
+    extraPortMappings:
+      - containerPort: 30080 # Traefik "web" NodePort
+        hostPort: 9080
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      - containerPort: 30443 # Traefik "websecure" NodePort
+        hostPort: 9443
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+  - role: worker
+    image: kindest/node:v1.36.4
+    labels:
+      platform.mycompany.io/role: worker
+      platform.mycompany.io/pool: workload
+      platform.mycompany.io/cluster: green
+  - role: worker
+    image: kindest/node:v1.36.4
+    labels:
+      platform.mycompany.io/role: worker
+      platform.mycompany.io/pool: workload
+      platform.mycompany.io/cluster: green

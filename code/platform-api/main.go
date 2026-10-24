@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -50,6 +51,12 @@ type Config struct {
 	TokensFile      string
 	CORSOrigins     string
 	CORSCredentials bool
+	AdminGroup      string
+	// ImpersonateGroups is the allowlist of groups platform-api may impersonate.
+	// Groups outside it are dropped before impersonation. It mirrors the groups
+	// listed in the chart's impersonator ClusterRole.
+	ImpersonateGroups string
+	InsecureSkipAuthz bool
 }
 
 func main() {
@@ -73,6 +80,13 @@ func parseFlags(args []string) Config {
 		"File of 'token,subject[,group1;group2]' lines for bearer auth; empty disables auth (dev only)")
 	fs.StringVar(&c.CORSOrigins, "cors-origins", os.Getenv("PLATFORM_API_CORS_ORIGINS"), "Comma-separated allowed CORS origins")
 	fs.BoolVar(&c.CORSCredentials, "cors-credentials", false, "Send Access-Control-Allow-Credentials for allowed (non-wildcard) origins")
+	fs.StringVar(&c.AdminGroup, "platform-admin-group", envOr("PLATFORM_API_ADMIN_GROUP", handlers.DefaultPlatformAdminGroup),
+		"Group whose members may create and delete Tenants")
+	// Deliberately not read from the environment: it must be an explicit choice.
+	fs.StringVar(&c.ImpersonateGroups, "impersonate-groups", envOr("PLATFORM_API_IMPERSONATE_GROUPS", handlers.DefaultPlatformAdminGroup),
+		"Comma-separated allowlist of groups that may be impersonated. system:* groups are refused. The admin group is always included.")
+	fs.BoolVar(&c.InsecureSkipAuthz, "insecure-skip-authz", false,
+		"DEV ONLY: allow unauthenticated requests (served with platform-api's own credentials) and skip the admin-group check")
 	_ = fs.Parse(args)
 	return c
 }
@@ -116,18 +130,30 @@ func run(cfg Config, logger *slog.Logger) error {
 		}
 		verifier = tokens
 	} else {
-		logger.Warn("authentication DISABLED: no --tokens-file configured")
+		logger.Warn("no --tokens-file configured: resource requests will be rejected with 401 " +
+			"unless --insecure-skip-authz is set (development only)")
+	}
+	if cfg.InsecureSkipAuthz {
+		logger.Warn("INSECURE MODE: --insecure-skip-authz is set. Unauthenticated requests use platform-api's own " +
+			"ServiceAccount, and the platform-admin check is disabled. NEVER run this in a shared cluster.")
 	}
 
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
+	impersonateAllowlist, err := buildAllowlist(cfg.ImpersonateGroups)
+	if err != nil {
+		return err
+	}
 	opts := handlers.Options{
-		Dynamic:         dyn,
-		Discovery:       disc,
-		Build:           handlers.BuildInfo{Version: Version, Commit: Commit, BuildTime: BuildTime},
-		EnableProfiling: cfg.EnableProfiling,
-		OpenAPISpec:     openAPISpec,
+		ClientFor:          impersonatingClientFor(restCfg, impersonateAllowlist, logger),
+		Dynamic:            dyn,
+		Discovery:          disc,
+		Build:              handlers.BuildInfo{Version: Version, Commit: Commit, BuildTime: BuildTime},
+		EnableProfiling:    cfg.EnableProfiling,
+		OpenAPISpec:        openAPISpec,
+		PlatformAdminGroup: cfg.AdminGroup,
+		InsecureSkipAuthz:  cfg.InsecureSkipAuthz,
 	}
 	if cfg.EnableMetrics {
 		opts.MetricsHandler = promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
@@ -175,6 +201,57 @@ func run(cfg Config, logger *slog.Logger) error {
 	}
 	logger.Info("server stopped")
 	return nil
+}
+
+// buildAllowlist parses the impersonation allowlist. It refuses system:* entries.
+// The list is exactly what the chart renders into impersonation.groups.
+func buildAllowlist(raw string) ([]string, error) {
+	allowed := splitCSV(raw)
+	for _, g := range allowed {
+		if strings.HasPrefix(g, "system:") {
+			return nil, fmt.Errorf("--impersonate-groups: %q is a reserved system group and cannot be impersonated", g)
+		}
+	}
+	return allowed, nil
+}
+
+// impersonatingClientFor returns the per-request client factory. Each call
+// refuses reserved identities, drops groups that are not allowlisted, and
+// builds a dynamic client that impersonates the authenticated caller. Every
+// impersonation is written to the audit log.
+func impersonatingClientFor(base *rest.Config, allowed []string, logger *slog.Logger) handlers.ClientFactory {
+	return func(p *mw.Principal) (dynamic.Interface, error) {
+		if p == nil || p.Subject == "" {
+			return nil, errors.New("refusing to build a client without an authenticated subject")
+		}
+		if err := handlers.ValidatePrincipal(p); err != nil {
+			logger.Warn("refused impersonation of a reserved identity", "audit", true,
+				"subject", p.Subject, "groups", p.Groups)
+			return nil, err
+		}
+		c, dropped := impersonationConfig(base, p, allowed)
+		logger.Info("impersonating", "audit", true, "subject", p.Subject,
+			"groups", c.Impersonate.Groups, "droppedGroups", dropped)
+		return dynamic.NewForConfig(c)
+	}
+}
+
+// impersonationConfig returns a copy of base that impersonates p with only the
+// allowlisted groups. It also returns the groups that were dropped. base itself
+// is never modified, so the server's own identity is untouched. Subjects are not
+// filtered here: the users rule of the ClusterRole (resourceNames) limits them.
+func impersonationConfig(base *rest.Config, p *mw.Principal, allowed []string) (*rest.Config, []string) {
+	var kept, dropped []string
+	for _, g := range p.Groups {
+		if slices.Contains(allowed, g) && !strings.HasPrefix(g, "system:") {
+			kept = append(kept, g)
+		} else {
+			dropped = append(dropped, g)
+		}
+	}
+	c := rest.CopyConfig(base)
+	c.Impersonate = rest.ImpersonationConfig{UserName: p.Subject, Groups: kept}
+	return c, dropped
 }
 
 func restConfig(kubeconfig string) (*rest.Config, error) {

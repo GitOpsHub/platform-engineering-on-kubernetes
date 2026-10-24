@@ -1,530 +1,408 @@
-# Lab 03: Build a Platform API
+# Lab 03: Platform API - a WebApp Operator
 
 ## Objectives
-- Build a Kubernetes-native Platform API using controller-runtime
-- Define Custom Resource Definitions (CRDs) for platform resources
-- Implement controllers for Service, Environment, Tenant, and Deployment
-- Deploy the Platform API to a cluster
-- Test with the platform CLI
+
+By the end of this lab you will be able to:
+
+- Define a custom API (`WebApp`, in `platform.mycompany.io/v1alpha1`) in Go and generate its CRD, OpenAPI schema and DeepCopy code
+- Add server-side validation with **CEL** rules, so bad input is rejected before a controller sees it
+- Write a reconciler that creates a Deployment and a Service, with **owner references** and **status conditions**
+- Use a **finalizer** to control the order of cleanup on delete
+- Unit-test a reconciler with the controller-runtime **fake client**, without a cluster
+- Run the controller on your laptop, then build and deploy it into the Lab 01 cluster with RBAC
 
 ## Prerequisites
-- Completed Lab 01 (Cluster Setup) and Lab 02 (GitOps Bootstrap)
-- Go 1.21+ installed
-- kubebuilder CLI installed
-- Docker installed
 
-## Estimated Time: 60-90 minutes
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| [Lab 01](../lab-01-cluster-setup/README.md) cluster | - | Context `kind-platform-engineering`. The `developer-platform` and `platform-system` namespaces must exist |
+| Go | 1.25+ | Required by the module (controller-runtime v0.23 needs 1.25). Go 1.22 is the minimum for the code itself |
+| Docker | 25+ | Builds the controller image |
+| kubectl | 1.33+ | |
+| make | any | |
 
----
+Background reading:
+[Kubernetes API Primer](../../docs/01-kubernetes-fundamentals/api-primer.md),
+[Controllers and Operators](../../docs/01-kubernetes-fundamentals/controllers-operators.md),
+[Kubernetes CRDs](../../docs/09-platform-apis/kubernetes-crds.md),
+[Platform API Design](../../docs/09-platform-apis/platform-api-design.md).
 
-## Architecture
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  Platform CLI   │────▶│  Platform API    │────▶│  Kubernetes     │
-│  (kubectl-like) │     │  (CRDs + Ctrlrs) │     │  Resources      │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-                              ▲
-                              │
-                     ┌────────┴────────┐
-                     │  GitOps         │
-                     │  (ArgoCD/Flux)  │
-                     └─────────────────┘
-```
+## Estimated Time: 60-75 minutes
 
 ---
 
-## Step 1: Initialize Project with Kubebuilder
+## How it fits together
 
-```bash
-# Create project directory
-mkdir -p platform-api
-cd platform-api
-
-# Initialize kubebuilder project
-kubebuilder init --domain mycompany.io --repo github.com/myorg/platform-api --plugins=go/v4
-
-# Create API types
-kubebuilder create api --group platform --version v1 --kind Service --resource --controller
-kubebuilder create api --group platform --version v1 --kind Environment --resource --controller
-kubebuilder create api --group platform --version v1 --kind Tenant --resource --controller
-kubebuilder create api --group platform --version v1 --kind Deployment --resource --controller
+```mermaid
+flowchart LR
+  dev([Developer]) -- "kubectl apply WebApp" --> api[API server]
+  api -- "CEL + OpenAPI validation" --> api
+  api -- watch --> ctrl[webapp-controller]
+  ctrl -- "creates + owns" --> dep[Deployment]
+  ctrl -- "creates + owns" --> svc[Service]
+  dep --> pods[Pods]
+  ctrl -- "status: Ready condition" --> api
 ```
 
----
+The developer writes one small object: *what* to run. The controller turns it
+into the Kubernetes objects that *how* to run it requires. Those objects carry
+an owner reference back to the WebApp.
 
-## Step 2: Define API Types
+### The WebApp contract
 
-### Service Type
-```go
-// api/v1/service_types.go
-package v1
-
-import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
-
-type ServiceSpec struct {
-	Description string            `json:"description,omitempty"`
-	Owner       string            `json:"owner"`
-	Repository  string            `json:"repository,omitempty"`
-	Language    string            `json:"language,omitempty"`
-	Framework   string            `json:"framework,omitempty"`
-	Tags        map[string]string `json:"tags,omitempty"`
-}
-
-type ServiceStatus struct {
-	Phase       string            `json:"phase,omitempty"`
-	Conditions  []metav1.Condition `json:"conditions,omitempty"`
-	Environments []string         `json:"environments,omitempty"`
-	LastDeployed *metav1.Time      `json:"lastDeployed,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Owner",type=string,JSONPath=.spec.owner
-// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=.status.phase
-// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=.metadata.creationTimestamp
-type Service struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec   ServiceSpec   `json:"spec,omitempty"`
-	Status ServiceStatus `json:"status,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-type ServiceList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Service `json:"items"`
-}
-```
-
-### Environment Type
-```go
-// api/v1/environment_types.go
-package v1
-
-import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
-
-type EnvironmentSpec struct {
-	DisplayName string            `json:"displayName,omitempty"`
-	Description string            `json:"description,omitempty"`
-	Cluster     string            `json:"cluster,omitempty"`
-	Namespace   string            `json:"namespace"`
-	Type        EnvironmentType   `json:"type,omitempty"` // development, staging, production
-	Tags        map[string]string `json:"tags,omitempty"`
-}
-
-type EnvironmentType string
-
-const (
-	EnvironmentTypeDevelopment EnvironmentType = "development"
-	EnvironmentTypeStaging     EnvironmentType = "staging"
-	EnvironmentTypeProduction  EnvironmentType = "production"
-)
-
-type EnvironmentStatus struct {
-	Phase      string            `json:"phase,omitempty"`
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
-	Services   []string          `json:"services,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=.spec.type
-// +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=.spec.cluster
-// +kubebuilder:printcolumn:name="Namespace",type=string,JSONPath=.spec.namespace
-// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=.status.phase
-// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=.metadata.creationTimestamp
-type Environment struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec   EnvironmentSpec   `json:"spec,omitempty"`
-	Status EnvironmentStatus `json:"status,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-type EnvironmentList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Environment `json:"items"`
-}
-```
-
-### Deployment Type
-```go
-// api/v1/deployment_types.go
-package v1
-
-import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
-
-type DeploymentSpec struct {
-	Service     string            `json:"service"`
-	Environment string            `json:"environment"`
-	Version     string            `json:"version"`
-	Config      map[string]string `json:"config,omitempty"`
-	Replicas    *int32            `json:"replicas,omitempty"`
-	Resources   ResourceRequirements `json:"resources,omitempty"`
-}
-
-type ResourceRequirements struct {
-	CPU    string `json:"cpu,omitempty"`
-	Memory string `json:"memory,omitempty"`
-}
-
-type DeploymentStatus struct {
-	Phase       string            `json:"phase,omitempty"`
-	Conditions  []metav1.Condition `json:"conditions,omitempty"`
-	Replicas    int32             `json:"replicas,omitempty"`
-	ReadyReplicas int32           `json:"readyReplicas,omitempty"`
-	Image       string            `json:"image,omitempty"`
-	Endpoint    string            `json:"endpoint,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Service",type=string,JSONPath=.spec.service
-// +kubebuilder:printcolumn:name="Environment",type=string,JSONPath=.spec.environment
-// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=.spec.version
-// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=.status.phase
-// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=.status.readyReplicas
-// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=.metadata.creationTimestamp
-type Deployment struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec   DeploymentSpec   `json:"spec,omitempty"`
-	Status DeploymentStatus `json:"status,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-type DeploymentList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Deployment `json:"items"`
-}
-```
-
----
-
-## Step 3: Implement Controllers
-
-### Service Controller
-```go
-// internal/controller/service_controller.go
-package controller
-
-import (
-	"context"
-	"time"
-
-	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	platformv1 "github.com/myorg/platform-api/api/v1"
-)
-
-type ServiceReconciler struct {
-	client.Client
-	Scheme *runtime.Scheme
-	Log    logr.Logger
-}
-
-func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx).WithValues("service", req.NamespacedName)
-
-	service := &platformv1.Service{}
-	if err := r.Get(ctx, req.NamespacedName, service); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-
-	// Handle deletion
-	if !service.DeletionTimestamp.IsZero() {
-		return r.handleDeletion(ctx, service)
-	}
-
-	// Initialize status
-	if service.Status.Phase == "" {
-		service.Status.Phase = "Pending"
-		if err := r.Status().Update(ctx, service); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	// Validate service
-	if err := r.validateService(service); err != nil {
-		log.Error(err, "Service validation failed")
-		r.updateCondition(service, "Valid", metav1.ConditionFalse, "ValidationFailed", err.Error())
-		r.updatePhase(ctx, service, "Failed")
-		return ctrl.Result{}, err
-	}
-
-	// Update status
-	r.updateCondition(service, "Valid", metav1.ConditionTrue, "Validated", "Service is valid")
-	r.updatePhase(ctx, service, "Ready")
-
-	log.Info("Service reconciled successfully")
-	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-}
-
-func (r *ServiceReconciler) handleDeletion(ctx context.Context, service *platformv1.Service) (ctrl.Result, error) {
-	// Cleanup logic here
-	return ctrl.Result{}, nil
-}
-
-func (r *ServiceReconciler) validateService(service *platformv1.Service) error {
-	if service.Spec.Owner == "" {
-		return fmt.Errorf("owner is required")
-	}
-	return nil
-}
-
-func (r *ServiceReconciler) updateCondition(service *platformv1.Service, conditionType string, status metav1.ConditionStatus, reason, message string) {
-	condition := metav1.Condition{
-		Type:    conditionType,
-		Status:  status,
-		Reason:  reason,
-		Message: message,
-	}
-	// ... update logic
-}
-
-func (r *ServiceReconciler) updatePhase(ctx context.Context, service *platformv1.Service, phase string) {
-	service.Status.Phase = phase
-	r.Status().Update(ctx, service)
-}
-
-func (r *ServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&platformv1.Service{}).
-		Complete(r)
-}
-```
-
----
-
-## Step 4: Build and Deploy
-
-### Build Docker Image
-```bash
-# Build
-make docker-build IMG=ghcr.io/myorg/platform-api:v1.0.0
-
-# Push
-make docker-push IMG=ghcr.io/myorg/platform-api:v1.0.0
-```
-
-### Deploy with Kustomize
-```bash
-# Deploy to cluster
-make deploy IMG=ghcr.io/myorg/platform-api:v1.0.0
-
-# Or use kustomize directly
-kubectl apply -k config/default
-```
-
-### Verify Deployment
-```bash
-# Check pods
-kubectl get pods -n platform-system -l control-plane=controller-manager
-
-# Check CRDs
-kubectl get crd | grep platform.mycompany.io
-
-# Check API
-kubectl api-resources --api-group=platform.mycompany.io
-```
-
----
-
-## Step 5: Test the Platform API
-
-### Create a Service
 ```yaml
-# service.yaml
-apiVersion: platform.mycompany.io/v1
-kind: Service
+apiVersion: platform.mycompany.io/v1alpha1
+kind: WebApp
 metadata:
-  name: user-service
-  namespace: platform-system
+  name: hello
+  namespace: developer-platform
 spec:
-  description: "User management service"
-  owner: "team-platform"
-  repository: "https://github.com/myorg/user-service"
-  language: "go"
-  framework: "gin"
-  tags:
-    team: "platform"
-    criticality: "high"
+  image: nginxinc/nginx-unprivileged:1.29-alpine   # explicit tag required, :latest rejected
+  replicas: 2                                       # 0-10, default 1
+  port: 8080                                        # default 8080
 ```
 
-```bash
-kubectl apply -f service.yaml
-```
+### Files in this lab
 
-### Create an Environment
-```yaml
-# environment.yaml
-apiVersion: platform.mycompany.io/v1
-kind: Environment
-metadata:
-  name: production
-  namespace: platform-system
-spec:
-  displayName: "Production Environment"
-  description: "Production environment for customer-facing services"
-  cluster: "production-east"
-  namespace: "production"
-  type: "production"
-```
-
-```bash
-kubectl apply -f environment.yaml
-```
-
-### Create a Deployment
-```yaml
-# deployment.yaml
-apiVersion: platform.mycompany.io/v1
-kind: Deployment
-metadata:
-  name: user-service-prod
-  namespace: platform-system
-spec:
-  service: "user-service"
-  environment: "production"
-  version: "v1.2.3"
-  replicas: 3
-  resources:
-    cpu: "500m"
-    memory: "512Mi"
-  config:
-    LOG_LEVEL: "info"
-    DB_POOL_SIZE: "10"
-```
-
-```bash
-kubectl apply -f deployment.yaml
-```
-
-### List Resources via CLI
-```bash
-# Using kubectl
-kubectl get services.platform.mycompany.io -n platform-system
-kubectl get environments.platform.mycompany.io -n platform-system
-kubectl get deployments.platform.mycompany.io -n platform-system
-
-# Using platform-cli (from Lab 04)
-platform-cli service list
-platform-cli env list
-platform-cli deployment list
-```
+| Path | Purpose |
+|------|---------|
+| [`api/v1alpha1/webapp_types.go`](api/v1alpha1/webapp_types.go) | The Go types. Markers (`+kubebuilder:...`) generate the CRD and validation |
+| [`api/v1alpha1/zz_generated.deepcopy.go`](api/v1alpha1/zz_generated.deepcopy.go) | DeepCopy methods, generated by controller-gen |
+| [`controllers/webapp_controller.go`](controllers/webapp_controller.go) | The reconciler: Deployment, Service, finalizer, status |
+| [`controllers/webapp_controller_test.go`](controllers/webapp_controller_test.go) | Unit tests with the fake client |
+| [`cmd/main.go`](cmd/main.go) | Manager entrypoint: flags, scheme, probes, leader election |
+| [`crds/`](crds/) | The generated `WebApp` CustomResourceDefinition |
+| [`deploy/`](deploy/) | ServiceAccount, RBAC, Deployment (Kustomize). `role.yaml` is generated |
+| [`samples/`](samples/) | A valid WebApp, plus three invalid ones that must be rejected |
+| [`Dockerfile`](Dockerfile) | Two-stage build, distroless, non-root |
+| [`Makefile`](Makefile) | `build`, `run`, `test`, `install`, `deploy`, `undeploy`, plus codegen |
 
 ---
 
-## Step 6: Add Validation Webhooks
+## Step 1 - Read the API before you run anything
 
-```go
-// api/v1/service_webhook.go
-package v1
+Open [`api/v1alpha1/webapp_types.go`](api/v1alpha1/webapp_types.go). Three things to notice:
 
-import (
-	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-)
+1. **The Go type is the source of truth.** The `+kubebuilder:validation:...` comments
+   above each field become OpenAPI schema in the CRD.
+2. **Validation is server-side.** The `XValidation` rules are CEL expressions that the
+   API server evaluates on every create and update.
+3. **`Replicas` and `Port` are pointers.** A pointer distinguishes "unset" (the
+   default applies) from an explicit `0`. An `int32` with `omitempty` could not tell them apart.
 
-func (r *Service) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(r).
-		Complete()
-}
+## Step 2 - Generate the code
 
-var _ webhook.Defaulter = &Service{}
-
-func (r *Service) Default() {
-	if r.Spec.Language == "" {
-		r.Spec.Language = "go"
-	}
-	if r.Spec.Framework == "" {
-		r.Spec.Framework = "standard"
-	}
-}
-
-var _ webhook.Validator = &Service{}
-
-func (r *Service) ValidateCreate() error {
-	if r.Spec.Owner == "" {
-		return field.Invalid(field.NewPath("spec").Child("owner"), r.Spec.Owner, "owner is required")
-	}
-	if r.Spec.Repository != "" && !strings.HasPrefix(r.Spec.Repository, "https://") {
-		return field.Invalid(field.NewPath("spec").Child("repository"), r.Spec.Repository, "repository must be HTTPS URL")
-	}
-	return nil
-}
-
-func (r *Service) ValidateUpdate(old runtime.Object) error {
-	return r.ValidateCreate()
-}
-
-func (r *Service) ValidateDelete() error {
-	return nil
-}
+```bash
+make generate manifests
 ```
+
+This installs a pinned `controller-gen` into `bin/` (not in the module's dependency
+graph) and writes:
+
+- `api/v1alpha1/zz_generated.deepcopy.go` from the `object` generator
+- `crds/platform.mycompany.io_webapps.yaml` from the type markers
+- `deploy/role.yaml` from the `+kubebuilder:rbac` markers in `controllers/`
+
+Generated files are committed, so readers can see them without running the tools.
+To check they are current:
+
+```bash
+make generate manifests && git diff --exit-code -- api crds deploy
+```
+
+Look at the CEL rules in the CRD:
+
+```bash
+grep -A3 'x-kubernetes-validations' crds/platform.mycompany.io_webapps.yaml
+```
+
+## Step 3 - Run the unit tests
+
+```bash
+make test
+```
+
+Expected: four tests pass and no cluster is involved.
+
+| Test | What it proves |
+|------|----------------|
+| `TestReconcileCreatesDeploymentAndService` | Children exist, carry the right spec, and are owned by the WebApp. Ready is `False/WaitingForPods` |
+| `TestReadyConditionFollowsDeploymentStatus` | When the Deployment reports ready replicas, the WebApp's `Ready` condition flips to `True` |
+| `TestDeletionRunsFinalizerAndRemovesChildren` | Deleting a WebApp runs the finalizer, removes the children, then lets the WebApp go |
+| `TestDefaultsWhenOptionalFieldsUnset` | Unset `replicas` and `port` fall back to 1 and 8080 |
+
+Read [`controllers/webapp_controller.go`](controllers/webapp_controller.go) next to the tests. The fake client
+(`sigs.k8s.io/controller-runtime/pkg/client/fake`) stores objects in memory and
+implements the API semantics this lab depends on, such as finalizers and status
+subresources.
+
+## Step 4 - Install the CRD
+
+```bash
+make install
+kubectl get crd webapps.platform.mycompany.io
+kubectl explain webapp.spec --api-version=platform.mycompany.io/v1alpha1
+```
+
+`kubectl explain` prints the field descriptions from the generated schema.
+
+## Step 5 - Run the controller on your laptop
+
+Keep this running in its own terminal:
+
+```bash
+make run
+```
+
+It uses your current kubeconfig context, so make sure it is `kind-platform-engineering`.
+With `--leader-elect` off (the default for `make run`) it does not need the leader-election RBAC.
+
+In a second terminal, create a WebApp:
+
+```bash
+kubectl apply -f samples/webapp-hello.yaml
+kubectl -n developer-platform get webapp hello
+kubectl -n developer-platform get deploy,svc,pods -l app.kubernetes.io/instance=hello
+```
+
+Inspect the ownership chain:
+
+```bash
+kubectl -n developer-platform get deploy hello \
+  -o jsonpath='{.metadata.ownerReferences[0].kind}/{.metadata.ownerReferences[0].name}{"\n"}'
+# WebApp/hello
+```
+
+Then read the status the controller wrote:
+
+```bash
+kubectl -n developer-platform get webapp hello -o yaml | sed -n '/^status:/,$p'
+```
+
+You should see `readyReplicas`, the in-cluster `url`, and a `Ready` condition.
+The condition reads `False/WaitingForPods` until both pods pass their readiness probe, then `True/ReplicasReady`.
+
+```bash
+kubectl -n developer-platform get webapp hello   # printer columns: IMAGE, READY, DESIRED, STATUS
+```
+
+Stop `make run` with Ctrl-C when you are done with this step.
+
+## Step 6 - Watch validation reject bad input
+
+These samples must all be **rejected by the API server**, before any controller runs:
+
+```bash
+kubectl apply -f samples/invalid/latest-tag.yaml        # CEL: image must not use the :latest tag
+kubectl apply -f samples/invalid/no-tag.yaml            # CEL: image must include an explicit tag or digest
+kubectl apply -f samples/invalid/too-many-replicas.yaml # OpenAPI: replicas must be <= 10
+```
+
+Each command prints an `Invalid value` error that names the rule. Nothing is created.
+Validation runs in the API server, so it applies to every client: kubectl, GitOps (Lab 02) and CI.
+
+## Step 7 - Deploy the controller into the cluster
+
+`make deploy` applies the CRD, builds the image, loads it into the kind cluster,
+and applies `deploy/`:
+
+```bash
+make deploy
+kubectl -n platform-system get deploy,pods -l app.kubernetes.io/name=webapp-controller
+```
+
+The controller now runs under the `webapp-controller` ServiceAccount with the
+ClusterRole generated from the `+kubebuilder:rbac` markers. Check its permissions:
+
+```bash
+kubectl auth can-i update deployments.apps -n developer-platform \
+  --as=system:serviceaccount:platform-system:webapp-controller    # yes
+kubectl auth can-i delete secrets -n developer-platform \
+  --as=system:serviceaccount:platform-system:webapp-controller    # no
+```
+
+The controller can manage Deployments and Services, but it has no access to
+Secrets. Least privilege comes from the markers in the code, not from a hand-written role.
+
+Make sure the in-cluster version is running, then re-apply the sample:
+
+```bash
+kubectl apply -f samples/webapp-hello.yaml
+kubectl -n developer-platform get webapp hello
+```
+
+## Step 8 - Watch the controller correct drift
+
+The controller owns the Deployment. Change it by hand:
+
+```bash
+kubectl -n developer-platform scale deploy/hello --replicas=5
+kubectl -n developer-platform get deploy hello -w     # back to 2 within seconds
+```
+
+The `Owns(&appsv1.Deployment{})` watch sends the change to the reconciler, and
+`CreateOrUpdate` sets `replicas` back to `spec.replicas`. Compare this with Lab 02,
+where Argo CD corrects drift in the same way.
+
+Now change the desired state. Edit `spec.replicas` to `3`:
+
+```bash
+kubectl -n developer-platform patch webapp hello --type=merge -p '{"spec":{"replicas":3}}'
+kubectl -n developer-platform get webapp hello   # DESIRED=3, READY reaches 3
+```
+
+## Step 9 - Delete with the finalizer
+
+```bash
+kubectl -n developer-platform get webapp hello \
+  -o jsonpath='{.metadata.finalizers}{"\n"}'     # ["platform.mycompany.io/webapp-cleanup"]
+
+kubectl -n developer-platform delete webapp hello --wait=false
+kubectl -n developer-platform get webapp hello \
+  -o jsonpath='{.metadata.deletionTimestamp}{"\n"}'  # set, but the object still exists
+
+kubectl -n developer-platform get webapp hello      # disappears within a few seconds
+kubectl -n developer-platform get deploy,svc -l app.kubernetes.io/instance=hello   # No resources found
+```
+
+The WebApp stays in the API until the finalizer has removed the Deployment and Service
+with foreground propagation. Owner references would clean these up in the background
+anyway. The finalizer makes the order explicit, and it is the place to add cleanup that
+owner references cannot do, such as deleting an external DNS record or a registry entry.
+
+---
+
+## Verification
+
+Run these in order. Each should succeed:
+
+```bash
+make test                                                    # 4 tests PASS
+kubectl get crd webapps.platform.mycompany.io                # CRD exists
+kubectl -n platform-system rollout status deploy/webapp-controller
+kubectl apply -f samples/webapp-hello.yaml                   # created or unchanged
+kubectl -n developer-platform rollout status deploy/hello --timeout=120s
+kubectl -n developer-platform get webapp hello \
+  -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}{"\n"}'   # True
+```
+
+The controller does not create an Ingress, so `hello` is reachable only inside the
+cluster (`http://hello.developer-platform.svc.cluster.local`). Exercise 1 exposes it.
+
+---
+
+## Exercises
+
+1. **Expose the app.** Create an Ingress for the `hello` Service (port 80) on Traefik
+   with host `hello.localtest.me`. Confirm `curl http://hello.localtest.me:8080/` answers.
+   Should the controller create this Ingress, or should the developer? Discuss the trade-off.
+2. **Add a field.** Add `spec.env` (a map of strings) and set it as container environment
+   variables. You will need to update the type, regenerate (`make generate manifests`),
+   and write a unit test.
+3. **Break the controller on purpose.** Remove `Owns(&corev1.Service{})` in
+   `SetupWithManager`, redeploy and delete the Service by hand. Does anything recreate it?
+   Why not, and what happens when you put it back?
+4. **Rate-limit the surface.** Add a CEL rule that forbids `port` below 1024 unless the
+   image is in an allow-list, and write the matching sample.
+
+---
+
+## Cleanup
+
+```bash
+kubectl delete -f samples/webapp-hello.yaml --ignore-not-found
+make undeploy      # controller, ServiceAccount and RBAC
+make uninstall     # CRD (deletes all WebApps)
+```
+
+The cluster itself is kept for [Lab 04](../lab-04-service-catalog/README.md).
 
 ---
 
 ## Troubleshooting
 
-### Controller Not Starting
-```bash
-# Check controller logs
-kubectl logs -n platform-system -l control-plane=controller-manager -f
+### `make run` fails with `no matches for kind "WebApp"`
 
-# Check RBAC
-kubectl auth can-i create services.platform.mycompany.io --as=system:serviceaccount:platform-system:controller-manager
+The CRD is not installed. Run `make install`, then start `make run` again.
+
+### `make deploy` shows `ImagePullBackOff` or `ErrImageNeverPull`
+
+The image was not loaded into the cluster, or the tag does not match.
+
+```bash
+docker image ls webapp-controller
+kind load docker-image webapp-controller:dev --name platform-engineering
+kubectl -n platform-system describe pod -l app.kubernetes.io/name=webapp-controller | tail -15
 ```
 
-### CRD Not Found
-```bash
-# Reinstall CRDs
-make install
+On k3d, use `k3d image import webapp-controller:dev -c platform-engineering` instead.
 
-# Or manually
-kubectl apply -f config/crd/bases/
+### Controller logs `forbidden: ... cannot list resource "deployments"`
+
+The ClusterRole is out of date. Regenerate it and redeploy:
+
+```bash
+make manifests
+make deploy
+kubectl auth can-i list deployments.apps --all-namespaces \
+  --as=system:serviceaccount:platform-system:webapp-controller
 ```
 
-### Webhook Failures
-```bash
-# Check webhook service
-kubectl get svc -n platform-system
+### WebApp stuck with `Ready=False/WaitingForPods`
 
-# Check cert-manager
-kubectl get certificaterequest -n platform-system
+The pods are not ready. Check their events and logs:
+
+```bash
+kubectl -n developer-platform describe deploy hello
+kubectl -n developer-platform get pods -l app.kubernetes.io/instance=hello
+kubectl -n developer-platform logs deploy/hello --tail=20
 ```
+
+A common cause is a wrong `spec.port`. The readiness probe checks the port named `http`.
+
+### Pod Security warnings for `hello` pods
+
+The controller sets the `restricted` fields on the pods it creates (non-root, seccomp
+`RuntimeDefault`, no privilege escalation, all capabilities dropped). You should see no
+warnings. If you do, check that your image runs as a non-root user, as
+`nginx-unprivileged` does.
+
+### WebApp will not delete
+
+The finalizer waits for the Deployment and Service to disappear. Check that the
+controller is running, since nothing else will release the finalizer:
+
+```bash
+kubectl -n platform-system get pods -l app.kubernetes.io/name=webapp-controller
+kubectl -n developer-platform get deploy,svc -l app.kubernetes.io/instance=hello
+```
+
+Only if the controller is gone for good, remove the finalizer by hand. This skips the cleanup
+the finalizer exists to do, so use it as a last resort:
+
+```bash
+kubectl -n developer-platform patch webapp hello --type=merge -p '{"metadata":{"finalizers":null}}'
+```
+
+### `go` picks up a different toolchain
+
+The module requires Go 1.25. Go 1.21 and newer download the required toolchain
+automatically (`GOTOOLCHAIN=auto`, the default), so you only need a recent Go. Check with `go version`.
 
 ---
 
 ## Next Steps
 
-1. **Lab 04**: [Build Service Catalog with Backstage](../lab-04-service-catalog/README.md)
-2. **Read**: [Platform API Design](../docs/09-platform-apis/platform-api-design.md)
-3. **Explore**: [Controller Runtime Documentation](https://pkg.go.dev/sigs.k8s.io/controller-runtime)
-4. **Practice**: Add more CRDs (Database, Cache, Queue, etc.)
+1. **Read**: [Platform API Design](../../docs/09-platform-apis/platform-api-design.md) and [Kubernetes CRDs](../../docs/09-platform-apis/kubernetes-crds.md)
+2. **Lab 04**: [Service Catalog with Backstage](../lab-04-service-catalog/README.md). The catalog's templates scaffold `WebApp` objects like this one
+3. **Lab 02 link**: put `samples/webapp-hello.yaml` in a GitOps repo and let Argo CD deploy it
+4. **Read**: [Controllers and Operators](../../docs/01-kubernetes-fundamentals/controllers-operators.md)
 
 ---
 
 ## Resources
 
-- [Kubebuilder Book](https://kubebuilder.io/)
-- [Controller Runtime](https://pkg.go.dev/sigs.k8s.io/controller-runtime)
-- [Kubernetes API Conventions](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md)
+- [controller-runtime book](https://main.book.kubebuilder.io/) and [controller-runtime docs](https://pkg.go.dev/sigs.k8s.io/controller-runtime)
+- [Kubebuilder markers reference](https://book.kubebuilder.io/reference/markers)
+- [CEL validation rules for CRDs](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules)
+- [Finalizers and owner references](https://kubernetes.io/docs/concepts/overview/working-with-objects/finalizers/)

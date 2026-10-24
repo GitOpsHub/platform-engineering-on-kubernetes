@@ -1,0 +1,23 @@
+apiVersion: platform.mycompany.io/v1alpha1
+kind: Workload
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .name }}
+    platform.mycompany.io/owner: {{ .owner }}
+spec:
+  image: {{ .image }}/{{ .name }}:latest
+  replicas: {{ .replicas }}
+  port: {{ .port }}
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  traits:
+    - type: ingress
+      config:
+        host: {{ .name }}.example.com

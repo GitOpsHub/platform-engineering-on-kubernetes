@@ -671,7 +671,7 @@ kubernetes:
       plural: environments
 ```
 
-The service account Backstage uses needs **read-only** access. Give it exactly what the plugin lists:
+The service account Backstage uses needs **read-only** access. Give it exactly what the plugin lists. Note what this identity is: a single, shared, read-only inventory reader for the catalog's Kubernetes tab. It is not impersonation, and it must never receive an `impersonate` rule. Because it is shared, every Backstage user sees the objects it can read; the tab does not filter by who is looking. Actions that change anything (scaffolding, environment creation, scaling) go through [platform-api](../09-platform-apis/platform-api-design.md), which acts as the signed-in user via impersonation. Keep the two identities separate, and keep secret reads out of the reader role.
 
 ```yaml
 # backstage-k8s-reader.yaml

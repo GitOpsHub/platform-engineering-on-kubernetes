@@ -1,0 +1,21 @@
+# Owner access for a tenant, matching tenant-operator: a RoleBinding named tenant-owners
+# in each tenant namespace, bound to the built-in ClusterRole "admin". The binding is
+# namespaced, so the owners get admin inside their own namespaces and nothing cluster-scoped.
+# setup.sh renders __TENANT__ into the group name tenant:<tenant>:owners. The same group
+# is listed in the Tenant CR as owners: ["group:tenant:<tenant>:owners"], so the operator
+# and the manifests grant the same identity.
+#
+# Note: "admin" can also create RoleBindings inside its namespace. That is what the
+# operator grants; a narrower Role is a stricter alternative (see the README).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tenant-owners
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: tenant:__TENANT__:owners

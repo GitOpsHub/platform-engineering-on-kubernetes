@@ -1,0 +1,12 @@
+# Composite-resource form of claims.yaml's Database, used by `crossplane render`.
+apiVersion: platform.mycompany.io/v1alpha1
+kind: XDatabase
+metadata:
+  name: orders-db-xr
+spec:
+  parameters:
+    tier: medium
+    storageGB: 50
+    version: "16"
+    region: eu-west-1
+    backupRetentionDays: 14

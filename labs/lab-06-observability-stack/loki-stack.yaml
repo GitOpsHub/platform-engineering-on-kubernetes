@@ -1,0 +1,55 @@
+# Loki for Lab 06 (chart grafana/loki 7.3.0, Loki 3.6.12).
+# Install: helm upgrade --install loki loki --repo https://grafana.github.io/helm-charts \
+#            --version 7.3.0 -n platform-monitoring -f loki-stack.yaml --wait
+#
+# Single binary, filesystem storage on a small PVC, no caches, no gateway.
+# Not for production: one replica, no replication, no auth.
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+# Simple-scalable components are unused in SingleBinary mode.
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Laptop trims: no gateway, caches, canary or helm test pod.
+gateway:
+  enabled: false
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+lokiCanary:
+  enabled: false
+test:
+  enabled: false

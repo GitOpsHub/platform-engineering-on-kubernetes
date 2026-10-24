@@ -1,0 +1,39 @@
+{{- if .Values.platformCli.docs.enabled }}
+# helm test: the docs ConfigMap exists and has at least one key.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-test-cli-docs
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "developer-tools.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: check
+      image: busybox:1.37
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      command: ["/bin/sh", "-c"]
+      args:
+        - test -s /docs/platform-cli.md && echo "docs present"
+      volumeMounts:
+        - name: docs
+          mountPath: /docs
+          readOnly: true
+  volumes:
+    - name: docs
+      configMap:
+        name: {{ .Values.platformCli.docs.name }}
+{{- end }}

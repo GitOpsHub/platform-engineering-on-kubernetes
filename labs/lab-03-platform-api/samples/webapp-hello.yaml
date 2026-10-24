@@ -1,0 +1,10 @@
+# A valid WebApp. Apply with: kubectl apply -f samples/webapp-hello.yaml
+apiVersion: platform.mycompany.io/v1alpha1
+kind: WebApp
+metadata:
+  name: hello
+  namespace: developer-platform   # created by Lab 01
+spec:
+  image: nginxinc/nginx-unprivileged:1.29-alpine
+  replicas: 2
+  port: 8080

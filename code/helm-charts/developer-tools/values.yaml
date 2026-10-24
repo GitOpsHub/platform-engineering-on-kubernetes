@@ -1,0 +1,19 @@
+# Default values for developer-tools.
+
+# Backstage is the `backstage` subchart. Keys under `backstage:` go to that chart,
+# so see its values.yaml for image, appConfig and ingress settings.
+backstage:
+  enabled: true
+  # Set the image to the portal build your team publishes. The subchart's default is a demo image.
+  # image:
+  #   registry: ghcr.io
+  #   repository: gitopshub/developer-portal
+  #   tag: "0.1.0"
+  # appConfig holds the portal's app-config.yaml. Keep secrets out of it; reference them from env.
+
+platformCli:
+  docs:
+    # Publishes files/*.md as the platform-cli-docs ConfigMap, for the portal and for in-cluster users.
+    enabled: true
+    name: platform-cli-docs
+    labels: {}

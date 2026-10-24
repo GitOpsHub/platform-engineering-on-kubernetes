@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/version"
+	"k8s.io/client-go/dynamic"
 	dynfake "k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 
@@ -47,9 +48,34 @@ type fakeDiscovery struct {
 
 func (f fakeDiscovery) ServerVersion() (*version.Info, error) { return f.info, f.err }
 
+// adminPrincipal is an authenticated platform admin used by most tests.
+var adminPrincipal = &mw.Principal{Subject: "admin", Groups: []string{"platform-admins"}}
+
+// fakeFactory returns a ClientFactory that always hands out dyn.
+func fakeFactory(dyn dynamic.Interface) ClientFactory {
+	return func(*mw.Principal) (dynamic.Interface, error) { return dyn, nil }
+}
+
+// withPrincipal injects p as the authenticated caller (nil = anonymous).
+func withPrincipal(p *mw.Principal) mw.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if p != nil {
+				r = r.WithContext(mw.WithPrincipal(r.Context(), p))
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func newHandler(dyn *dynfake.FakeDynamicClient, disc ServerVersioner) http.Handler {
-	api := New(Options{Dynamic: dyn, Discovery: disc, Build: BuildInfo{Version: "1.2.3"}, OpenAPISpec: []byte("openapi: 3.0.3")})
-	return mw.Chain(api.Routes(), mw.RequestID())
+	return newHandlerFor(dyn, disc, adminPrincipal)
+}
+
+func newHandlerFor(dyn *dynfake.FakeDynamicClient, disc ServerVersioner, p *mw.Principal) http.Handler {
+	api := New(Options{ClientFor: fakeFactory(dyn), Dynamic: dyn, Discovery: disc,
+		Build: BuildInfo{Version: "1.2.3"}, OpenAPISpec: []byte("openapi: 3.0.3")})
+	return mw.Chain(api.Routes(), withPrincipal(p), mw.RequestID())
 }
 
 func do(t *testing.T, h http.Handler, method, path, body string) *httptest.ResponseRecorder {
@@ -201,7 +227,7 @@ func TestCreate(t *testing.T) {
 
 func TestCreateStoresCRAndCreatedBy(t *testing.T) {
 	dyn := newFakeDynamic()
-	api := New(Options{Dynamic: dyn})
+	api := New(Options{ClientFor: fakeFactory(dyn)})
 	h := mw.Chain(api.Routes(), mw.Auth(mw.AuthConfig{Verifier: mw.StaticTokens{"t": {Subject: "alice"}}}))
 	req := httptest.NewRequest(http.MethodPost, "/api/v1alpha1/namespaces/team-a/workloads",
 		strings.NewReader(`{"metadata":{"name":"cart","uid":"client-supplied"},"spec":{"image":"img:1"},"status":{"phase":"Ready"}}`))
@@ -306,7 +332,7 @@ func TestOperationalEndpoints(t *testing.T) {
 }
 
 func TestProfilingEnabled(t *testing.T) {
-	h := New(Options{Dynamic: newFakeDynamic(), EnableProfiling: true}).Routes()
+	h := New(Options{ClientFor: fakeFactory(newFakeDynamic()), EnableProfiling: true}).Routes()
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
 	if rr.Code != 200 || !strings.Contains(rr.Body.String(), "goroutine") {

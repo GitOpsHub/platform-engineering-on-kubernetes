@@ -1,0 +1,29 @@
+apiVersion: platform.mycompany.io/v1alpha1
+kind: Workload
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .name }}
+    platform.mycompany.io/owner: {{ .owner }}
+spec:
+  image: {{ .image }}/{{ .name }}:latest
+  replicas: {{ .replicas }}
+  port: {{ .port }}
+  env:
+    - name: LOG_LEVEL
+      value: info
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  traits:
+    - type: ingress
+      config:
+        host: {{ .name }}.example.com
+    - type: pdb
+      config:
+        minAvailable: 1

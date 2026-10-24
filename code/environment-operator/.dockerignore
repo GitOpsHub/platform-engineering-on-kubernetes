@@ -1,0 +1,5 @@
+# Only ship what the Dockerfile copies.
+bin/
+testbin/
+*.test
+cover.out

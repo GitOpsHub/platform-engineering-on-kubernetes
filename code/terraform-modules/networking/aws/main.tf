@@ -146,15 +146,14 @@ data "aws_iam_policy_document" "flow_logs_assume" {
   }
 }
 
+# Publishing flow logs needs only these two actions, scoped to the streams of this one log group.
+# The document exists only when flow logs are enabled, so it never contains a wildcard resource.
 data "aws_iam_policy_document" "flow_logs" {
+  count = var.enable_flow_logs ? 1 : 0
+
   statement {
-    actions = [
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
-      "logs:DescribeLogGroups",
-      "logs:DescribeLogStreams",
-    ]
-    resources = var.enable_flow_logs ? ["${aws_cloudwatch_log_group.flow_logs[0].arn}:*"] : ["*"]
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.flow_logs[0].arn}:*"]
   }
 }
 
@@ -169,7 +168,7 @@ resource "aws_iam_role_policy" "flow_logs" {
   count  = var.enable_flow_logs ? 1 : 0
   name   = "flow-logs"
   role   = aws_iam_role.flow_logs[0].id
-  policy = data.aws_iam_policy_document.flow_logs.json
+  policy = data.aws_iam_policy_document.flow_logs[0].json
 }
 
 resource "aws_flow_log" "this" {

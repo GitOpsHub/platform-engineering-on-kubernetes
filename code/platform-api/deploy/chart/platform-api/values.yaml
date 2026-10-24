@@ -22,8 +22,25 @@ cors:
 
 auth:
   # Name of an existing Secret with a key "tokens" in 'token,subject[,groups]' lines.
-  # Leave empty to DISABLE authentication (labs only).
+  # Without it every resource request is rejected with 401 (the server still starts).
   existingSecret: ""
+
+# Members of this group (from the token's groups) may create and delete Tenants.
+# Everything else is evaluated by Kubernetes RBAC as the caller (impersonation).
+# The group is always added to the impersonation allowlist below.
+platformAdminGroup: platform-admins
+
+# Impersonation scope. This is the only broad permission the platform-api
+# ServiceAccount holds, so it is explicit. See README.md in this chart.
+impersonation:
+  # Subjects platform-api may act as. Required unless allowAnyUser is true.
+  users: []
+  # Groups platform-api may act as. Must be non-empty. Only these groups are
+  # forwarded; any other IdP group is dropped. system:* is refused at render time.
+  groups:
+    - platform-admins
+  # Explicit, unscoped opt-in: let platform-api impersonate any user. Off by default.
+  allowAnyUser: false
 
 service:
   type: ClusterIP

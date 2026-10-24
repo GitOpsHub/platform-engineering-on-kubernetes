@@ -1,0 +1,56 @@
+# backstage-config.yaml - the Backstage app-config for Lab 04.
+#
+# deploy.sh stores this file in the ConfigMap "backstage-lab-config" and the
+# official chart passes it to the backend as an extra --config file
+# (see helm-values.yaml, backstage.extraAppConfig).
+#
+# No secrets in this file. ${VARIABLES} are read from the backstage-env Secret.
+# The catalog locations below point at GitHub. deploy.sh rewrites them when you
+# pass --repo-url, so a fork works the same way as Lab 02.
+app:
+  title: Platform Engineering Lab
+  baseUrl: http://backstage.localtest.me:8080
+
+organization:
+  name: Platform Engineering Lab
+
+backend:
+  baseUrl: http://backstage.localtest.me:8080
+  listen:
+    port: 7007
+  cors:
+    origin: http://backstage.localtest.me:8080
+    methods: [GET, HEAD, PATCH, POST, PUT, DELETE]
+    credentials: true
+  database:
+    client: pg
+    connection:
+      host: ${POSTGRES_HOST}
+      port: ${POSTGRES_PORT}
+      user: ${POSTGRES_USER}
+      password: ${POSTGRES_PASSWORD}
+
+auth:
+  environment: development
+  providers:
+    guest:
+      # LAB ONLY: anyone who can reach the UI becomes a guest user.
+      # Replace with GitHub, OIDC or another real provider before sharing this instance.
+      dangerouslyAllowOutsideDevelopment: true
+
+integrations:
+  github:
+    - host: github.com
+      # Needed only for the publish:github scaffolder action. Empty is fine for reading public repos.
+      token: ${GITHUB_TOKEN}
+
+catalog:
+  rules:
+    - allow: [Component, System, API, Resource, Group, User, Template, Location]
+  locations:
+    - type: url
+      target: https://github.com/GitOpsHub/platform-engineering-on-kubernetes/blob/main/labs/lab-04-service-catalog/catalog-entities.yaml
+    - type: url
+      target: https://github.com/GitOpsHub/platform-engineering-on-kubernetes/blob/main/labs/lab-04-service-catalog/templates/workload-service/template.yaml
+    - type: url
+      target: https://github.com/GitOpsHub/platform-engineering-on-kubernetes/blob/main/labs/lab-04-service-catalog/templates/openapi-api/template.yaml

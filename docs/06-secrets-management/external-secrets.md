@@ -40,7 +40,6 @@ helm repo update
 # Install
 helm upgrade --install external-secrets external-secrets/external-secrets \
   --namespace external-secrets --create-namespace \
-  --version 0.9.0 \
   --set installCRDs=true \
   --set webhook.port=9443 \
   --set certController.enabled=true
@@ -59,7 +58,7 @@ kubectl get crd | grep external-secrets
 #### ClusterSecretStore (Cluster-scoped)
 ```yaml
 # clustersecretstore-vault.yaml
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
   name: vault-backend
@@ -122,7 +121,7 @@ vault write auth/kubernetes/role/external-secrets \
 
 ```yaml
 # clustersecretstore-aws.yaml
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
   name: aws-secretsmanager
@@ -170,7 +169,7 @@ spec:
 
 ```yaml
 # clustersecretstore-azure.yaml
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
   name: azure-keyvault
@@ -188,7 +187,7 @@ spec:
 
 ```yaml
 # clustersecretstore-gcp.yaml
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
   name: gcp-secretsmanager
@@ -210,7 +209,7 @@ spec:
 ### Basic ExternalSecret
 ```yaml
 # externalsecret-basic.yaml
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: database-credentials
@@ -258,7 +257,7 @@ spec:
 ### ExternalSecret with Multiple Keys
 ```yaml
 # externalsecret-multi.yaml
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: tls-certificates
@@ -296,7 +295,7 @@ spec:
 ### ExternalSecret with JSON Data
 ```yaml
 # externalsecret-json.yaml
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: app-config
@@ -333,7 +332,7 @@ spec:
 ### ExternalSecret with Find (Dynamic Keys)
 ```yaml
 # externalsecret-find.yaml
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: microservices-secrets
@@ -374,7 +373,7 @@ spec:
 # - date, dateInZone
 # - env (read from env vars)
 
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: templated-secret
@@ -397,7 +396,7 @@ spec:
 ### PushSecret (Write to External Store)
 ```yaml
 # pushsecret.yaml
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: PushSecret
 metadata:
   name: push-to-vault
@@ -422,7 +421,7 @@ spec:
 ### Secret Rotation
 ```yaml
 # Rotation via ClusterSecretStore refreshInterval
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
   name: vault-backend
@@ -437,7 +436,7 @@ spec:
 
 ```yaml
 # Per-ExternalSecret override
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: rotated-secret
@@ -453,7 +452,7 @@ spec:
 ### Managing ExternalSecrets with Flux
 ```yaml
 # flux-externalsecret.yaml
-apiVersion: kustomize.toolkit.fluxcd.io/v1beta2
+apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: external-secrets
@@ -471,7 +470,7 @@ spec:
 ```yaml
 # clusters/production/external-secrets/database.yaml
 # SAFE TO COMMIT - no actual secrets!
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: database-credentials
@@ -548,6 +547,81 @@ kubectl get externalsecret database-credentials -n production -o jsonpath='{.spe
 
 ---
 
+## Hands-On Exercise
+
+**Goal**: Sync a Vault KV v2 secret into a Kubernetes Secret, rotate the source value, and confirm the Secret follows.
+
+```bash
+# 1. Start a dev-mode Vault in the cluster (lab use only; dev mode is not persistent)
+helm repo add hashicorp https://helm.releases.hashicorp.com
+helm upgrade --install vault hashicorp/vault \
+  --namespace vault --create-namespace \
+  --set "server.dev.enabled=true" \
+  --set "server.dev.devRootToken=root"
+
+# 2. Write a secret into KV v2
+kubectl -n vault exec vault-0 -- sh -c \
+  'VAULT_TOKEN=root vault kv put secret/platform/db username=app password=initial'
+
+# 3. Create the ClusterSecretStore and an ExternalSecret (token auth keeps the lab short)
+kubectl apply -f - <<'EOF'
+# exercise-store.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vault-root-token
+  namespace: external-secrets
+stringData:
+  token: root
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: vault-dev
+spec:
+  provider:
+    vault:
+      server: "http://vault.vault.svc:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        tokenSecretRef:
+          name: vault-root-token
+          key: token
+          namespace: external-secrets
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: db-credentials
+  namespace: default
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-dev
+  target:
+    name: db-credentials
+    creationPolicy: Owner
+  dataFrom:
+    - extract:
+        key: platform/db
+EOF
+
+# 4. Check sync status and read the result
+kubectl -n default get externalsecret db-credentials
+kubectl -n default get secret db-credentials -o jsonpath='{.data.password}' | base64 -d; echo
+```
+
+**Verify**:
+1. The ExternalSecret reports `SecretSynced` with `Ready=True`.
+2. Update the Vault value (`vault kv put secret/platform/db username=app password=rotated`), wait one `refreshInterval`, and confirm the Kubernetes Secret changes without any manual action.
+3. Break the store on purpose (wrong `server`) and read the `status.conditions` to see how the failure is reported.
+
+**Cleanup**: `kubectl delete externalsecret db-credentials -n default`, `kubectl delete clustersecretstore vault-dev`, and `helm uninstall vault -n vault`.
+
+---
+
 ## Best Practices
 
 1. **Use ClusterSecretStore** for cluster-wide secret stores
@@ -563,5 +637,13 @@ kubectl get externalsecret database-credentials -n production -o jsonpath='{.spe
 ## Further Reading
 
 - [External Secrets Documentation](https://external-secrets.io/)
-- [Provider Specific Guides](https://external-secrets.io/v0.9.0/guides/)
-- [API Reference](https://external-secrets.io/v0.9.0/api/)
+- [Provider Specific Guides](https://external-secrets.io/latest/provider/)
+- [API Reference](https://external-secrets.io/latest/api/)
+
+---
+
+## Next Steps
+
+1. **Compare**: [Vault Integration](./vault-integration.md) for pod-level injection and the CSI provider
+2. **Pair with GitOps**: [Sealed Secrets](./sealed-secrets.md) when you need encrypted secrets that live in Git
+3. **Plan rotation**: [Secrets Rotation](./secrets-rotation.md) for refresh intervals, dynamic credentials, and reloads

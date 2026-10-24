@@ -9,6 +9,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	dynfake "k8s.io/client-go/dynamic/fake"
 
 	"github.com/GitOpsHub/platform-engineering-on-kubernetes/code/platform-api/client"
@@ -24,9 +25,14 @@ func newServer(t *testing.T) *httptest.Server {
 	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		handlers.TenantGVR: "TenantList", handlers.EnvironmentGVR: "EnvironmentList", handlers.WorkloadGVR: "WorkloadList",
 	})
-	h := mw.Chain(handlers.New(handlers.Options{Dynamic: dyn, Build: handlers.BuildInfo{Version: "test"}}).Routes(),
+	factory := func(*mw.Principal) (dynamic.Interface, error) { return dyn, nil }
+	api := handlers.New(handlers.Options{ClientFor: factory, Build: handlers.BuildInfo{Version: "test"}})
+	h := mw.Chain(api.Routes(),
 		mw.RequestID(),
-		mw.Auth(mw.AuthConfig{Verifier: mw.StaticTokens{"good": {Subject: "sdk"}}, PublicPaths: []string{"/version"}}))
+		mw.Auth(mw.AuthConfig{
+			Verifier:    mw.StaticTokens{"good": {Subject: "sdk", Groups: []string{"platform-admins"}}},
+			PublicPaths: []string{"/version"},
+		}))
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return srv

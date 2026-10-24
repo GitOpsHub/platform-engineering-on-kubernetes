@@ -75,3 +75,20 @@ make docs       # regenerate README input/output tables (terraform-docs)
 ```
 
 Set `TF=tofu` to use OpenTofu: `make validate TF=tofu`.
+
+## Working with the modules
+
+The `Makefile` runs only local checks. It never plans or applies, and it needs no cloud credentials.
+
+| Target | What it does |
+| ------ | ------------ |
+| `make fmt` | `terraform fmt -recursive` (or `tofu fmt` when Terraform is not installed) |
+| `make validate` | `init -backend=false` and `validate` for every module and example |
+| `make docs` | Regenerates the Inputs, Outputs and Resources tables in each module README with `terraform-docs` |
+| `make all` | Format check plus validate (what CI should run) |
+
+Set `TF=tofu` to force OpenTofu. Each module's README is generated from its `variables.tf`, `outputs.tf`
+and `versions.tf`, so edit those files and run `make docs` rather than editing the tables by hand.
+
+Each example has a `terraform.tfvars.example`. Copy it to `terraform.tfvars` (ignored by git) and
+configure a remote backend before running `plan` against a real account.

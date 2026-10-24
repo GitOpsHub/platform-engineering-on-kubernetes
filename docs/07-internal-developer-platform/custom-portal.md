@@ -2,8 +2,8 @@
 
 ## Learning Objectives
 - Decide when building a portal beats adopting [Backstage](backstage.md) or [Port](port.md)
-- Design a portal architecture with a **Backend-for-Frontend (BFF)** over the platform API and Kubernetes
-- Authenticate users with OIDC and authorize them with Kubernetes **impersonation** so RBAC stays the source of truth
+- Design a portal architecture with a **Backend-for-Frontend (BFF)** over the platform API
+- Authenticate users with OIDC and have platform-api act as them through Kubernetes **impersonation**, so RBAC stays the source of truth and the portal holds no cluster permissions
 - Stream live `Workload` and `Environment` status to the browser with watches and Server-Sent Events
 - Generate forms from CRD OpenAPI schemas instead of hand-coding them
 - Operate the portal: caching, rate limits, audit, and testing
@@ -57,11 +57,9 @@ graph TB
         Views[View handlers<br/>aggregate + shape data]
         Forms[Schema-driven forms<br/>from CRD OpenAPI]
         SSE[SSE stream<br/>status updates]
-        Cache[Informer cache<br/>read-only, per cluster]
     end
     IdP[OIDC IdP]
     PAPI[platform-api<br/>/api/v1]
-    KAPI[Kubernetes API<br/>impersonated user]
     Prom[(Prometheus)]
     Git[(GitOps repo)]
 
@@ -70,11 +68,9 @@ graph TB
     UI --> Views
     UI --> SSE
     Views --> PAPI
-    Views --> KAPI
     Views --> Prom
-    Forms --> KAPI
-    SSE --> Cache
-    Cache --> KAPI
+    Forms --> PAPI
+    SSE --> PAPI
     PAPI --> Git
 ```
 
@@ -83,14 +79,14 @@ graph TB
 | UI | Render, collect input, show status | Business rules in JavaScript |
 | BFF | AuthN, aggregation, shaping responses for screens | Its own database of platform state |
 | platform-api | Validation, tenancy, orchestration, writes | Being bypassed by the portal |
-| Kubernetes API | Source of truth for resources and RBAC | Portal using a cluster-admin token |
+| Kubernetes API | Source of truth for resources and RBAC | Portal or browser holding any cluster credential |
 
 ### Design Principles
 
 1. **Stateless BFF.** All state lives in Kubernetes, Git, or the platform API. The portal can be deleted and redeployed without data loss.
-2. **User identity end-to-end.** Calls carry the user's identity (OIDC token to platform-api, impersonation to Kubernetes). Authorization happens where the data lives.
+2. **User identity end-to-end.** The browser's session becomes the user's OIDC token on every call to platform-api, which impersonates that user against Kubernetes. The portal never holds cluster credentials.
 3. **Schema-driven UI.** Forms come from the CRD's `openAPIV3Schema`, so adding a field to the CRD adds it to the portal.
-4. **Read from caches, write through APIs.** Informers serve fast reads; writes go to platform-api or Kubernetes with the user's identity.
+4. **One path to the cluster.** Reads, writes, permission checks, and watches all go through platform-api, so group filtering, audit, and RBAC are enforced in one place.
 
 ---
 
@@ -200,168 +196,219 @@ func randomString() string {
 
 ---
 
-## Authorization: Kubernetes Impersonation
+## Authorization: Impersonation Through platform-api
 
-The portal's service account gets **only** the `impersonate` permission. Every Kubernetes call is made *as the user*, so existing tenant RBAC (created by the `tenant-operator`) decides what they can see and do.
-
-```yaml
-# portal-impersonator-rbac.yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: portal-impersonator
-rules:
-  # Allowed to impersonate users and groups, nothing else
-  - apiGroups: ['']
-    resources: [users, groups]
-    verbs: [impersonate]
-  # Optional: restrict impersonatable groups with resourceNames
-  # - apiGroups: ['']
-  #   resources: [groups]
-  #   verbs: [impersonate]
-  #   resourceNames: [tenant-payments-developers, tenant-search-developers]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: portal-impersonator
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: portal-impersonator
-subjects:
-  - kind: ServiceAccount
-    name: portal
-    namespace: platform-portal
-```
-
-```go
-// cmd/portal/kube.go
-package main
-
-import (
-	"context"
-
-	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	platformv1alpha1 "github.com/myorg/workload-operator/api/v1alpha1"
-)
-
-// ClientFor returns a controller-runtime client that acts as the given user.
-// Creating clients per request is cheap relative to an HTTP round trip, but you
-// can cache them per user with a short TTL if needed.
-func (k *Kube) ClientFor(u Session) (client.Client, error) {
-	cfg := rest.CopyConfig(k.base) // in-cluster config of the portal SA
-	cfg.Impersonate = rest.ImpersonationConfig{
-		UserName: u.Email,
-		Groups:   u.Groups, // IdP groups -> must match RoleBinding subjects
-	}
-	return client.New(cfg, client.Options{Scheme: k.scheme})
-}
-
-// ListWorkloads returns the Workloads the user may see in a namespace.
-func (k *Kube) ListWorkloads(ctx context.Context, u Session, ns string) (*platformv1alpha1.WorkloadList, error) {
-	c, err := k.ClientFor(u)
-	if err != nil {
-		return nil, err
-	}
-	var list platformv1alpha1.WorkloadList
-	err = c.List(ctx, &list, client.InNamespace(ns))
-	return &list, err // a 403 here is the correct answer, not a bug
-}
-```
-
-The `tenant-operator` binds IdP groups to tenant namespaces:
-
-```yaml
-# Created by tenant-operator for Tenant "payments" in each tenant namespace
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: tenant-developers
-  namespace: payments-dev
-  labels:
-    platform.mycompany.io/tenant: payments
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: platform-developer     # get/list/watch/create/update Workloads, read pods/logs
-subjects:
-  - kind: Group
-    name: tenant-payments-developers
-    apiGroup: rbac.authorization.k8s.io
-```
-
-> **Why not just use the user's token?** If your cluster's API server trusts the same OIDC issuer (`--oidc-issuer-url` or structured `AuthenticationConfiguration`), you can forward the ID token directly instead of impersonating. Impersonation is simpler when clusters are managed (EKS/GKE/AKS) and you can't change API server flags, or when you have many clusters.
-
-To render "can I?" buttons without trial-and-error, ask the API server:
-
-```go
-// Can the user create Workloads in this namespace? (SelfSubjectAccessReview as the user)
-func (k *Kube) CanCreateWorkload(ctx context.Context, u Session, ns string) (bool, error) {
-	c, err := k.ClientFor(u)
-	if err != nil {
-		return false, err
-	}
-	ssar := &authorizationv1.SelfSubjectAccessReview{
-		Spec: authorizationv1.SelfSubjectAccessReviewSpec{
-			ResourceAttributes: &authorizationv1.ResourceAttributes{
-				Namespace: ns,
-				Verb:      "create",
-				Group:     "platform.mycompany.io",
-				Resource:  "workloads",
-			},
-		},
-	}
-	if err := c.Create(ctx, ssar); err != nil {
-		return false, err
-	}
-	return ssar.Status.Allowed, nil
-}
-```
-
----
-
-## Live Status with Informers and Server-Sent Events
-
-Polling the API from every browser tab does not scale. The BFF runs **one** shared informer per resource type (using its own read-only identity), and streams changes to browsers — filtered by what each user is allowed to see.
+The portal holds **no cluster permissions of its own**. It has an OIDC client secret and a session key, and nothing else. It never calls the Kubernetes API directly. Every read and write goes to [platform-api](../09-platform-apis/platform-api-design.md), which authenticates the caller's bearer token and then acts as that user through Kubernetes impersonation. Cluster RBAC decides what the user can see or change, so the answer is the same whether the request came from the portal, the CLI, or CI.
 
 ```mermaid
 sequenceDiagram
     participant B as Browser
     participant P as Portal BFF
-    participant I as Informer cache
+    participant A as platform-api
+    participant K as Kubernetes API
+    B->>P: request (session cookie)
+    P->>A: request + user's OIDC bearer token
+    A->>A: verify token; map subject and groups
+    A->>K: request with Impersonate-User and Impersonate-Group headers
+    K->>K: RBAC evaluated for the user
+    K-->>A: allowed (or 403)
+    A-->>P: response or problem+json
+    P-->>B: rendered view or error
+```
+
+### What platform-api is allowed to impersonate
+
+Impersonation is the one powerful permission in this design, so it is scoped to the minimum. The platform-api ServiceAccount receives a ClusterRole with two rules:
+
+```yaml
+# platform-api-impersonator-rbac.yaml (target model)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-api-impersonator
+rules:
+  # Impersonate only the tenant groups the platform manages. resourceNames is an
+  # explicit allowlist; a group not on it cannot be impersonated.
+  - apiGroups: [""]
+    resources: ["groups"]
+    verbs: ["impersonate"]
+    resourceNames:
+      - tenant-payments-developers
+      - tenant-payments-admins
+      - tenant-search-developers
+  # Impersonating a user requires the users verb. Kubernetes cannot restrict this
+  # to a dynamic set of users, so this is the one rule that cannot be allowlisted.
+  # Its safety comes from platform-api only ever setting the subject it verified.
+  - apiGroups: [""]
+    resources: ["users"]
+    verbs: ["impersonate"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-api-impersonator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: platform-api-impersonator
+subjects:
+  - kind: ServiceAccount
+    name: platform-api
+    namespace: platform-system
+```
+
+Three rules keep this model honest:
+
+1. **Never a broad group grant.** Do not write `resources: [groups]` with no `resourceNames`. That lets the server act as any group, including `system:masters`. Keep the group list in the same place as the tenant-operator's group bindings, and extend it per tenant.
+2. **platform-api filters groups before impersonating.** RBAC `resourceNames` cannot express a prefix, so platform-api rejects any group beginning with `system:` and drops any group that is not an allowed tenant group. It never forwards an IdP group verbatim. A token carrying `system:masters` gets a `403` at the edge, not an impersonation.
+3. **Protect the platform-api token.** Because the `users` rule cannot be narrowed, anyone who obtains the platform-api ServiceAccount token can act as any user. Treat that token like a cluster credential: short-lived projected token, no copies in config files, and access audited.
+
+The `impersonate` verb on `users` is the residual broad permission. The design accepts it because the alternative (the portal or every tenant holding its own credentials) is worse. Document it in the platform's threat model.
+
+### How platform-api builds the caller's client
+
+platform-api verifies the bearer token, filters the groups, and builds a per-request client that impersonates the verified subject. The portal never supplies a username or group list.
+
+```go
+// platform-api: main.go (excerpt; the server's real implementation lives in code/platform-api)
+package main
+
+import (
+	"strings"
+
+	"k8s.io/client-go/rest"
+)
+
+// allowedGroup is the allowlist mirrored from the platform-api-impersonator ClusterRole.
+// Keep the two in sync; the ClusterRole is the enforcement, this is the early reject.
+var allowedGroup = map[string]bool{
+	"tenant-payments-developers": true,
+	"tenant-payments-admins":     true,
+	"tenant-search-developers":   true,
+}
+
+// impersonationFor returns a copy of base that acts as the verified caller.
+// Groups outside the allowlist, and any system: group, are dropped.
+func impersonationFor(base *rest.Config, subject string, idpGroups []string) *rest.Config {
+	groups := make([]string, 0, len(idpGroups))
+	for _, g := range idpGroups {
+		if strings.HasPrefix(g, "system:") || !allowedGroup[g] {
+			continue
+		}
+		groups = append(groups, g)
+	}
+
+	c := rest.CopyConfig(base) // base is platform-api's own config; never mutate it
+	c.Impersonate = rest.ImpersonationConfig{
+		UserName: subject,
+		Groups:   groups,
+	}
+	return c
+}
+```
+
+Reject requests whose subject is empty before this function runs. A request with no verified principal never reaches Kubernetes (see [Platform API Design](../09-platform-apis/platform-api-design.md#authentication-and-authorization)).
+
+### Portal side: forward the user's token
+
+The portal forwards the user's OIDC access token to platform-api from the session, and never adds identity headers of its own:
+
+```go
+// cmd/portal/platform.go
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+)
+
+// PlatformClient calls platform-api as the logged-in user.
+type PlatformClient struct {
+	baseURL string // http://platform-api.platform-system.svc:8080
+	http    *http.Client
+}
+
+func (p *PlatformClient) Do(ctx context.Context, s Session, method, path string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, p.baseURL+path, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.AccessToken) // the user's token, not the portal's
+	req.Header.Set("Accept", "application/json")
+	return p.http.Do(req)
+}
+
+// ListWorkloads returns the Workloads the user may see. A 403 is the correct answer, not a bug.
+func (p *PlatformClient) ListWorkloads(ctx context.Context, s Session, ns string) (*http.Response, error) {
+	return p.Do(ctx, s, http.MethodGet, fmt.Sprintf("/api/v1alpha1/namespaces/%s/workloads", ns), nil)
+}
+```
+
+The session stores the access token (or the ID token if platform-api verifies ID tokens, which is what the OIDC seam in platform-api expects). Pick one and state it in the platform-api configuration; mixing them causes `401` storms.
+
+### "Can I?" buttons
+
+Ask the API server as the user, not the portal. Expose this through platform-api rather than having the portal create `SelfSubjectAccessReview` objects itself, so every permission check goes through the same impersonation path:
+
+```http
+POST /api/v1alpha1/access-reviews
+Content-Type: application/json
+
+{ "verb": "create", "group": "platform.mycompany.io", "resource": "workloads", "namespace": "payments-dev" }
+```
+
+```json
+{ "allowed": true, "denied": false, "reason": "" }
+```
+
+platform-api answers by creating a `SelfSubjectAccessReview` with the caller's impersonated client, so the result is Kubernetes RBAC's answer for that user.
+
+> **Why not forward the user's token straight to Kubernetes?** If the API server trusts the same OIDC issuer (structured `AuthenticationConfiguration`), the portal could send the user's token directly and skip impersonation. That is the cleanest option when you control the API server. Impersonation through platform-api is the model here because it works on managed clusters (EKS, GKE, AKS) where API server flags are not yours, and because it keeps one enforcement point for group filtering and audit across many clusters.
+
+
+---
+
+## Live Status with Server-Sent Events
+
+Polling the API from every browser tab does not scale, but a shared informer would need to run under an identity, and any identity that reads everything is a cross-tenant leak. So the portal does not run an informer. It subscribes to a **per-user watch** exposed by platform-api, which evaluates RBAC as the subscriber and streams only the objects that user may see.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant P as Portal BFF
+    participant A as platform-api
     participant K as Kubernetes API
 
-    P->>K: LIST+WATCH workloads (portal SA, read-only)
-    K-->>I: events
-    B->>P: GET /events?ns=payments-dev
-    P->>K: SelfSubjectAccessReview (as user): list workloads in ns?
-    K-->>P: allowed
-    loop on change
-        I-->>P: Workload updated
-        P-->>B: event: workload\ndata: {...}
-    end
+    B->>P: GET /events?ns=payments-dev (SSE)
+    P->>A: GET /namespaces/payments-dev/workloads?watch=true (user's token)
+    A->>K: WATCH workloads as the impersonated user
+    K-->>A: ADDED / MODIFIED / DELETED (only what RBAC allows)
+    A-->>P: watch stream (newline-delimited JSON)
+    P-->>B: event: workload, data: {...}
 ```
+
+Two notes on the model:
+
+- **Authorization happens once, at the watch.** If the user's RBAC changes, the existing stream keeps running until it is closed. Set a maximum stream lifetime (for example, 10 minutes) and let the browser reconnect, which re-evaluates RBAC.
+- **The watch is opened with `?watch=true`**, the same convention Kubernetes uses. platform-api streams newline-delimited JSON, one `{"type": ..., "object": {...}}` per line, as described in [Platform API Design](../09-platform-apis/platform-api-design.md).
 
 ```go
 // cmd/portal/events.go
 package main
 
 import (
-	"context"
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"net/http"
-
-	toolscache "k8s.io/client-go/tools/cache"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
-
-	platformv1alpha1 "github.com/myorg/workload-operator/api/v1alpha1"
+	"time"
 )
 
+// WorkloadEvent is the shape the browser receives. It is a view model, not the raw CR.
 type WorkloadEvent struct {
+	Type      string `json:"type"` // ADDED, MODIFIED, DELETED
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
 	Phase     string `json:"phase"`
@@ -369,96 +416,66 @@ type WorkloadEvent struct {
 	URL       string `json:"url,omitempty"`
 }
 
-// Hub fans informer events out to subscribed SSE connections.
-type Hub struct {
-	subscribe   chan subscription
-	unsubscribe chan subscription
-	broadcast   chan WorkloadEvent
-}
-
-type subscription struct {
-	namespace string
-	ch        chan WorkloadEvent
-}
-
-func (h *Hub) Run() {
-	subs := map[subscription]struct{}{}
-	for {
-		select {
-		case s := <-h.subscribe:
-			subs[s] = struct{}{}
-		case s := <-h.unsubscribe:
-			delete(subs, s)
-			close(s.ch)
-		case ev := <-h.broadcast:
-			for s := range subs {
-				if s.namespace == ev.Namespace {
-					select {
-					case s.ch <- ev:
-					default: // slow client: drop rather than block the hub
-					}
-				}
-			}
-		}
-	}
-}
-
-// Wire the controller-runtime cache informer into the hub.
-func (h *Hub) Attach(ctx context.Context, c cache.Cache) error {
-	inf, err := c.GetInformer(ctx, &platformv1alpha1.Workload{})
-	if err != nil {
-		return err
-	}
-	_, err = inf.AddEventHandler(toolscache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj any) { h.emit(obj) },
-		UpdateFunc: func(_, obj any) { h.emit(obj) },
-	})
-	return err
-}
-
-func (h *Hub) emit(obj any) {
-	w, ok := obj.(*platformv1alpha1.Workload)
-	if !ok {
-		return
-	}
-	h.broadcast <- WorkloadEvent{
-		Name:      w.Name,
-		Namespace: w.Namespace,
-		Phase:     string(w.Status.Phase),
-		Ready:     fmt.Sprintf("%d/%d", w.Status.ReadyReplicas, w.Spec.Replicas),
-		URL:       w.Status.URL,
-	}
-}
-
 // GET /events?ns=payments-dev
 func (s *Server) Events(w http.ResponseWriter, r *http.Request) {
-	u := userFrom(r.Context())
+	sess := sessionFrom(r.Context())
 	ns := r.URL.Query().Get("ns")
-
-	// Authorize the stream once, as the user
-	if ok, err := s.kube.Can(r.Context(), u, ns, "list", "workloads"); err != nil || !ok {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
+
+	// The watch is opened as the user. A 403 from platform-api is returned to the browser as-is.
+	resp, err := s.platform.Do(r.Context(), sess, http.MethodGet,
+		fmt.Sprintf("/api/v1alpha1/namespaces/%s/workloads?watch=true", ns), nil)
+	if err != nil {
+		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, http.StatusText(resp.StatusCode), resp.StatusCode)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no") // disable proxy buffering (nginx)
 
-	sub := subscription{namespace: ns, ch: make(chan WorkloadEvent, 16)}
-	s.hub.subscribe <- sub
-	defer func() { s.hub.unsubscribe <- sub }()
+	// Stop after a bounded lifetime so RBAC changes take effect on reconnect.
+	deadline := time.NewTimer(10 * time.Minute)
+	defer deadline.Stop()
+
+	lines := bufio.NewScanner(resp.Body)
+	heartbeat := time.NewTicker(20 * time.Second)
+	defer heartbeat.Stop()
+
+	events := make(chan WorkloadEvent)
+	go func() {
+		defer close(events)
+		for lines.Scan() {
+			var ev WorkloadEvent
+			if json.Unmarshal(lines.Bytes(), &ev) == nil {
+				events <- ev
+			}
+		}
+	}()
 
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case ev := <-sub.ch:
+		case <-deadline.C:
+			return
+		case <-heartbeat.C:
+			fmt.Fprint(w, ": ping\n\n") // keeps proxies from closing idle streams
+			flusher.Flush()
+		case ev, open := <-events:
+			if !open {
+				return
+			}
 			b, _ := json.Marshal(ev)
 			fmt.Fprintf(w, "event: workload\ndata: %s\n\n", b)
 			flusher.Flush()
@@ -590,9 +607,9 @@ spec:
 |---------|----------|
 | Audit | Kubernetes audit logs record `impersonatedUser`; platform-api logs the OIDC subject |
 | Rate limiting | Put the portal behind the [platform gateway](../09-platform-apis/api-gateway.md); per-user limits on write endpoints |
-| Caching | Informers for lists; never cache authorization decisions longer than a few seconds |
+| Caching | Cache lists briefly in platform-api, keyed by user; never cache authorization decisions longer than a few seconds |
 | SSE through proxies | Disable buffering; set idle timeouts > heartbeat interval; send `: ping` comments every 15–30s |
-| Multi-cluster | One informer set per cluster; namespace → cluster mapping comes from `Tenant`/`Environment` status |
+| Multi-cluster | platform-api routes each request to the right cluster; namespace → cluster mapping comes from `Tenant`/`Environment` status |
 | Testing | `envtest` for Kubernetes interactions; Playwright for critical flows |
 | Accessibility | Semantic HTML, keyboard navigation; server-rendered pages help here |
 
@@ -611,13 +628,13 @@ spec:
    kubectl create rolebinding alice-dev -n payments-dev \
      --clusterrole=edit --user=alice@mycompany.io
    ```
-3. **Verify impersonation** works before writing code:
+3. **Verify the cluster RBAC the user will get** before writing code (run as an admin who can impersonate):
    ```bash
    kubectl get workloads -n payments-dev --as=alice@mycompany.io     # allowed
    kubectl get workloads -n search-dev   --as=alice@mycompany.io     # Forbidden
    kubectl auth can-i create workloads.platform.mycompany.io -n payments-dev --as=alice@mycompany.io
    ```
-4. **Implement** `ClientFor`, `ListWorkloads`, and the `/events` SSE handler from this doc. Run locally with `go run ./cmd/portal` using your kubeconfig as the "portal SA".
+4. **Implement** `PlatformClient`, `ListWorkloads`, and the `/events` SSE handler from this doc. Run platform-api locally against your kubeconfig, and point the portal at it with a test user's bearer token.
 5. **Watch updates:** in another terminal, scale a workload and confirm the browser row updates:
    ```bash
    kubectl patch workload payments-api -n payments-dev --type=merge -p '{"spec":{"replicas":3}}'
@@ -635,11 +652,12 @@ spec:
 
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
-| `users "x" is forbidden: User "system:serviceaccount:..." cannot impersonate` | Missing impersonate RBAC | Apply `portal-impersonator` ClusterRole/Binding |
+| platform-api returns `500` and logs `cannot impersonate` | platform-api ServiceAccount lacks the impersonate rule, or the group is missing from `resourceNames` | Check `platform-api-impersonator` ClusterRole; add the group to the allowlist only after the tenant-operator creates it |
+| Requests for a user's group are silently missing | Group is not in the platform-api allowlist (filtered on purpose) | Confirm the group is a tenant group in the allowlist; do not add `system:*` groups |
 | User sees nothing despite group membership | IdP `groups` claim absent or differently named | Inspect the ID token; map claim names; check RoleBinding subject names |
 | SSE connection closes every 60s | Proxy/gateway idle timeout | Send heartbeat comments; raise timeout on the route |
 | Events arrive in bursts | Response buffering | `X-Accel-Buffering: no`, flush after each event, disable compression on `/events` |
-| High API server load | Per-request LIST calls | Serve lists from informer cache; only authorize per request |
+| High API server load | Per-request LIST calls from many tabs | Coalesce and cache lists in platform-api per user for a few seconds; use watches for live views |
 | Form missing new CRD field | Schema cached at startup | Re-read CRD on change (watch CRDs) or on a short interval |
 | `no matches for kind "Workload"` | Scheme not registered / CRD not installed | `platformv1alpha1.AddToScheme(scheme)`; `kubectl get crd workloads.platform.mycompany.io` |
 

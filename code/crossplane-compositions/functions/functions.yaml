@@ -1,0 +1,19 @@
+# Composition functions. Pipeline-mode compositions reference these by name.
+# See README.md in this directory for what each function does.
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-patch-and-transform
+  labels:
+    platform.mycompany.io/component: crossplane-functions
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.8.2
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-auto-ready
+  labels:
+    platform.mycompany.io/component: crossplane-functions
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.5.0

@@ -1,0 +1,33 @@
+# Admission-time enforcement of the same rule as the controller: an Environment's
+# spec.tenant must equal the tenant label of the namespace it is created in.
+# Requires Kubernetes 1.30+ (ValidatingAdmissionPolicy GA). Not part of config/default;
+# apply with `kubectl apply -k config/policy` after the CRD is installed.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: environment-tenant-matches-namespace
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: ["platform.mycompany.io"]
+      apiVersions: ["v1alpha1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["environments"]
+  validations:
+  - expression: >-
+      has(namespaceObject.metadata.labels) &&
+      'platform.mycompany.io/tenant' in namespaceObject.metadata.labels &&
+      namespaceObject.metadata.labels['platform.mycompany.io/tenant'] == object.spec.tenant
+    messageExpression: >-
+      'spec.tenant "' + object.spec.tenant + '" must match the tenant label of namespace "' +
+      namespaceObject.metadata.name + '"'
+    reason: Invalid
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: environment-tenant-matches-namespace
+spec:
+  policyName: environment-tenant-matches-namespace
+  validationActions: ["Deny"]

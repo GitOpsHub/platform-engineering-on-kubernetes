@@ -1,0 +1,21 @@
+# Tenant CR for acme. Applied only when the Tenant CRD exists (see setup.sh).
+# Field names and types match code/tenant-operator/api/v1alpha1/tenant_types.go.
+# The owners list includes the same group the manifests bind (tenant:acme:owners), so
+# both modes grant the same identity. The operator maps "group:<name>" to the group <name>.
+apiVersion: platform.mycompany.io/v1alpha1
+kind: Tenant
+metadata:
+  name: acme
+spec:
+  displayName: Acme Corp
+  owners:
+    - alice@example.com
+    - group:tenant:acme:owners
+  namespaces:
+    - tenant-acme-dev
+  quota:
+    cpu: "4"
+    memory: 8Gi
+    storage: 20Gi
+    pods: 20
+  networkIsolation: true

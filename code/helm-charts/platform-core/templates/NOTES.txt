@@ -1,0 +1,24 @@
+platform-core {{ .Chart.Version }} is installed in namespace "{{ .Values.controlPlane.namespace }}".
+
+Components:
+{{- if .Values.platformApi.enabled }}
+  - platform-api   (service: platform-api:{{ .Values.platformApi.service.port }}, {{ .Values.platformApi.replicaCount }} replicas)
+{{- end }}
+{{- range $name, $op := .Values.operators }}
+{{- if $op.enabled }}
+  - {{ $name }}-operator (image: {{ include "platform-core.image" (dict "image" $op.image "root" $) }})
+{{- end }}
+{{- end }}
+
+Check the rollout:
+  kubectl -n {{ .Values.controlPlane.namespace }} get deploy,pods
+
+{{- if and .Values.platformApi.enabled (not .Values.platformApi.auth.existingSecret) }}
+
+WARNING: platform.auth.existingSecret is empty. platform-api will reject every resource request with 401.
+Create a Secret with a "tokens" key (lines of 'token,subject[,groups]') and set platformApi.auth.existingSecret.
+{{- end }}
+
+CRDs are installed from the crds/ directory on first install only. On upgrades, apply them with
+  make -C code/helm-charts sync-crds
+  kubectl apply --server-side -f code/helm-charts/platform-core/crds/

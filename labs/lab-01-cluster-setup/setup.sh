@@ -14,10 +14,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- Pinned versions (keep in sync with README.md) ----------------------------
-CILIUM_VERSION="1.20.2"
+CILIUM_VERSION="1.20.4"
 TRAEFIK_CHART_VERSION="42.1.3"          # Traefik v3.7
-CERT_MANAGER_VERSION="v1.21.2"
-EXTERNAL_SECRETS_VERSION="2.10.0"
+CERT_MANAGER_VERSION="v1.21.3"
+EXTERNAL_SECRETS_VERSION="2.14.0"
 SEALED_SECRETS_VERSION="v0.41.1"
 METRICS_SERVER_CHART_VERSION="3.14.0"   # metrics-server v0.9.0
 

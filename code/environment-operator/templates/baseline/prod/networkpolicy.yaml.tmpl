@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: env-baseline
+  namespace: "{{ .Namespace }}"
+  labels:
+    platform.mycompany.io/tenant: "{{ .Tenant }}"
+    platform.mycompany.io/environment: "{{ .Name }}"
+    platform.mycompany.io/managed-by: environment-operator
+  annotations:
+    platform.mycompany.io/owner-uid: "{{ .OwnerUID }}"
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from:
+    - podSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+  egress:
+  - to:
+    - podSelector: {}
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - {protocol: UDP, port: 53}
+    - {protocol: TCP, port: 53}

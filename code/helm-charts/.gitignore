@@ -1,0 +1,2 @@
+# Packaged subchart archives are rebuilt by `make deps`. Chart.lock files stay in git.
+*/charts/

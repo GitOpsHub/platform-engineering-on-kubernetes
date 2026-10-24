@@ -1,0 +1,19 @@
+# Tenant CR for globex. Applied only when the Tenant CRD exists (see setup.sh).
+# The owners list includes the group the manifests bind (tenant:globex:owners).
+apiVersion: platform.mycompany.io/v1alpha1
+kind: Tenant
+metadata:
+  name: globex
+spec:
+  displayName: Globex Industries
+  owners:
+    - bob@example.com
+    - group:tenant:globex:owners
+  namespaces:
+    - tenant-globex-dev
+  quota:
+    cpu: "4"
+    memory: 8Gi
+    storage: 20Gi
+    pods: 20
+  networkIsolation: true

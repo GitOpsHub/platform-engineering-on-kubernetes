@@ -464,7 +464,7 @@ Each step waits until the previous step's Applications are Healthy before syncin
 | OCI tags per ring | Immutable artifacts, signing, fast | Requires CI publishing; tags are mutable pointers (audit tag moves) |
 | Argo CD RollingSync | Native, no repo changes | Alpha; no automated sync; health only, no metric analysis |
 
-For analysis-driven rollout (SLOs, error rates) between rings, gate promotion PRs on queries to your metrics stack ([SLOs and SLIs](../11-reliability/slos-slis.md)). [Lab 08](../../labs/lab-08-platform-upgrade/README.md) uses this for platform upgrades.
+For analysis-driven rollout (SLOs, error rates) between rings, gate promotion PRs on queries to your metrics stack ([SLOs and SLIs](../11-reliability/slos-slis.md)). [Lab 08](../../labs/lab-08-platform-upgrade/) uses this for platform upgrades.
 
 ---
 
@@ -695,4 +695,4 @@ kind delete cluster --name hub; kind delete cluster --name spoke-dev; kind delet
 
 1. **Read**: [Cluster Federation](../13-multi-cluster/cluster-federation.md) — Karmada, Cluster API, and Fleet beyond delivery
 2. **Read**: [Secrets Management with Vault](../06-secrets-management/vault-integration.md) — secrets that follow workloads across clusters
-3. **Lab**: [Lab 07 - Multi-Tenancy](../../labs/lab-07-multi-tenancy/README.md) and [Lab 08 - Platform Upgrade](../../labs/lab-08-platform-upgrade/README.md)
+3. **Lab**: [Lab 07 - Multi-Tenancy](../../labs/lab-07-multi-tenancy/README.md) and [Lab 08 - Platform Upgrade](../../labs/lab-08-platform-upgrade/)

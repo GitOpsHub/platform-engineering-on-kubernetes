@@ -403,8 +403,10 @@ func main() {
 }
 ```
 
+The CLI front-end is **planned**: `platform-cli` has no `service create` command yet, so this shows the intended interface:
+
 ```bash
-platform-cli service create orders-api --tenant payments --size small --out ./orders-api
+platform-cli service create orders-api --tenant payments --size small --out ./orders-api   # planned
 ```
 
 ---
@@ -523,7 +525,7 @@ graph TB
    uvx copier update --trust --skip-answered --data readinessProbePath=/readyz
    git diff
    ```
-6. **Bonus**: implement the Go scaffolder and make `platform-cli service create` produce the same output as Copier for the same answers (compare with `diff -r`).
+6. **Bonus**: implement the Go scaffolder and make the planned `platform-cli service create` produce the same output as Copier for the same answers (compare with `diff -r`).
 
 #### Verification
 - [ ] Generated service builds, runs, and serves `/healthz`

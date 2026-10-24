@@ -1,0 +1,77 @@
+# helm test: a ServiceAccount that can read CRDs, and a Pod that checks each enabled add-on's CRD exists.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-addons-test
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "platform-addons.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-addons-test
+  labels:
+    {{- include "platform-addons.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-addons-test
+  labels:
+    {{- include "platform-addons.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-addons-test
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-addons-test
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-test-addons
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "platform-addons.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  serviceAccountName: {{ .Release.Name }}-addons-test
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: kubectl
+      image: registry.k8s.io/kubectl:v1.34.1
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -e
+          for crd in {{ include "platform-addons.enabledCRDs" . | fromJsonArray | join " " }}; do
+            kubectl get crd "$crd" >/dev/null && echo "ok: $crd"
+          done

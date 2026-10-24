@@ -1,24 +1,62 @@
+{{- /*
+platform-api never reads or writes platform CRs with its own identity. Every
+request runs as a client that impersonates the authenticated caller, so cluster
+RBAC is evaluated for the real user. The ServiceAccount's only permission is
+`impersonate`, and that permission is scoped here. See README.md in this chart.
+*/ -}}
+{{- $admin := .Values.platformAdminGroup -}}
+{{- range .Values.impersonation.users }}
+  {{- if hasPrefix "system:" . }}
+    {{- fail (printf "impersonation.users: %q is a reserved system: identity and cannot be impersonated" .) }}
+  {{- end }}
+{{- end }}
+{{- range .Values.impersonation.groups }}
+  {{- if hasPrefix "system:" . }}
+    {{- fail (printf "impersonation.groups: %q is a reserved system: group and cannot be impersonated (system:masters, system:nodes and every other system:* group are refused)" .) }}
+  {{- end }}
+{{- end }}
+{{- if hasPrefix "system:" $admin }}
+  {{- fail (printf "platformAdminGroup %q must not be a system: group" $admin) }}
+{{- end }}
+{{- if and (not .Values.impersonation.allowAnyUser) (empty .Values.impersonation.users) }}
+  {{- fail "impersonation.users must list the subjects platform-api may act as, or set impersonation.allowAnyUser=true (explicit opt-in)" }}
+{{- end }}
+{{- if empty .Values.impersonation.groups }}
+  {{- fail "impersonation.groups must list at least one tenant group" }}
+{{- end }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "platform-api.fullname" . }}
+  name: {{ include "platform-api.fullname" . }}-impersonator
   labels:
     {{- include "platform-api.labels" . | nindent 4 }}
 rules:
-  - apiGroups: ["platform.mycompany.io"]
-    resources: ["tenants", "environments", "workloads"]
-    verbs: ["get", "list", "watch", "create", "delete"]
+  # Users: the only residual broad grant. Kubernetes cannot match a pattern, so
+  # with allowAnyUser=false the rule is limited to the listed subjects.
+  - apiGroups: [""]
+    resources: ["users"]
+    {{- if not .Values.impersonation.allowAnyUser }}
+    resourceNames: {{ toJson .Values.impersonation.users }}
+    {{- end }}
+    verbs: ["impersonate"]
+  # Groups: an explicit allowlist. platform-api also drops every group that is
+  # not on it before impersonating. Include platformAdminGroup here if its members
+  # should act as the admin group in cluster RBAC.
+  - apiGroups: [""]
+    resources: ["groups"]
+    resourceNames: {{ toJson (include "platform-api.impersonateGroupList" . | fromJsonArray) }}
+    verbs: ["impersonate"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "platform-api.fullname" . }}
+  name: {{ include "platform-api.fullname" . }}-impersonator
   labels:
     {{- include "platform-api.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ include "platform-api.fullname" . }}
+  name: {{ include "platform-api.fullname" . }}-impersonator
 subjects:
   - kind: ServiceAccount
     name: {{ include "platform-api.serviceAccountName" . }}

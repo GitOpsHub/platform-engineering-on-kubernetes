@@ -4,5 +4,5 @@ platform-api is installed.
   curl http://localhost:8080/version
 {{- if not .Values.auth.existingSecret }}
 
-WARNING: authentication is DISABLED (auth.existingSecret is empty). Do not expose this service.
+WARNING: auth.existingSecret is empty, so every resource request returns 401. Configure a tokens Secret or an OIDC verifier before use.
 {{- end }}

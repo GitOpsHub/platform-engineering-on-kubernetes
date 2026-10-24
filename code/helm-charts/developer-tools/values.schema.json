@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "developer-tools values",
+  "type": "object",
+  "required": ["backstage", "platformCli"],
+  "properties": {
+    "backstage": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "platformCli": {
+      "type": "object",
+      "required": ["docs"],
+      "properties": {
+        "docs": {
+          "type": "object",
+          "required": ["enabled", "name"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+            },
+            "labels": { "type": "object", "additionalProperties": { "type": "string" } }
+          }
+        }
+      }
+    }
+  }
+}

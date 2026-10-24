@@ -1,0 +1,127 @@
+# Composition: XDatabase -> AWS RDS PostgreSQL instance.
+# Pipeline mode: step 1 renders the managed resource with function-patch-and-transform,
+# step 2 marks the composite ready once the managed resource is ready (function-auto-ready).
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: database-aws-postgres
+  labels:
+    platform.mycompany.io/cloud: aws
+    platform.mycompany.io/component: crossplane-compositions
+spec:
+  compositeTypeRef:
+    apiVersion: platform.mycompany.io/v1alpha1
+    kind: XDatabase
+  mode: Pipeline
+  pipeline:
+    - step: render-rds-instance
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: rds-instance
+            base:
+              apiVersion: rds.aws.upbound.io/v1beta1
+              kind: Instance
+              spec:
+                providerConfigRef:
+                  name: default
+                deletionPolicy: Orphan
+                forProvider:
+                  engine: postgres
+                  instanceClass: db.t4g.micro
+                  allocatedStorage: 20
+                  skipFinalSnapshot: false
+                  finalSnapshotIdentifier: placeholder
+                  publiclyAccessible: false
+                  storageEncrypted: true
+                  autoMinorVersionUpgrade: true
+                  deletionProtection: true
+                  multiAz: false
+                  username: dbadmin
+                  autoGeneratePassword: true
+                  passwordSecretRef:
+                    namespace: crossplane-system
+                    name: placeholder
+                    key: password
+                  backupRetentionPeriod: 7
+                  performanceInsightsEnabled: true
+                writeConnectionSecretToRef:
+                  namespace: crossplane-system
+            patches:
+              # Grab the composite's name for the connection secret and the final snapshot name.
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.uid
+                toFieldPath: spec.writeConnectionSecretToRef.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-rds"
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.uid
+                toFieldPath: spec.forProvider.passwordSecretRef.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-rds-password"
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.uid
+                toFieldPath: spec.forProvider.finalSnapshotIdentifier
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-final"
+              # Developer-facing parameters.
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.tier
+                toFieldPath: spec.forProvider.instanceClass
+                transforms:
+                  - type: map
+                    map:
+                      small: db.t4g.micro
+                      medium: db.t4g.medium
+                      large: db.r6g.large
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.storageGB
+                toFieldPath: spec.forProvider.allocatedStorage
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.version
+                toFieldPath: spec.forProvider.engineVersion
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.region
+                toFieldPath: spec.forProvider.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.parameters.backupRetentionDays
+                toFieldPath: spec.forProvider.backupRetentionPeriod
+              # Expose the endpoint on the composite status.
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.address
+                toFieldPath: status.endpoint
+              # Propagate the owning tenant label to the managed resource when the claim has one.
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.labels[platform.mycompany.io/tenant]
+                toFieldPath: metadata.labels[platform.mycompany.io/tenant]
+                policy:
+                  fromFieldPath: Optional
+              - type: ToCompositeFieldPath
+                fromFieldPath: metadata.annotations[crossplane.io/external-name]
+                toFieldPath: status.externalName
+                policy:
+                  fromFieldPath: Optional
+            connectionDetails:
+              - name: endpoint
+                fromConnectionSecretKey: endpoint
+              - name: port
+                fromConnectionSecretKey: port
+              - name: username
+                fromConnectionSecretKey: username
+              - name: password
+                fromConnectionSecretKey: password
+    - step: auto-ready
+      functionRef:
+        name: function-auto-ready

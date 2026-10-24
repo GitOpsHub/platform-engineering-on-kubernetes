@@ -1,0 +1,7 @@
+# Values used by `make helm-lint` and `make helm-template`. Real installs must
+# supply their own tenant groups and subjects.
+impersonation:
+  users:
+    - platform-api-smoke-test
+  groups:
+    - tenant-example

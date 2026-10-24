@@ -1,0 +1,10 @@
+# Application namespace. Restricted Pod Security, unlike platform-monitoring (privileged).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: checkout
+  labels:
+    platform.mycompany.io/managed: "true"
+    platform.mycompany.io/lab: lab-06-observability-stack
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted

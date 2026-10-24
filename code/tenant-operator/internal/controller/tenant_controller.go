@@ -1,407 +1,558 @@
+// Package controller contains the Tenant reconciler.
+//
+// Ownership rules (see README "Security"):
+//   - A namespace is adopted only if it carries managed-by=tenant-operator and
+//     tenant=<name>, or already has a controller reference to the Tenant.
+//   - Every object the operator creates is owned through a controller reference
+//     so garbage collection can clean it up.
+//   - Every Delete is preceded by a controller-reference check; objects that are
+//     not owned by the Tenant are never deleted, even when they carry our labels.
 package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	platformv1 "github.com/myorg/platform-engineering/api/v1"
+	platformv1alpha1 "github.com/GitOpsHub/platform-engineering-on-kubernetes/code/tenant-operator/api/v1alpha1"
 )
 
-// TenantReconciler reconciles a Tenant object
+// Names of the per-namespace objects managed by the operator.
+const (
+	ResourceQuotaName       = "tenant-quota"
+	LimitRangeName          = "tenant-limits"
+	OwnersRoleBindingName   = "tenant-owners"
+	DefaultDenyPolicyName   = "tenant-default-deny"
+	AllowTenantPolicyName   = "tenant-allow-same-tenant"
+	AllowDNSPolicyName      = "tenant-allow-dns"
+	ownerGroupPrefix        = "group:"
+	requeueWhileTerminating = 5 * time.Second
+)
+
+// Reasons reported in status conditions for spec or ownership problems.
+const (
+	ReasonInvalidNamespace  = "InvalidNamespace"
+	ReasonNamespaceConflict = "NamespaceConflict"
+	ReasonObjectConflict    = "ObjectConflict"
+	ReasonInvalidQuota      = "InvalidQuota"
+)
+
+// specError marks a problem that more retries cannot fix (an invalid spec or an
+// object that belongs to someone else). It is reported in status and the
+// Tenant is only reconciled again when it, or the objects it conflicts with, change.
+type specError struct {
+	reason string
+	err    error
+}
+
+func (e specError) Error() string { return e.err.Error() }
+func (e specError) Unwrap() error { return e.err }
+
+// TenantReconciler reconciles a Tenant object.
 type TenantReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-	Log    logr.Logger
+
+	// OperatorNamespace is the namespace the operator runs in. It is never used
+	// (or deleted) as a tenant namespace.
+	OperatorNamespace string
 }
 
-// +kubebuilder:rbac:groups=platform.mycompany.io,resources=tenants,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=platform.mycompany.io,resources=tenants,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=platform.mycompany.io,resources=tenants/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=platform.mycompany.io,resources=tenantquotas,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=platform.mycompany.io,resources=tenantquotas/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=platform.mycompany.io,resources=tenants/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=resourcequotas,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=limitranges,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=resourcequotas;limitranges,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=bind,resourceNames=admin
 
+// Reconcile drives the cluster towards the state described by a Tenant.
 func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.Log.WithValues("tenant", req.NamespacedName)
+	logger := log.FromContext(ctx).WithValues("tenant", req.Name)
 
-	// Fetch the Tenant
-	tenant := &platformv1.Tenant{}
+	tenant := &platformv1alpha1.Tenant{}
 	if err := r.Get(ctx, req.NamespacedName, tenant); err != nil {
-		if errors.IsNotFound(err) {
-			return ctrl.Result{}, nil
-		}
-		log.Error(err, "Failed to get Tenant")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Handle deletion
 	if !tenant.DeletionTimestamp.IsZero() {
-		return r.handleDeletion(ctx, tenant)
+		return r.finalize(ctx, tenant)
 	}
 
-	// Add finalizer if not present
-	if !controllerutil.ContainsFinalizer(tenant, "platform.mycompany.io/tenant-finalizer") {
-		controllerutil.AddFinalizer(tenant, "platform.mycompany.io/tenant-finalizer")
+	if controllerutil.AddFinalizer(tenant, platformv1alpha1.TenantFinalizer) {
 		if err := r.Update(ctx, tenant); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// Update status phase
-	if tenant.Status.Phase == "" {
-		tenant.Status.Phase = platformv1.TenantPhasePending
-		if err := r.Status().Update(ctx, tenant); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
-	}
+	original := tenant.DeepCopy()
+	result, reconcileErr := r.reconcileTenant(ctx, tenant)
 
-	// Reconcile tenant namespaces
-	if err := r.reconcileNamespaces(ctx, tenant); err != nil {
-		r.updateCondition(tenant, "NamespacesReady", metav1.ConditionFalse, "ReconcileError", err.Error())
-		r.updateStatus(ctx, tenant, platformv1.TenantPhaseFailed)
-		return ctrl.Result{}, err
-	}
-
-	// Reconcile tenant quota
-	if err := r.reconcileQuota(ctx, tenant); err != nil {
-		r.updateCondition(tenant, "QuotaReady", metav1.ConditionFalse, "ReconcileError", err.Error())
-		r.updateStatus(ctx, tenant, platformv1.TenantPhaseFailed)
-		return ctrl.Result{}, err
-	}
-
-	// Update status
 	tenant.Status.ObservedGeneration = tenant.Generation
-	tenant.Status.LastReconcileTime = &metav1.Time{Time: time.Now()}
-	r.updateCondition(tenant, "Ready", metav1.ConditionTrue, "Reconciled", "Tenant reconciled successfully")
-	r.updateStatus(ctx, tenant, platformv1.TenantPhaseReady)
+	if err := r.Status().Patch(ctx, tenant, client.MergeFrom(original)); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, errors.Join(reconcileErr, err)
+	}
 
-	log.Info("Tenant reconciled successfully")
+	var se specError
+	if errors.As(reconcileErr, &se) {
+		// Spec or ownership problem: reported in status, wait for a change.
+		logger.Info("tenant spec cannot be satisfied", "reason", se.reason, "message", se.Error())
+		return ctrl.Result{}, nil
+	}
+	if reconcileErr != nil {
+		return ctrl.Result{}, reconcileErr
+	}
+	return result, nil
+}
+
+// reconcileTenant creates/updates all child objects and records conditions.
+func (r *TenantReconciler) reconcileTenant(ctx context.Context, tenant *platformv1alpha1.Tenant) (ctrl.Result, error) {
+	gen := tenant.Generation
+	setCond := func(t string, ok bool, reason, msg string) {
+		status := metav1.ConditionTrue
+		if !ok {
+			status = metav1.ConditionFalse
+		}
+		meta.SetStatusCondition(&tenant.Status.Conditions, metav1.Condition{
+			Type: t, Status: status, Reason: reason, Message: msg, ObservedGeneration: gen,
+		})
+	}
+	fail := func(cond string, err error) (ctrl.Result, error) {
+		reason := "ReconcileError"
+		var se specError
+		if errors.As(err, &se) {
+			reason = se.reason
+		}
+		setCond(cond, false, reason, err.Error())
+		setCond(platformv1alpha1.ConditionReady, false, reason, err.Error())
+		tenant.Status.Phase = platformv1alpha1.PhaseFailed
+		return ctrl.Result{}, err
+	}
+
+	if tenant.Status.Phase == "" {
+		tenant.Status.Phase = platformv1alpha1.PhasePending
+	}
+
+	hard, err := tenant.Spec.Quota.ResourceList()
+	if err != nil {
+		return fail(platformv1alpha1.ConditionQuotaReady, specError{ReasonInvalidQuota, err})
+	}
+
+	// 1. Validate every requested namespace before touching the cluster.
+	for _, name := range tenant.Spec.Namespaces {
+		if err := platformv1alpha1.ValidateNamespaceName(name, r.OperatorNamespace); err != nil {
+			return fail(platformv1alpha1.ConditionNamespacesReady, specError{ReasonInvalidNamespace, err})
+		}
+	}
+
+	// 2. Namespaces (create or adopt), then prune namespaces we own that were removed.
+	for _, name := range tenant.Spec.Namespaces {
+		if err := r.ensureNamespace(ctx, tenant, name); err != nil {
+			return fail(platformv1alpha1.ConditionNamespacesReady, err)
+		}
+	}
+	if err := r.pruneNamespaces(ctx, tenant); err != nil {
+		return fail(platformv1alpha1.ConditionNamespacesReady, err)
+	}
+	// Status is informational only; ownership is decided by controller references.
+	tenant.Status.Namespaces = slices.Clone(tenant.Spec.Namespaces)
+	slices.Sort(tenant.Status.Namespaces)
+	setCond(platformv1alpha1.ConditionNamespacesReady, true, "Provisioned",
+		fmt.Sprintf("%d namespace(s) provisioned", len(tenant.Spec.Namespaces)))
+
+	// 3. Per-namespace policy objects.
+	for _, ns := range tenant.Spec.Namespaces {
+		if err := r.ensureQuota(ctx, tenant, ns, hard); err != nil {
+			return fail(platformv1alpha1.ConditionQuotaReady, err)
+		}
+		if err := r.ensureNetworkPolicies(ctx, tenant, ns); err != nil {
+			return fail(platformv1alpha1.ConditionNetworkReady, err)
+		}
+		if err := r.ensureOwnerBinding(ctx, tenant, ns); err != nil {
+			return fail(platformv1alpha1.ConditionRBACReady, err)
+		}
+	}
+	setCond(platformv1alpha1.ConditionQuotaReady, true, "Applied", "ResourceQuota and LimitRange applied")
+	if tenant.Spec.NetworkIsolation {
+		setCond(platformv1alpha1.ConditionNetworkReady, true, "Isolated", "default-deny, same-tenant and DNS policies applied")
+	} else {
+		setCond(platformv1alpha1.ConditionNetworkReady, true, "Disabled", "network isolation disabled")
+	}
+	setCond(platformv1alpha1.ConditionRBACReady, true, "Bound",
+		fmt.Sprintf("%d owner(s) bound to ClusterRole admin", len(tenant.Spec.Owners)))
+	setCond(platformv1alpha1.ConditionReady, true, "Reconciled", "tenant is ready")
+	tenant.Status.Phase = platformv1alpha1.PhaseReady
 	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 }
 
-func (r *TenantReconciler) handleDeletion(ctx context.Context, tenant *platformv1.Tenant) (ctrl.Result, error) {
-	log := r.Log.WithValues("tenant", tenant.Name)
-	log.Info("Deleting tenant")
+// operatorLabels returns the labels the operator always sets on tenant-owned objects.
+func operatorLabels(tenant *platformv1alpha1.Tenant) map[string]string {
+	return map[string]string{
+		platformv1alpha1.LabelTenant:    tenant.Name,
+		platformv1alpha1.LabelManagedBy: platformv1alpha1.ManagedByValue,
+	}
+}
 
-	// Delete tenant namespaces
-	for _, nsName := range tenant.Status.Namespaces {
-		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
-		if err := r.Delete(ctx, ns); err != nil && !errors.IsNotFound(err) {
-			log.Error(err, "Failed to delete namespace", "namespace", nsName)
+// applyNamespaceMetadata sets user labels/annotations first (reserved keys are
+// filtered), then the operator labels, so users can never override ownership labels.
+func applyNamespaceMetadata(tenant *platformv1alpha1.Tenant, ns *corev1.Namespace) {
+	labels := map[string]string{}
+	for k, v := range ns.Labels {
+		labels[k] = v
+	}
+	for k, v := range platformv1alpha1.FilterUserMetadata(tenant.Labels) {
+		labels[k] = v
+	}
+	for k, v := range operatorLabels(tenant) {
+		labels[k] = v
+	}
+	ns.Labels = labels
+
+	annotations := map[string]string{}
+	for k, v := range ns.Annotations {
+		annotations[k] = v
+	}
+	for k, v := range platformv1alpha1.FilterUserMetadata(tenant.Annotations) {
+		annotations[k] = v
+	}
+	ns.Annotations = annotations
+}
+
+// mergeOperatorLabels sets the operator labels on a child object, keeping its other labels.
+func mergeOperatorLabels(tenant *platformv1alpha1.Tenant, obj client.Object) {
+	l := obj.GetLabels()
+	if l == nil {
+		l = map[string]string{}
+	}
+	for k, v := range operatorLabels(tenant) {
+		l[k] = v
+	}
+	obj.SetLabels(l)
+}
+
+// ensureNamespace creates the namespace, or adopts it when CanAdoptNamespace allows.
+func (r *TenantReconciler) ensureNamespace(ctx context.Context, tenant *platformv1alpha1.Tenant, name string) error {
+	ns := &corev1.Namespace{}
+	err := r.Get(ctx, client.ObjectKey{Name: name}, ns)
+	if apierrors.IsNotFound(err) {
+		ns = &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}}
+		applyNamespaceMetadata(tenant, ns)
+		if err := controllerutil.SetControllerReference(tenant, ns, r.Scheme); err != nil {
+			return err
+		}
+		return r.Create(ctx, ns)
+	}
+	if err != nil {
+		return err
+	}
+
+	if !platformv1alpha1.CanAdoptNamespace(ns, tenant) {
+		return specError{ReasonNamespaceConflict, fmt.Errorf(
+			"namespace %q already exists and is not managed by tenant %q", name, tenant.Name)}
+	}
+	if !ns.DeletionTimestamp.IsZero() {
+		return fmt.Errorf("namespace %q is terminating; will retry", name)
+	}
+	if err := controllerutil.SetControllerReference(tenant, ns, r.Scheme); err != nil {
+		// Another controller already owns it.
+		return specError{ReasonNamespaceConflict, fmt.Errorf("namespace %q: %w", name, err)}
+	}
+	applyNamespaceMetadata(tenant, ns)
+	return r.Update(ctx, ns)
+}
+
+// ownedNamespaces lists namespaces whose controller reference points at tenant.
+func (r *TenantReconciler) ownedNamespaces(ctx context.Context, tenant *platformv1alpha1.Tenant) ([]corev1.Namespace, error) {
+	list := &corev1.NamespaceList{}
+	if err := r.List(ctx, list); err != nil {
+		return nil, err
+	}
+	owned := make([]corev1.Namespace, 0, len(list.Items))
+	for _, ns := range list.Items {
+		if metav1.IsControlledBy(&ns, tenant) {
+			owned = append(owned, ns)
+		}
+	}
+	return owned, nil
+}
+
+// pruneNamespaces deletes namespaces owned by the tenant that are no longer in
+// spec.namespaces. Only controller-owned namespaces are candidates.
+func (r *TenantReconciler) pruneNamespaces(ctx context.Context, tenant *platformv1alpha1.Tenant) error {
+	owned, err := r.ownedNamespaces(ctx, tenant)
+	if err != nil {
+		return err
+	}
+	for i := range owned {
+		ns := &owned[i]
+		if slices.Contains(tenant.Spec.Namespaces, ns.Name) || !ns.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if platformv1alpha1.IsReservedNamespace(ns.Name, r.OperatorNamespace) {
+			continue
+		}
+		// Ownership re-checked immediately before the delete.
+		if !metav1.IsControlledBy(ns, tenant) {
+			continue
+		}
+		if err := r.Delete(ctx, ns); client.IgnoreNotFound(err) != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ensureChild creates or updates a namespaced object owned by tenant. An existing
+// object without a controller reference to the tenant is a conflict; it is never adopted.
+// mutate must modify the same obj pointer it closes over.
+func (r *TenantReconciler) ensureChild(ctx context.Context, tenant *platformv1alpha1.Tenant, obj client.Object, mutate func()) error {
+	err := r.Get(ctx, client.ObjectKeyFromObject(obj), obj)
+	if apierrors.IsNotFound(err) {
+		mutate()
+		if err := controllerutil.SetControllerReference(tenant, obj, r.Scheme); err != nil {
+			return err
+		}
+		return r.Create(ctx, obj)
+	}
+	if err != nil {
+		return err
+	}
+	if !metav1.IsControlledBy(obj, tenant) {
+		return specError{ReasonObjectConflict, fmt.Errorf(
+			"%T %s/%s exists and is not owned by tenant %q", obj, obj.GetNamespace(), obj.GetName(), tenant.Name)}
+	}
+	mutate()
+	return r.Update(ctx, obj)
+}
+
+// deleteChild deletes a namespaced object only if the tenant owns it.
+func (r *TenantReconciler) deleteChild(ctx context.Context, tenant *platformv1alpha1.Tenant, obj client.Object) error {
+	if err := r.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	if !metav1.IsControlledBy(obj, tenant) {
+		return nil
+	}
+	return client.IgnoreNotFound(r.Delete(ctx, obj))
+}
+
+func (r *TenantReconciler) ensureQuota(ctx context.Context, tenant *platformv1alpha1.Tenant, ns string, hard corev1.ResourceList) error {
+	rq := &corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: ResourceQuotaName, Namespace: ns}}
+	if len(hard) == 0 {
+		if err := r.deleteChild(ctx, tenant, rq); err != nil {
+			return err
+		}
+	} else if err := r.ensureChild(ctx, tenant, rq, func() {
+		mergeOperatorLabels(tenant, rq)
+		rq.Spec.Hard = hard
+	}); err != nil {
+		return err
+	}
+
+	// A LimitRange gives containers sane defaults so that pods are admitted
+	// once a quota on requests/limits exists.
+	lr := &corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{Name: LimitRangeName, Namespace: ns}}
+	return r.ensureChild(ctx, tenant, lr, func() {
+		mergeOperatorLabels(tenant, lr)
+		lr.Spec.Limits = []corev1.LimitRangeItem{{
+			Type: corev1.LimitTypeContainer,
+			Default: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+			},
+			DefaultRequest: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("100m"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
+			},
+		}}
+	})
+}
+
+func (r *TenantReconciler) ensureNetworkPolicies(ctx context.Context, tenant *platformv1alpha1.Tenant, ns string) error {
+	desired := desiredNetworkPolicies(tenant.Name, ns)
+	if !tenant.Spec.NetworkIsolation {
+		for i := range desired {
+			np := &networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: desired[i].Name, Namespace: ns}}
+			if err := r.deleteChild(ctx, tenant, np); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	for i := range desired {
+		want := desired[i]
+		np := &networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: want.Name, Namespace: ns}}
+		if err := r.ensureChild(ctx, tenant, np, func() {
+			mergeOperatorLabels(tenant, np)
+			np.Spec = want.Spec
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// desiredNetworkPolicies returns the isolation policy set for one namespace:
+//   - default-deny all ingress and egress
+//   - allow ingress/egress to any namespace labelled with the same tenant
+//   - allow DNS egress to kube-system
+func desiredNetworkPolicies(tenantName, ns string) []networkingv1.NetworkPolicy {
+	sameTenant := []networkingv1.NetworkPolicyPeer{{
+		NamespaceSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{platformv1alpha1.LabelTenant: tenantName},
+		},
+	}}
+	udp, tcp := corev1.ProtocolUDP, corev1.ProtocolTCP
+	dnsPort := intstr.FromInt32(53)
+	both := []networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress}
+
+	return []networkingv1.NetworkPolicy{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: DefaultDenyPolicyName, Namespace: ns},
+			Spec: networkingv1.NetworkPolicySpec{
+				PodSelector: metav1.LabelSelector{},
+				PolicyTypes: both,
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: AllowTenantPolicyName, Namespace: ns},
+			Spec: networkingv1.NetworkPolicySpec{
+				PodSelector: metav1.LabelSelector{},
+				PolicyTypes: both,
+				Ingress:     []networkingv1.NetworkPolicyIngressRule{{From: sameTenant}},
+				Egress:      []networkingv1.NetworkPolicyEgressRule{{To: sameTenant}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: AllowDNSPolicyName, Namespace: ns},
+			Spec: networkingv1.NetworkPolicySpec{
+				PodSelector: metav1.LabelSelector{},
+				PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
+				Egress: []networkingv1.NetworkPolicyEgressRule{{
+					To: []networkingv1.NetworkPolicyPeer{{
+						NamespaceSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"kubernetes.io/metadata.name": "kube-system"},
+						},
+					}},
+					Ports: []networkingv1.NetworkPolicyPort{
+						{Protocol: &udp, Port: &dnsPort},
+						{Protocol: &tcp, Port: &dnsPort},
+					},
+				}},
+			},
+		},
+	}
+}
+
+func (r *TenantReconciler) ensureOwnerBinding(ctx context.Context, tenant *platformv1alpha1.Tenant, ns string) error {
+	rb := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: OwnersRoleBindingName, Namespace: ns}}
+	if len(tenant.Spec.Owners) == 0 {
+		return r.deleteChild(ctx, tenant, rb)
+	}
+	return r.ensureChild(ctx, tenant, rb, func() {
+		mergeOperatorLabels(tenant, rb)
+		// RoleRef is immutable; it is always the same value so updates are safe.
+		rb.RoleRef = rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: "admin"}
+		rb.Subjects = ownerSubjects(tenant.Spec.Owners)
+	})
+}
+
+// ownerSubjects maps "alice@example.com" to a User and "group:team-a" to a Group.
+func ownerSubjects(owners []string) []rbacv1.Subject {
+	subjects := make([]rbacv1.Subject, 0, len(owners))
+	for _, o := range owners {
+		if g, ok := strings.CutPrefix(o, ownerGroupPrefix); ok {
+			subjects = append(subjects, rbacv1.Subject{Kind: rbacv1.GroupKind, APIGroup: rbacv1.GroupName, Name: g})
+			continue
+		}
+		subjects = append(subjects, rbacv1.Subject{Kind: rbacv1.UserKind, APIGroup: rbacv1.GroupName, Name: o})
+	}
+	return subjects
+}
+
+// finalize deletes every namespace owned by the tenant, then releases the
+// finalizer. Namespace deletion is asynchronous; we wait until every delete
+// has been accepted. Garbage collection covers anything left behind.
+func (r *TenantReconciler) finalize(ctx context.Context, tenant *platformv1alpha1.Tenant) (ctrl.Result, error) {
+	if !controllerutil.ContainsFinalizer(tenant, platformv1alpha1.TenantFinalizer) {
+		return ctrl.Result{}, nil
+	}
+
+	if tenant.Status.Phase != platformv1alpha1.PhaseTerminating {
+		original := tenant.DeepCopy()
+		tenant.Status.Phase = platformv1alpha1.PhaseTerminating
+		meta.SetStatusCondition(&tenant.Status.Conditions, metav1.Condition{
+			Type: platformv1alpha1.ConditionReady, Status: metav1.ConditionFalse,
+			Reason: "Terminating", Message: "deleting tenant namespaces", ObservedGeneration: tenant.Generation,
+		})
+		if err := r.Status().Patch(ctx, tenant, client.MergeFrom(original)); client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, err
 		}
 	}
 
-	// Delete tenant quota
-	quota := &platformv1.TenantQuota{ObjectMeta: metav1.ObjectMeta{Name: tenant.Name}}
-	if err := r.Delete(ctx, quota); err != nil && !errors.IsNotFound(err) {
-		log.Error(err, "Failed to delete tenant quota")
+	owned, err := r.ownedNamespaces(ctx, tenant)
+	if err != nil {
 		return ctrl.Result{}, err
 	}
+	for i := range owned {
+		ns := &owned[i]
+		if !ns.DeletionTimestamp.IsZero() || platformv1alpha1.IsReservedNamespace(ns.Name, r.OperatorNamespace) {
+			continue
+		}
+		if !metav1.IsControlledBy(ns, tenant) {
+			continue
+		}
+		if err := r.Delete(ctx, ns); client.IgnoreNotFound(err) != nil {
+			return ctrl.Result{}, err
+		}
+	}
 
-	// Remove finalizer
-	controllerutil.RemoveFinalizer(tenant, "platform.mycompany.io/tenant-finalizer")
-	if err := r.Update(ctx, tenant); err != nil {
+	// Re-list to confirm every owned namespace has been asked to terminate.
+	owned, err = r.ownedNamespaces(ctx, tenant)
+	if err != nil {
 		return ctrl.Result{}, err
 	}
+	for _, ns := range owned {
+		if ns.DeletionTimestamp.IsZero() {
+			return ctrl.Result{RequeueAfter: requeueWhileTerminating}, nil
+		}
+	}
 
-	log.Info("Tenant deleted successfully")
-	return ctrl.Result{}, nil
+	controllerutil.RemoveFinalizer(tenant, platformv1alpha1.TenantFinalizer)
+	return ctrl.Result{}, client.IgnoreNotFound(r.Update(ctx, tenant))
 }
 
-func (r *TenantReconciler) reconcileNamespaces(ctx context.Context, tenant *platformv1.Tenant) error {
-	log := r.Log.WithValues("tenant", tenant.Name)
-
-	prefix := tenant.Spec.Namespaces.Prefix
-	if prefix == "" {
-		prefix = tenant.Name
-	}
-
-	environments := tenant.Spec.Namespaces.Environments
-	if len(environments) == 0 {
-		defaultEnv := tenant.Spec.Namespaces.DefaultEnvironment
-		if defaultEnv == "" {
-			defaultEnv = "dev"
-		}
-		environments = []string{defaultEnv}
-	}
-
-	var createdNamespaces []string
-
-	for _, env := range environments {
-		nsName := fmt.Sprintf("%s-%s", prefix, env)
-
-		ns := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nsName,
-				Labels: map[string]string{
-					"platform.mycompany.io/tenant":     tenant.Name,
-					"platform.mycompany.io/environment": env,
-					"platform.mycompany.io/managed-by": "tenant-operator",
-				},
-				Annotations: tenant.Spec.Namespaces.Annotations,
-			},
-		}
-
-		// Merge tenant labels
-		for k, v := range tenant.Spec.Namespaces.Labels {
-			ns.Labels[k] = v
-		}
-
-		// Set owner reference
-		if err := ctrl.SetControllerReference(tenant, ns, r.Scheme); err != nil {
-			return err
-		}
-
-		// Create or update namespace
-		existing := &corev1.Namespace{}
-		if err := r.Get(ctx, types.NamespacedName{Name: nsName}, existing); err != nil {
-			if errors.IsNotFound(err) {
-				if err := r.Create(ctx, ns); err != nil {
-					return err
-				}
-				log.Info("Created namespace", "namespace", nsName)
-			} else {
-				return err
-			}
-		} else {
-			// Update labels/annotations
-			existing.Labels = ns.Labels
-			existing.Annotations = ns.Annotations
-			if err := r.Update(ctx, existing); err != nil {
-				return err
-			}
-		}
-
-		createdNamespaces = append(createdNamespaces, nsName)
-
-		// Apply network policy if specified
-		if tenant.Spec.Namespaces.NetworkPolicy != nil {
-			if err := r.applyNetworkPolicy(ctx, nsName, tenant.Spec.Namespaces.NetworkPolicy); err != nil {
-				return err
-			}
-		}
-
-		// Apply resource quota if specified
-		if tenant.Spec.Namespaces.ResourceQuota != nil {
-			if err := r.applyResourceQuota(ctx, nsName, tenant.Spec.Namespaces.ResourceQuota); err != nil {
-				return err
-			}
-		}
-
-		// Apply limit range if specified
-		if tenant.Spec.Namespaces.LimitRange != nil {
-			if err := r.applyLimitRange(ctx, nsName, tenant.Spec.Namespaces.LimitRange); err != nil {
-				return err
-			}
-		}
-	}
-
-	// Clean up old namespaces
-	for _, existingNs := range tenant.Status.Namespaces {
-		found := false
-		for _, newNs := range createdNamespaces {
-			if existingNs == newNs {
-				found = true
-				break
-			}
-		}
-		if !found {
-			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: existingNs}}
-			if err := r.Delete(ctx, ns); err != nil && !errors.IsNotFound(err) {
-				return err
-			}
-			log.Info("Deleted old namespace", "namespace", existingNs)
-		}
-	}
-
-	tenant.Status.Namespaces = createdNamespaces
-	return nil
-}
-
-func (r *TenantReconciler) applyNetworkPolicy(ctx context.Context, namespace string, spec *platformv1.NetworkPolicySpec) error {
-	np := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tenant-default",
-			Namespace: namespace,
-		},
-	}
-
-	_, err := ctrl.CreateOrUpdate(ctx, r.Client, np, func() error {
-		np.Spec.PodSelector = metav1.LabelSelector{}
-		np.Spec.PolicyTypes = spec.PolicyTypes
-		if len(spec.PolicyTypes) == 0 {
-			np.Spec.PolicyTypes = []networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress}
-		}
-
-		// Convert ingress rules
-		np.Spec.Ingress = make([]networkingv1.NetworkPolicyIngressRule, len(spec.Ingress))
-		for i, rule := range spec.Ingress {
-			np.Spec.Ingress[i] = networkingv1.NetworkPolicyIngressRule{
-				From:  convertNetworkPolicyPeers(rule.From),
-				Ports: convertNetworkPolicyPorts(rule.Ports),
-			}
-		}
-
-		// Convert egress rules
-		np.Spec.Egress = make([]networkingv1.NetworkPolicyEgressRule, len(spec.Egress))
-		for i, rule := range spec.Egress {
-			np.Spec.Egress[i] = networkingv1.NetworkPolicyEgressRule{
-				To:    convertNetworkPolicyPeers(rule.To),
-				Ports: convertNetworkPolicyPorts(rule.Ports),
-			}
-		}
-		return nil
-	})
-
-	return err
-}
-
-func convertNetworkPolicyPeers(peers []platformv1.NetworkPolicyPeer) []networkingv1.NetworkPolicyPeer {
-	result := make([]networkingv1.NetworkPolicyPeer, len(peers))
-	for i, p := range peers {
-		result[i] = networkingv1.NetworkPolicyPeer{
-			PodSelector:       p.PodSelector,
-			NamespaceSelector: p.NamespaceSelector,
-			IPBlock:           convertIPBlock(p.IPBlock),
-		}
-	}
-	return result
-}
-
-func convertNetworkPolicyPorts(ports []platformv1.NetworkPolicyPort) []networkingv1.NetworkPolicyPort {
-	result := make([]networkingv1.NetworkPolicyPort, len(ports))
-	for i, p := range ports {
-		result[i] = networkingv1.NetworkPolicyPort{
-			Protocol: p.Protocol,
-			Port:     p.Port,
-			EndPort:  p.EndPort,
-		}
-	}
-	return result
-}
-
-func convertIPBlock(block *platformv1.IPBlock) *networkingv1.IPBlock {
-	if block == nil {
-		return nil
-	}
-	return &networkingv1.IPBlock{
-		CIDR:   block.CIDR,
-		Except: block.Except,
-	}
-}
-
-func (r *TenantReconciler) applyResourceQuota(ctx context.Context, namespace string, spec *platformv1.ResourceQuotaSpec) error {
-	rq := &corev1.ResourceQuota{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tenant-quota",
-			Namespace: namespace,
-		},
-	}
-
-	_, err := ctrl.CreateOrUpdate(ctx, r.Client, rq, func() error {
-		rq.Spec.Hard = spec.Hard
-		rq.Spec.Scopes = spec.Scopes
-		return nil
-	})
-
-	return err
-}
-
-func (r *TenantReconciler) applyLimitRange(ctx context.Context, namespace string, spec *platformv1.LimitRangeSpec) error {
-	lr := &corev1.LimitRange{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tenant-limits",
-			Namespace: namespace,
-		},
-	}
-
-	_, err := ctrl.CreateOrUpdate(ctx, r.Client, lr, func() error {
-		lr.Spec.Limits = make([]corev1.LimitRangeItem, len(spec.Limits))
-		for i, item := range spec.Limits {
-			lr.Spec.Limits[i] = corev1.LimitRangeItem{
-				Type:                 corev1.LimitType(item.Type),
-				Max:                  item.Max,
-				Min:                  item.Min,
-				Default:              item.Default,
-				DefaultRequest:       item.DefaultRequest,
-				MaxLimitRequestRatio: item.MaxLimitRequestRatio,
-			}
-		}
-		return nil
-	})
-
-	return err
-}
-
-func (r *TenantReconciler) reconcileQuota(ctx context.Context, tenant *platformv1.Tenant) error {
-	quota := &platformv1.TenantQuota{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      tenant.Name,
-			Namespace: "platform-system",
-		},
-	}
-
-	_, err := ctrl.CreateOrUpdate(ctx, r.Client, quota, func() error {
-		quota.Spec.TenantRef = tenant.Name
-		quota.Spec.Quota = tenant.Spec.Quota
-		return nil
-	})
-
-	return err
-}
-
-func (r *TenantReconciler) updateCondition(tenant *platformv1.Tenant, conditionType string, status metav1.ConditionStatus, reason, message string) {
-	condition := metav1.Condition{
-		Type:    conditionType,
-		Status:  status,
-		Reason:  reason,
-		Message: message,
-	}
-	// Update or add condition
-	found := false
-	for i, c := range tenant.Status.Conditions {
-		if c.Type == conditionType {
-			tenant.Status.Conditions[i] = condition
-			found = true
-			break
-		}
-	}
-	if !found {
-		tenant.Status.Conditions = append(tenant.Status.Conditions, condition)
-	}
-}
-
-func (r *TenantReconciler) updateStatus(ctx context.Context, tenant *platformv1.Tenant, phase platformv1.TenantPhase) {
-	tenant.Status.Phase = phase
-	if err := r.Status().Update(ctx, tenant); err != nil {
-		r.Log.Error(err, "Failed to update tenant status")
-	}
-}
-
+// SetupWithManager sets up the controller with the Manager.
 func (r *TenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&platformv1.Tenant{}).
+		Named("tenant").
+		For(&platformv1alpha1.Tenant{}).
 		Owns(&corev1.Namespace{}).
-		Owns(&platformv1.TenantQuota{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		Owns(&corev1.ResourceQuota{}).
+		Owns(&corev1.LimitRange{}).
+		Owns(&networkingv1.NetworkPolicy{}).
+		Owns(&rbacv1.RoleBinding{}).
 		Complete(r)
 }

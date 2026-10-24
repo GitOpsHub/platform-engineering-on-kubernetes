@@ -30,3 +30,12 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version }}
 {{- default "default" .Values.serviceAccount.name -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Groups platform-api may impersonate, exactly as listed in impersonation.groups.
+Rendered as a JSON array so the RBAC resourceNames and the --impersonate-groups
+flag come from one list. This matches platform-core's platformApi.impersonation.groups.
+*/}}
+{{- define "platform-api.impersonateGroupList" -}}
+{{- .Values.impersonation.groups | toJson -}}
+{{- end -}}

@@ -2,6 +2,8 @@
 
 A comprehensive learning platform for Platform Engineering concepts, patterns, and implementations on Kubernetes.
 
+**New here?** Follow the guided, step-by-step path in [START-HERE.md](START-HERE.md).
+
 ## 📚 Learning Path
 
 ### Phase 1: Foundations

@@ -1,0 +1,16 @@
+apiVersion: v2
+name: platform-core
+description: Core control plane for the platform - namespaces, RBAC, platform-api and the tenant, environment and workload operators.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.28.0-0"
+keywords:
+  - platform
+  - kubernetes
+  - operators
+home: https://github.com/gitopshub/platform-engineering-on-kubernetes
+sources:
+  - https://github.com/gitopshub/platform-engineering-on-kubernetes
+maintainers:
+  - name: platform-team

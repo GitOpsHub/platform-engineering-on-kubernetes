@@ -36,6 +36,8 @@ spec:
             - --log-level={{ .Values.logLevel }}
             - --profiling={{ .Values.profiling }}
             - --cors-credentials={{ .Values.cors.credentials }}
+            - --platform-admin-group={{ .Values.platformAdminGroup }}
+            - --impersonate-groups={{ include "platform-api.impersonateGroupList" . | fromJsonArray | join "," }}
             {{- if .Values.cors.origins }}
             - --cors-origins={{ .Values.cors.origins }}
             {{- end }}
