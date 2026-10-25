@@ -536,15 +536,48 @@ Check: `kubectl -n demo top pod -l app=hasher` shows CPU near the 500m limit aft
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| Alloy eBPF pods `CrashLoopBackOff` with permission errors | Not privileged, no `hostPID`, or blocked by PSA/Kyverno | Use a privileged namespace and a policy exemption for the agent ServiceAccount |
-| Flame graph full of hex addresses / `[unknown]` | Stripped binaries, missing frame pointers, unsupported runtime | Build with symbols and frame pointers (`-fno-omit-frame-pointer`); use SDK push for that language |
-| No profiles for a namespace | Namespace opt-out label, or `service_name` empty and dropped | Check relabel rules in the Alloy UI (`:12345`) under component health/debug |
-| Java agent: `perf_events` unavailable | `perf_event_paranoid` restrictive / seccomp | Use `PYROSCOPE_PROFILER_EVENT=itimer` |
-| Pyroscope `429` / ingestion limit errors | Per-tenant limits too low for fleet size | Raise `ingestion_rate_mb`; cut the sample rate or label cardinality |
-| Span "Profiles" link empty | Span shorter than the sampling interval (~10ms at 100 Hz), or the wrapper is missing | Expected for very short spans; check the `otelpyroscope` wrapper is installed |
-| Overhead higher than expected | Alloc profiling with a very small sample interval | Raise the alloc sample size (for example 512k → 2m) |
+### Alloy eBPF pods `CrashLoopBackOff` with permission errors
+
+**Cause:** Not privileged, no `hostPID`, or blocked by PSA/Kyverno
+
+**Fix:** Use a privileged namespace and a policy exemption for the agent ServiceAccount
+
+### Flame graph full of hex addresses / `[unknown]`
+
+**Cause:** Stripped binaries, missing frame pointers, unsupported runtime
+
+**Fix:** Build with symbols and frame pointers (`-fno-omit-frame-pointer`); use SDK push for that language
+
+### No profiles for a namespace
+
+**Cause:** Namespace opt-out label, or `service_name` empty and dropped
+
+**Fix:** Check relabel rules in the Alloy UI (`:12345`) under component health/debug
+
+### Java agent: `perf_events` unavailable
+
+**Cause:** `perf_event_paranoid` restrictive / seccomp
+
+**Fix:** Use `PYROSCOPE_PROFILER_EVENT=itimer`
+
+### Pyroscope `429` / ingestion limit errors
+
+**Cause:** Per-tenant limits too low for fleet size
+
+**Fix:** Raise `ingestion_rate_mb`; cut the sample rate or label cardinality
+
+### Span "Profiles" link empty
+
+**Cause:** Span shorter than the sampling interval (~10ms at 100 Hz), or the wrapper is missing
+
+**Fix:** Expected for very short spans; check the `otelpyroscope` wrapper is installed
+
+### Overhead higher than expected
+
+**Cause:** Alloc profiling with a very small sample interval
+
+**Fix:** Raise the alloc sample size (for example 512k → 2m)
+
 
 ```bash
 # Alloy debug UI: component graph, health, live targets

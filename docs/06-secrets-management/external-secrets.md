@@ -496,7 +496,7 @@ spec:
 
 ---
 
-## Monitoring & Troubleshooting
+## Monitoring
 
 ### Metrics
 ```bash
@@ -509,9 +509,15 @@ kubectl get --raw=/metrics | grep external_secrets
 # external_secrets_store_health
 ```
 
-### Common Issues
+---
 
-#### Secret Not Synced
+## Troubleshooting
+
+### Secret Not Synced (SecretSyncedError)
+
+**Cause:** The ExternalSecret cannot read from the store, or the ClusterSecretStore is not ready.  
+**Fix:** Inspect the status conditions and controller logs.
+
 ```bash
 # Check ExternalSecret status
 kubectl get externalsecret database-credentials -n production -o yaml
@@ -523,7 +529,16 @@ kubectl get clustersecretstore vault-backend -o yaml
 kubectl logs -n external-secrets -l app=external-secrets
 ```
 
-#### Permission Denied
+### ClusterSecretStore Not Ready
+
+**Cause:** The store cannot authenticate to the backend (wrong address, role or credentials).  
+**Fix:** Run `kubectl describe clustersecretstore vault-backend` and read the `Ready` condition message, then correct the provider settings.
+
+### Permission Denied
+
+**Cause:** The Vault role or Kubernetes auth binding does not allow the controller's ServiceAccount to read the path.  
+**Fix:** Check the token, role and ServiceAccount token.
+
 ```bash
 # Check Vault token/role
 vault token lookup
@@ -535,7 +550,11 @@ vault read auth/kubernetes/role/external-secrets
 kubectl exec -n external-secrets deploy/external-secrets -- cat /var/run/secrets/kubernetes.io/serviceaccount/token
 ```
 
-#### Refresh Not Working
+### Refresh Not Working
+
+**Cause:** The `refreshInterval` has not elapsed, or the sync is failing.  
+**Fix:** Force a refresh and check the interval.
+
 ```bash
 # Force refresh
 kubectl annotate externalsecret database-credentials -n production \
@@ -547,23 +566,32 @@ kubectl get externalsecret database-credentials -n production -o jsonpath='{.spe
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
+
+### Exercise 1: Sync a Vault Secret
 
 **Goal**: Sync a Vault KV v2 secret into a Kubernetes Secret, rotate the source value, and confirm the Secret follows.
 
+1. Start a dev-mode Vault in the cluster (lab use only; dev mode is not persistent)
+
 ```bash
-# 1. Start a dev-mode Vault in the cluster (lab use only; dev mode is not persistent)
 helm repo add hashicorp https://helm.releases.hashicorp.com
 helm upgrade --install vault hashicorp/vault \
   --namespace vault --create-namespace \
   --set "server.dev.enabled=true" \
   --set "server.dev.devRootToken=root"
+```
 
-# 2. Write a secret into KV v2
+2. Write a secret into KV v2
+
+```bash
 kubectl -n vault exec vault-0 -- sh -c \
   'VAULT_TOKEN=root vault kv put secret/platform/db username=app password=initial'
+```
 
-# 3. Create the ClusterSecretStore and an ExternalSecret (token auth keeps the lab short)
+3. Create the ClusterSecretStore and an ExternalSecret (token auth keeps the lab short)
+
+```bash
 kubectl apply -f - <<'EOF'
 # exercise-store.yaml
 apiVersion: v1
@@ -607,16 +635,22 @@ spec:
     - extract:
         key: platform/db
 EOF
+```
 
-# 4. Check sync status and read the result
+4. Check sync status and read the result
+
+```bash
 kubectl -n default get externalsecret db-credentials
 kubectl -n default get secret db-credentials -o jsonpath='{.data.password}' | base64 -d; echo
 ```
 
-**Verify**:
-1. The ExternalSecret reports `SecretSynced` with `Ready=True`.
-2. Update the Vault value (`vault kv put secret/platform/db username=app password=rotated`), wait one `refreshInterval`, and confirm the Kubernetes Secret changes without any manual action.
-3. Break the store on purpose (wrong `server`) and read the `status.conditions` to see how the failure is reported.
+Expected output: the ExternalSecret shows `STATUS` `SecretSynced` and `READY` `True`, and the decoded password is `initial`.
+
+**Check:**
+
+- The ExternalSecret reports `SecretSynced` with `Ready=True`.
+- Update the Vault value (`vault kv put secret/platform/db username=app password=rotated`), wait one `refreshInterval`, and confirm the Kubernetes Secret changes without any manual action.
+- Break the store on purpose (wrong `server`) and read the `status.conditions` to see how the failure is reported.
 
 **Cleanup**: `kubectl delete externalsecret db-credentials -n default`, `kubectl delete clustersecretstore vault-dev`, and `helm uninstall vault -n vault`.
 

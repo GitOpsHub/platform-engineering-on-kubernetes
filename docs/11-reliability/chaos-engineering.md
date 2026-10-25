@@ -572,7 +572,7 @@ Developers should be able to run experiments against **their own** workloads wit
 
 ```mermaid
 graph LR
-    Dev[Tenant team] -->|PR| Git[(Repo: experiments/)]
+    Dev[Tenant team] -->|PR| Git[("Repo: experiments/")]
     Git --> Argo[Argo CD]
     Argo --> NS[Tenant namespace]
     NS --> K[Kyverno<br/>guardrails]
@@ -594,7 +594,6 @@ metadata:
   annotations:
     policies.kyverno.io/title: Chaos experiments may only target their own namespace
 spec:
-  validationFailureAction: Enforce
   background: false
   rules:
     - name: selector-namespaces-must-match
@@ -606,6 +605,7 @@ spec:
                 - chaos-mesh.org/v1alpha1/NetworkChaos
                 - chaos-mesh.org/v1alpha1/StressChaos
       validate:
+        failureAction: Enforce
         message: "Chaos selector.namespaces must equal the object's namespace."
         deny:
           conditions:
@@ -733,16 +733,54 @@ vary with timing; the pattern is what matters.
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| Chaos object stuck, `AllInjected=False` | `chaos-daemon` can't reach runtime socket | Set correct `chaosDaemon.runtime` / `socketPath` (k3s: `/run/k3s/containerd/containerd.sock`) |
-| `no pod is selected` | Namespace not annotated (filter mode) or label typo | `kubectl annotate ns X chaos-mesh.org/inject=enabled`; check `labelSelectors` |
-| `chaos-daemon` pods rejected | Pod Security `restricted`/`baseline` on `chaos-mesh` ns | Label namespace `pod-security.kubernetes.io/enforce=privileged` (scoped exemption) |
-| NetworkChaos has no effect | Target uses host network, or CNI bypasses tc (eBPF host routing) | Check `kubectl get networkchaos -o yaml` status; test with plain pods; see CNI docs |
-| Fault never recovers after deleting CR | Finalizer stuck because daemon was gone | Restart `chaos-daemon` on that node; as last resort remove finalizer and restart target pod |
-| Litmus `ChaosResult` verdict `Awaited` forever | Runner can't create jobs (RBAC) | `kubectl logs` of `*-runner` pod; check `chaosServiceAccount` Role |
-| `promProbe` fails with connection refused | Wrong Prometheus endpoint / NetworkPolicy | Use the in-cluster service FQDN; allow egress to `monitoring` |
-| Experiment broke a neighbour | Selectors too broad (`mode: all` across namespaces) | Enforce same-namespace Kyverno policy; start with `mode: one` |
+### Chaos object stuck, `AllInjected=False`
+
+**Cause:** `chaos-daemon` can't reach runtime socket
+
+**Fix:** Set correct `chaosDaemon.runtime` / `socketPath` (k3s: `/run/k3s/containerd/containerd.sock`)
+
+### `no pod is selected`
+
+**Cause:** Namespace not annotated (filter mode) or label typo
+
+**Fix:** `kubectl annotate ns X chaos-mesh.org/inject=enabled`; check `labelSelectors`
+
+### `chaos-daemon` pods rejected
+
+**Cause:** Pod Security `restricted`/`baseline` on `chaos-mesh` ns
+
+**Fix:** Label namespace `pod-security.kubernetes.io/enforce=privileged` (scoped exemption)
+
+### NetworkChaos has no effect
+
+**Cause:** Target uses host network, or CNI bypasses tc (eBPF host routing)
+
+**Fix:** Check `kubectl get networkchaos -o yaml` status; test with plain pods; see CNI docs
+
+### Fault never recovers after deleting CR
+
+**Cause:** Finalizer stuck because daemon was gone
+
+**Fix:** Restart `chaos-daemon` on that node; as last resort remove finalizer and restart target pod
+
+### Litmus `ChaosResult` verdict `Awaited` forever
+
+**Cause:** Runner can't create jobs (RBAC)
+
+**Fix:** `kubectl logs` of `*-runner` pod; check `chaosServiceAccount` Role
+
+### `promProbe` fails with connection refused
+
+**Cause:** Wrong Prometheus endpoint / NetworkPolicy
+
+**Fix:** Use the in-cluster service FQDN; allow egress to `monitoring`
+
+### Experiment broke a neighbour
+
+**Cause:** Selectors too broad (`mode: all` across namespaces)
+
+**Fix:** Enforce same-namespace Kyverno policy; start with `mode: one`
+
 
 ```bash
 kubectl describe podchaos -n checkout checkout-pod-kill   # look at Events and status.conditions

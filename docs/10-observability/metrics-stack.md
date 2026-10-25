@@ -528,7 +528,7 @@ graph TB
     TO --> SM[Default ServiceMonitor]
     TO --> DB[Grafana folder + dashboards]
     TO --> LIM[Per-tenant limits in Mimir runtime config]
-    Dev[Developer] -->|adds annotation / Workload trait| W[Workload CR]
+    Dev[Developer] -->|"adds annotation / Workload trait"| W[Workload CR]
     W --> SM
 ```
 
@@ -566,7 +566,6 @@ kind: ClusterPolicy
 metadata:
   name: servicemonitor-guardrails
 spec:
-  validationFailureAction: Enforce
   background: true
   rules:
     - name: no-honor-labels
@@ -575,6 +574,7 @@ spec:
           - resources:
               kinds: [monitoring.coreos.com/v1/ServiceMonitor]
       validate:
+        failureAction: Enforce
         message: "honorLabels is reserved for platform-owned ServiceMonitors."
         pattern:
           spec:
@@ -701,16 +701,54 @@ Clean up with `kubectl delete ns checkout; kill %1`.
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| ServiceMonitor ignored, target missing | Selector mismatch with `serviceMonitorSelector`, or Service port not *named* | Set `*SelectorNilUsesHelmValues: false`; reference the port by name |
-| Target `DOWN` with `context deadline exceeded` | NetworkPolicy blocks the monitoring namespace, or scrape too slow | Allow ingress from `monitoring`; raise `scrapeTimeout`; check `/metrics` size |
-| `sample limit exceeded` | Target exposes more series than `enforcedSampleLimit` | Fix cardinality at the source or drop with `metricRelabelings` |
-| Prometheus OOMKilled | Cardinality growth, or heavy queries | Run `topk(10, count by (__name__)({__name__=~".+"}))`, check the TSDB status page `/tsdb-status`, add query limits |
-| Duplicate series in Grafana | HA replicas queried without dedupe | Query through Thanos/Mimir with `--query.replica-label` |
-| `out of order sample` errors on remote write | Two writers with identical external labels | Make sure each replica has a unique `prometheus_replica` label |
-| Gaps in `rate()` graphs | Range shorter than 2× scrape interval | Use `[$__rate_interval]` in Grafana |
-| Compactor halted: `overlapping blocks` | Two compactors on one bucket, or duplicate uploads | Run one compactor; `thanos tools bucket verify --repair` |
+### ServiceMonitor ignored, target missing
+
+**Cause:** Selector mismatch with `serviceMonitorSelector`, or Service port not *named*
+
+**Fix:** Set `*SelectorNilUsesHelmValues: false`; reference the port by name
+
+### Target `DOWN` with `context deadline exceeded`
+
+**Cause:** NetworkPolicy blocks the monitoring namespace, or scrape too slow
+
+**Fix:** Allow ingress from `monitoring`; raise `scrapeTimeout`; check `/metrics` size
+
+### `sample limit exceeded`
+
+**Cause:** Target exposes more series than `enforcedSampleLimit`
+
+**Fix:** Fix cardinality at the source or drop with `metricRelabelings`
+
+### Prometheus OOMKilled
+
+**Cause:** Cardinality growth, or heavy queries
+
+**Fix:** Run `topk(10, count by (__name__)({__name__=~".+"}))`, check the TSDB status page `/tsdb-status`, add query limits
+
+### Duplicate series in Grafana
+
+**Cause:** HA replicas queried without dedupe
+
+**Fix:** Query through Thanos/Mimir with `--query.replica-label`
+
+### `out of order sample` errors on remote write
+
+**Cause:** Two writers with identical external labels
+
+**Fix:** Make sure each replica has a unique `prometheus_replica` label
+
+### Gaps in `rate()` graphs
+
+**Cause:** Range shorter than 2× scrape interval
+
+**Fix:** Use `[$__rate_interval]` in Grafana
+
+### Compactor halted: `overlapping blocks`
+
+**Cause:** Two compactors on one bucket, or duplicate uploads
+
+**Fix:** Run one compactor; `thanos tools bucket verify --repair`
+
 
 ```bash
 # Inspect what the operator generated

@@ -1,15 +1,15 @@
-# 15 — Case Studies
+# 15 - Case Studies
 
 How three organizations have approached platform engineering, and one composite organization to practice on. Each case study separates what the company has said publicly from this repository's analysis, and each links its sources.
 
-## Documents
+## Reading Order
 
-| Document | Type | What you'll learn |
-|----------|------|-------------------|
-| [Netflix](./netflix.md) | Real company | Titus on Apache Mesos, Spinnaker, Chaos Monkey and Netflix OSS, the "operate what you build" model, and the paved road |
-| [Spotify](./spotify.md) | Real company | The 2012 squad model and why it is misread, the origin and open-sourcing of Backstage, and golden paths with software templates |
-| [Airbnb](./airbnb.md) | Real company | SmartStack service discovery, the monolith-to-services arc, delivery migration, and the regional-to-zonal Kubernetes migration |
-| [Generic Enterprise](./generic-enterprise.md) | **Composite (fictional)** | An end-to-end modernization: inventory, maturity assessment, team restructuring, platform contract, and sequencing |
+| # | Document | Type | Summary |
+|---|----------|------|---------|
+| 1 | [Netflix](./netflix.md) | Real company | Titus on Apache Mesos, Spinnaker, Chaos Monkey and Netflix OSS, the "operate what you build" model, and the paved road |
+| 2 | [Spotify](./spotify.md) | Real company | The 2012 squad model and why it is misread, the origin and open-sourcing of Backstage, and golden paths with software templates |
+| 3 | [Airbnb](./airbnb.md) | Real company | SmartStack service discovery, the monolith-to-services arc, delivery migration, and the regional-to-zonal Kubernetes migration |
+| 4 | [Generic Enterprise](./generic-enterprise.md) | **Composite (fictional)** | An end-to-end modernization: inventory, maturity assessment, team restructuring, platform contract, and sequencing |
 
 > **The composite is not a real company.** [Generic Enterprise](./generic-enterprise.md) assembles recurring patterns into one illustrative organization. Its figures are invented for exercises. It should never be cited as evidence about any employer.
 
@@ -49,16 +49,9 @@ The real-company documents were drafted from public sources and checked against 
 
 ## Prerequisites
 
-- [14 — Platform Evolution](../14-platform-evolution/README.md), which provides the vocabulary used throughout this section
-- [07 — Internal Developer Platform](../07-internal-developer-platform/README.md)
+- [14 - Platform Evolution](../14-platform-evolution/README.md), which provides the vocabulary used throughout this section
+- [07 - Internal Developer Platform](../07-internal-developer-platform/README.md)
 
-## Related
+## Where This Leads
 
 - Labs: [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/), [Lab 08: Platform Upgrade](../../labs/lab-08-platform-upgrade/)
-
-## Next Steps
-
-1. **Read**: [Netflix](./netflix.md)
-2. **Read**: [Spotify](./spotify.md)
-3. **Read**: [Airbnb](./airbnb.md)
-4. **Practice**: [Generic Enterprise](./generic-enterprise.md) and its exercise, applied to an organization you know

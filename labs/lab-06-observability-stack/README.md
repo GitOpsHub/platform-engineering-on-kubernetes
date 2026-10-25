@@ -25,6 +25,25 @@ Background reading: [Logging stack](../../docs/10-observability/logging-stack.md
 | Python | 3.12 | Only if you want to run `app.py` outside the cluster (optional) |
 | [Lab 01 done](../lab-01-cluster-setup/README.md) | - | kind cluster `platform-engineering` (context `kind-platform-engineering`), Cilium, Traefik, cert-manager, and the `platform-monitoring` namespace |
 
+### Laptop sizing
+
+Approximate memory limits on the cluster (requests are about half of these):
+
+| Workload | Memory limit |
+|----------|--------------|
+| Prometheus (+ Thanos sidecar) | 1 GiB + 256 MiB |
+| Loki | 512 MiB |
+| Tempo | 512 MiB |
+| Grafana | 256 MiB |
+| OpenTelemetry Collector | 256 MiB |
+| Alloy | 256 MiB |
+| Prometheus Operator, kube-state-metrics, node-exporter | about 350 MiB |
+| checkout-api + load generator | about 200 MiB |
+
+That is about 3.6 GiB of limits on top of the Lab 01 platform and the kind nodes. Plan on **8 GB of Docker
+memory minimum, 10 GB comfortable**, and 4 CPUs. Keep the Lab 01 cluster and this lab only. Run
+`./teardown.sh` before starting heavier labs.
+
 ## Estimated Time
 
 45-60 minutes, most of it image pulls and Prometheus Operator CRD installation on the first run.
@@ -386,27 +405,6 @@ kubectl apply -f apps/checkout-api/k8s/40-loadgen-job.yaml
 4. **Object storage**: add MinIO or a cloud bucket, then enable `objectStorageConfig` on the Thanos sidecar
    (or Loki and Tempo storage) to see real long-term retention.
 5. **Lab 07**: [Multi-Tenancy](../lab-07-multi-tenancy/README.md)
-
----
-
-## Laptop sizing
-
-Approximate memory limits on the cluster (requests are about half of these):
-
-| Workload | Memory limit |
-|----------|--------------|
-| Prometheus (+ Thanos sidecar) | 1 GiB + 256 MiB |
-| Loki | 512 MiB |
-| Tempo | 512 MiB |
-| Grafana | 256 MiB |
-| OpenTelemetry Collector | 256 MiB |
-| Alloy | 256 MiB |
-| Prometheus Operator, kube-state-metrics, node-exporter | about 350 MiB |
-| checkout-api + load generator | about 200 MiB |
-
-That is about 3.6 GiB of limits on top of the Lab 01 platform and the kind nodes. Plan on **8 GB of Docker
-memory minimum, 10 GB comfortable**, and 4 CPUs. Keep the Lab 01 cluster and this lab only. Run
-`./teardown.sh` before starting heavier labs.
 
 ---
 

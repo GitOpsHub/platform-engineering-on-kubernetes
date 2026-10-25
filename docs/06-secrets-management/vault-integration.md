@@ -470,7 +470,9 @@ with a wildcard over `secret/data/tenants/*`.
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
+
+### Exercise 1: Inject a Secret with the Agent Injector
 
 **Goal**: Inject a KV v2 secret into a pod using the Agent Injector, then confirm that a Vault policy
 change takes effect without redeploying.
@@ -478,8 +480,9 @@ change takes effect without redeploying.
 **Setup**: a kind cluster from Lab 01 and a Vault server you can reach. For a lab, run Vault in dev mode
 inside the cluster; do not use dev mode for anything real.
 
+1. Vault in dev mode with the injector enabled
+
 ```bash
-# 1. Vault in dev mode with the injector enabled
 helm upgrade --install vault hashicorp/vault \
   --namespace vault-system --create-namespace \
   --set "server.dev.enabled=true" \
@@ -487,16 +490,24 @@ helm upgrade --install vault hashicorp/vault \
   --set "injector.enabled=true"
 
 kubectl -n vault-system wait --for=condition=Ready pod/vault-0 --timeout=120s
+```
 
-# 2. Enable Kubernetes auth and point it at the cluster
+Expected output: the `vault-0` pod reports `condition met`.
+
+2. Enable Kubernetes auth and point it at the cluster
+
+```bash
 kubectl -n vault-system exec vault-0 -- sh -c '
   export VAULT_TOKEN=root
   vault auth enable -path=kubernetes/prod-cluster kubernetes
   vault write auth/kubernetes/prod-cluster/config \
     kubernetes_host="https://kubernetes.default.svc:443"
 '
+```
 
-# 3. Seed a secret and a read-only policy (the mount path matches the workload's auth-path annotation)
+3. Seed a secret and a read-only policy (the mount path matches the workload's auth-path annotation)
+
+```bash
 kubectl -n vault-system exec vault-0 -- sh -c '
   export VAULT_TOKEN=root
   vault kv put secret/tenants/billing/db username=app password=v1
@@ -507,24 +518,29 @@ kubectl -n vault-system exec vault-0 -- sh -c '
     bound_service_account_namespaces=team-billing \
     token_policies=billing-read ttl=1h
 '
+```
 
-# 4. Deploy the namespace, service account, and annotated workload
+4. Deploy the namespace, service account, and annotated workload
+
+```bash
 #    Save the Deployment from "Annotating a Workload" as billing-api-deployment.yaml first.
 kubectl create namespace team-billing
 kubectl -n team-billing create serviceaccount billing-api
 kubectl -n team-billing apply -f billing-api-deployment.yaml
 ```
 
-**Verify**:
+Expected output: the `billing-api` pods reach `Running` with two containers (`api` and `vault-agent`).
 
-1. `kubectl -n team-billing get pod -l app=billing-api` shows pods running with two containers
-   (`api` and `vault-agent`) after init completes.
-2. `kubectl -n team-billing exec deploy/billing-api -c api -- cat /vault/secrets/db.env` prints the
-   exported values.
-3. Update the secret (`vault kv put secret/tenants/billing/db username=app password=v2`) and re-run the
-   `cat`. The file reflects `v2` within the agent's poll window, while the pod's restart count stays at zero.
-4. Remove the `read` capability from `billing-read` and watch the agent log for permission denied errors on
-   the next render: `kubectl -n team-billing logs deploy/billing-api -c vault-agent`.
+**Check:**
+
+- `kubectl -n team-billing get pod -l app=billing-api` shows pods running with two containers
+  (`api` and `vault-agent`) after init completes.
+- `kubectl -n team-billing exec deploy/billing-api -c api -- cat /vault/secrets/db.env` prints the
+  exported values.
+- Update the secret (`vault kv put secret/tenants/billing/db username=app password=v2`) and re-run the
+  `cat`. The file reflects `v2` within the agent's poll window, while the pod's restart count stays at zero.
+- Remove the `read` capability from `billing-read` and watch the agent log for permission denied errors on
+  the next render: `kubectl -n team-billing logs deploy/billing-api -c vault-agent`.
 
 **Stretch**: Replace the injector with the CSI provider for the same secret. Compare the time to first
 successful start and what happens when the Vault server is unreachable at pod creation.
@@ -535,17 +551,59 @@ successful start and what happens when the Vault server is unreachable at pod cr
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Diagnose | Fix |
-|---------|--------------|----------|-----|
-| Pod stuck in `Init:0/1` | `vault-agent-init` cannot log in | `kubectl logs <pod> -c vault-agent-init` shows `permission denied` or `403` | Check role name, bound service account, and namespace |
-| `permission denied` on `auth/kubernetes/login` | Service account not in `bound_service_account_*` | `vault read auth/kubernetes/role/billing` | Correct the role bindings; recreate the pod after changing annotations |
-| `service account name not authorized` | Pod uses the `default` service account | `kubectl -n <ns> get pod <pod> -o jsonpath='{.spec.serviceAccountName}'` | Set `serviceAccountName` explicitly |
-| `lookup ... no such host` in agent logs | `vault.hashicorp.com/service` or `vaultAddress` wrong | Agent log line shows the address it dialed | Correct the Vault address; check DNS from inside the namespace |
-| Token review fails with `403` | Reviewer SA lacks `system:auth-delegator` | `kubectl auth can-i create tokenreviews --as=system:serviceaccount:vault-system:vault-token-reviewer` | Bind `system:auth-delegator` to the reviewer |
-| Secret file never updates | Template reads a path the policy does not allow, or the agent is pre-populate-only | Agent log; check `vault.hashicorp.com/agent-pre-populate-only` | Grant read on the path; set the annotation to `"false"` |
-| CSI pod stuck in `ContainerCreating` with `MountVolume` errors | Driver cannot reach the provider socket or Vault | `kubectl describe pod`, then driver and provider pod logs | Check that the provider DaemonSet runs on the node; check `vaultAddress` and CA |
-| Synced `Secret` missing | Volume never mounted, so sync never ran | `kubectl get secret billing-db` | Mount the CSI volume in the pod that needs the `Secret` |
-| Reviewer token rejected after cluster upgrade | Cluster CA rotated or the reviewer token was deleted | `vault read auth/kubernetes/prod-cluster/config` | Update `kubernetes_ca_cert` and the reviewer JWT |
+### Pod stuck in `Init:0/1`
+
+**Cause:** `vault-agent-init` cannot log in  
+**Diagnose:** `kubectl logs <pod> -c vault-agent-init` shows `permission denied` or `403`  
+**Fix:** Check role name, bound service account, and namespace
+
+### `permission denied` on `auth/kubernetes/login`
+
+**Cause:** Service account not in `bound_service_account_*`  
+**Diagnose:** `vault read auth/kubernetes/role/billing`  
+**Fix:** Correct the role bindings; recreate the pod after changing annotations
+
+### `service account name not authorized`
+
+**Cause:** Pod uses the `default` service account  
+**Diagnose:** `kubectl -n <ns> get pod <pod> -o jsonpath='{.spec.serviceAccountName}'`  
+**Fix:** Set `serviceAccountName` explicitly
+
+### `lookup ... no such host` in agent logs
+
+**Cause:** `vault.hashicorp.com/service` or `vaultAddress` wrong  
+**Diagnose:** Agent log line shows the address it dialed  
+**Fix:** Correct the Vault address; check DNS from inside the namespace
+
+### Token review fails with `403`
+
+**Cause:** Reviewer SA lacks `system:auth-delegator`  
+**Diagnose:** `kubectl auth can-i create tokenreviews --as=system:serviceaccount:vault-system:vault-token-reviewer`  
+**Fix:** Bind `system:auth-delegator` to the reviewer
+
+### Secret file never updates
+
+**Cause:** Template reads a path the policy does not allow, or the agent is pre-populate-only  
+**Diagnose:** Agent log; check `vault.hashicorp.com/agent-pre-populate-only`  
+**Fix:** Grant read on the path; set the annotation to `"false"`
+
+### CSI pod stuck in `ContainerCreating` with `MountVolume` errors
+
+**Cause:** Driver cannot reach the provider socket or Vault  
+**Diagnose:** `kubectl describe pod`, then driver and provider pod logs  
+**Fix:** Check that the provider DaemonSet runs on the node; check `vaultAddress` and CA
+
+### Synced `Secret` missing
+
+**Cause:** Volume never mounted, so sync never ran  
+**Diagnose:** `kubectl get secret billing-db`  
+**Fix:** Mount the CSI volume in the pod that needs the `Secret`
+
+### Reviewer token rejected after cluster upgrade
+
+**Cause:** Cluster CA rotated or the reviewer token was deleted  
+**Diagnose:** `vault read auth/kubernetes/prod-cluster/config`  
+**Fix:** Update `kubernetes_ca_cert` and the reviewer JWT
 
 ---
 

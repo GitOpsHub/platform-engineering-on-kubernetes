@@ -416,6 +416,8 @@ spec:
 
 ### Exercise 1: Explore Built-in Roles
 
+**Goal:** identify yourself, find the default ClusterRoles, and see how `edit` is assembled by aggregation.
+
 ```bash
 kubectl auth whoami
 kubectl get clusterroles | grep -E '^(admin|edit|view|cluster-admin) '
@@ -426,7 +428,29 @@ kubectl get clusterrole edit -o jsonpath='{.aggregationRule}{"\n"}'
 kubectl auth can-i --list -n default
 ```
 
+Expected output (abbreviated; the identity depends on your kubeconfig):
+
+```text
+ATTRIBUTE   VALUE
+Username    <user>
+Groups      [<group> system:authenticated]
+```
+
+```text
+admin           <created-at>
+cluster-admin   <created-at>
+edit            <created-at>
+view            <created-at>
+```
+
+**Check:**
+
+- The `grep` lists four ClusterRoles: `admin`, `cluster-admin`, `edit`, `view`.
+- The `aggregationRule` output contains `aggregate-to-edit`.
+
 ### Exercise 2: Create a Tenant Namespace with Scoped Access
+
+**Goal:** bind a group to `edit` in one namespace and verify what it can and cannot do.
 
 ```bash
 kubectl create namespace team-a-dev
@@ -442,7 +466,23 @@ kubectl auth can-i create rolebindings -n team-a-dev --as=alice --as-group=team-
 kubectl auth can-i get secrets -n team-a-dev        --as=alice --as-group=team-a-developers   # yes — edit includes secrets!
 ```
 
+Expected output of the four `can-i` commands, in order:
+
+```text
+yes
+no
+no
+yes
+```
+
+**Check:**
+
+- The four answers match the comments in the commands.
+- `kubectl -n team-a-dev get rolebinding team-a-edit` exists.
+
 ### Exercise 3: Aggregate Platform CRD Permissions
+
+**Goal:** show that a labelled ClusterRole is merged into `edit` automatically.
 
 ```bash
 kubectl apply -f clusterroles-platform-aggregation.yaml   # from the section above
@@ -453,7 +493,22 @@ kubectl auth can-i create workloads.platform.mycompany.io -n team-a-dev \
   --as=alice --as-group=team-a-developers
 ```
 
+Expected output (the `grep` shows the merged rule; the last command prints `yes`):
+
+```text
+  - platform.mycompany.io
+  ...
+yes
+```
+
+**Check:**
+
+- `kubectl get clusterrole edit -o yaml | grep -c platform.mycompany.io` prints a number greater than 0.
+- The final `can-i` prints `yes`.
+
 ### Exercise 4: ServiceAccount Least Privilege
+
+**Goal:** give a ServiceAccount only what it needs and verify it with `can-i` and with a real token.
 
 ```bash
 kubectl -n team-a-dev create serviceaccount ci-deployer
@@ -472,7 +527,24 @@ kubectl --token="$TOKEN" -n team-a-dev get deployments
 kubectl --token="$TOKEN" -n team-a-dev get secrets             # Forbidden
 ```
 
+Expected output:
+
+```text
+yes
+no
+no
+<the Deployment list, possibly empty>
+Error from server (Forbidden): secrets is forbidden: User "system:serviceaccount:team-a-dev:ci-deployer" cannot list resource "secrets" in API group "" in the namespace "team-a-dev"
+```
+
+**Check:**
+
+- The three `can-i` answers are `yes`, `no`, `no`.
+- The token request can list Deployments but gets `Forbidden` for Secrets.
+
 ### Exercise 5: Watch Escalation Prevention
+
+**Goal:** show that a user who can create RoleBindings still cannot grant permissions they do not hold.
 
 ```bash
 # Give a user permission to manage RoleBindings, but nothing else
@@ -482,12 +554,30 @@ kubectl -n team-a-dev create rolebinding bob-rb-manager --role=rb-manager --user
 # Bob tries to bind himself admin -> forbidden (he doesn't hold admin's permissions)
 kubectl -n team-a-dev create rolebinding bob-admin --clusterrole=admin --user=bob --as=bob
 # error: ... is attempting to grant RBAC permissions not currently held
+```
 
+Expected output of the last command (the full message names the subject and the missing rules):
+
+```text
+error: failed to create rolebinding: rolebindings.rbac.authorization.k8s.io "bob-admin" is forbidden: user "bob" (groups=["system:authenticated"]) is attempting to grant RBAC permissions not currently held:
+...
+```
+
+**Check:**
+
+- `kubectl -n team-a-dev get rolebinding bob-admin` returns `NotFound`.
+- `kubectl auth can-i create rolebindings -n team-a-dev --as=bob` prints `yes`.
+
+Clean up:
+
+```bash
 kubectl delete namespace team-a-dev
 kubectl delete -f clusterroles-platform-aggregation.yaml
 ```
 
 ### Exercise 6: Audit Who Can Do What
+
+**Goal:** list who can read Secrets and what a user can do across resources, using Krew plugins.
 
 ```bash
 # Krew plugins (https://krew.sigs.k8s.io/)
@@ -495,6 +585,13 @@ kubectl krew install who-can access-matrix
 kubectl who-can get secrets -n kube-system
 kubectl access-matrix -n team-a-dev --as=alice --as-group=team-a-developers
 ```
+
+Expected output: `who-can` prints a table of `ROLEBINDING`/`CLUSTERROLEBINDING` and `SUBJECT` columns (subjects vary by cluster); `access-matrix` prints a resource-by-verb grid with `✔` and blank cells.
+
+**Check:**
+
+- `kubectl who-can get secrets -n kube-system` includes `system:masters` or a `cluster-admin` binding.
+- In the access matrix for `alice`, the `secrets` row shows `get`, matching Exercise 2.
 
 ---
 
@@ -520,14 +617,12 @@ kubectl get rolebindings,clusterrolebindings -A -o json \
   | jq -r '.items[] | select(.subjects[]? | .name=="team-a-developers") | "\(.kind) \(.metadata.namespace // "-") \(.metadata.name) -> \(.roleRef.name)"'
 ```
 
-| Cause | Fix |
-|-------|-----|
-| Wrong `apiGroups` (e.g. `""` for deployments) | Deployments are `apps`; Ingress is `networking.k8s.io`; check `kubectl api-resources` |
-| Subresource missing (`pods/log`, `deployments/scale`) | Add the subresource explicitly |
-| Group claim not present in token | Check OIDC `groups` claim mapping and prefix (e.g. `oidc:team-a-developers`) |
-| RoleBinding in the wrong namespace | RoleBindings only apply to their own namespace |
-| ClusterRole bound via RoleBinding for cluster-scoped resource | Needs a ClusterRoleBinding |
-| `resourceNames` with `list`/`create` | `create` can't be restricted by name; `list` works only with a field selector on `metadata.name` |
+- Cause: Wrong `apiGroups` (e.g. `""` for deployments). Fix: Deployments are `apps`; Ingress is `networking.k8s.io`; check `kubectl api-resources`.
+- Cause: Subresource missing (`pods/log`, `deployments/scale`). Fix: Add the subresource explicitly.
+- Cause: Group claim not present in token. Fix: Check OIDC `groups` claim mapping and prefix (e.g. `oidc:team-a-developers`).
+- Cause: RoleBinding in the wrong namespace. Fix: RoleBindings only apply to their own namespace.
+- Cause: ClusterRole bound via RoleBinding for cluster-scoped resource. Fix: Needs a ClusterRoleBinding.
+- Cause: `resourceNames` with `list`/`create`. Fix: `create` can't be restricted by name; `list` works only with a field selector on `metadata.name`.
 
 ### Controller Logs `failed to list *v1.Secret: ... forbidden`
 

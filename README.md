@@ -39,7 +39,7 @@ A comprehensive learning platform for Platform Engineering concepts, patterns, a
 | [lab-02-gitops-bootstrap](labs/lab-02-gitops-bootstrap/) | Bootstrap ArgoCD with App of Apps pattern | Beginner |
 | [lab-03-platform-api](labs/lab-03-platform-api/) | Build a platform API with Kubernetes controllers | Intermediate |
 | [lab-04-service-catalog](labs/lab-04-service-catalog/) | Create a service catalog with Backstage | Intermediate |
-| [lab-05-policy-engine](labs/lab-05-policy-engine/) | Implement OPA/Gatekeeper policies | Intermediate |
+| [lab-05-policy-engine](labs/lab-05-policy-engine/) | Implement Gatekeeper, Kyverno and CEL admission policies | Intermediate |
 | [lab-06-observability-stack](labs/lab-06-observability-stack/) | Deploy full observability stack | Intermediate |
 | [lab-07-multi-tenancy](labs/lab-07-multi-tenancy/) | Multi-tenant platform with namespaces | Advanced |
 | [lab-08-platform-upgrade](labs/lab-08-platform-upgrade/) | Blue-green platform upgrades | Advanced |
@@ -73,14 +73,14 @@ cd labs/lab-01-cluster-setup
 cd ../lab-02-gitops-bootstrap
 ./bootstrap.sh
 
-# 3. Deploy platform API
+# 3. Build and deploy the Lab 03 WebApp operator
 cd ../lab-03-platform-api
 make deploy
 
 # 4. Try the platform CLI
 cd ../../code/platform-cli
 go build -o platform-cli
-./platform-cli service list
+./platform-cli --help   # lists the config, env, tenant, workload, resource and version commands
 ```
 
 ## 📖 Recommended Reading Order

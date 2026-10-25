@@ -606,9 +606,9 @@ jobs:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Bootstrap Argo CD on Kind with Terraform
+### Exercise 1: Bootstrap Argo CD on Kind with Terraform
 
 **Goal:** Use the Helm provider 3.x syntax to install Argo CD and a root app into the Kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md), then prove that GitOps — not Terraform — owns the add-ons.
 
@@ -686,16 +686,45 @@ terraform destroy
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| `Error: Kubernetes cluster unreachable: invalid configuration` | Provider configured from unknown values (same-apply cluster) | Split into stacks; configure from data sources |
-| `Unsupported block type "kubernetes"` in `provider "helm"` | Helm provider 3.x expects an attribute | Change `kubernetes {` to `kubernetes = {`; convert `set {}` blocks to `set = [ ... ]` |
-| `cannot create REST client: no client config` during plan | `kubernetes_manifest` needs API access at plan | Ensure cluster exists and creds work before planning that stack |
-| `no matches for kind "X" in group "Y"` | CRD not yet installed | Install CRDs in a prior stack, or use `alekc/kubectl` |
-| `cannot re-use a name that is still in use` | Orphaned Helm release (previous failed install) | `helm -n <ns> uninstall <name>` or `terraform import helm_release.x <ns>/<name>` |
-| Token expired mid-apply | Static token from a data source | Switch to `exec` auth |
-| Perpetual diff on annotations | Controller or webhook mutates the object | `computed_fields`, or `lifecycle { ignore_changes = [...] }` |
-| State lock never released | Crashed CI job | Confirm nothing is running, then `terraform force-unlock <LOCK_ID>` |
+### `Error: Kubernetes cluster unreachable: invalid configuration`
+
+**Cause:** Provider configured from unknown values (same-apply cluster)  
+**Fix:** Split into stacks; configure from data sources
+
+### `Unsupported block type "kubernetes"` in `provider "helm"`
+
+**Cause:** Helm provider 3.x expects an attribute  
+**Fix:** Change `kubernetes {` to `kubernetes = {`; convert `set {}` blocks to `set = [ ... ]`
+
+### `cannot create REST client: no client config` during plan
+
+**Cause:** `kubernetes_manifest` needs API access at plan  
+**Fix:** Ensure cluster exists and creds work before planning that stack
+
+### `no matches for kind "X" in group "Y"`
+
+**Cause:** CRD not yet installed  
+**Fix:** Install CRDs in a prior stack, or use `alekc/kubectl`
+
+### `cannot re-use a name that is still in use`
+
+**Cause:** Orphaned Helm release (previous failed install)  
+**Fix:** `helm -n <ns> uninstall <name>` or `terraform import helm_release.x <ns>/<name>`
+
+### Token expired mid-apply
+
+**Cause:** Static token from a data source  
+**Fix:** Switch to `exec` auth
+
+### Perpetual diff on annotations
+
+**Cause:** Controller or webhook mutates the object  
+**Fix:** `computed_fields`, or `lifecycle { ignore_changes = [...] }`
+
+### State lock never released
+
+**Cause:** Crashed CI job  
+**Fix:** Confirm nothing is running, then `terraform force-unlock <LOCK_ID>`
 
 ```bash
 # Debugging helpers

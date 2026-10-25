@@ -52,10 +52,13 @@ The spec is the contract with users. Design it before the controller.
 
 ### The Environment Spec
 
-The contract for `Environment` is `spec {tenant, type, ttl, template, cluster}` and `status {phase, namespace, url, expiresAt, conditions}`. Its schema encodes the rules that matter:
+The contract for `Environment` is `spec {tenant, type, ttl, template, cluster}` and `status {phase, namespace, url, expiresAt, conditions}`. The schema below is a target design that encodes the rules that matter.
+
+!!! note "Target design, not yet in `code/environment-operator`"
+    The [generated CRD in the repository](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/blob/main/code/environment-operator/config/crd/bases/platform.mycompany.io_environments.yaml) is simpler. It requires only `tenant` and `type`, defaults `type` to `dev` and `template` to `baseline`, has no `ttl` pattern, no `status.phase` enum and no `x-kubernetes-validations` (CEL) rules. Its phases are `Pending`, `Ready`, `Failed`, `Expired` and `Terminating`. The CEL rules below are a proposal; to adopt them, add `+kubebuilder:validation:XValidation` markers to `api/v1alpha1/environment_types.go` and run `make manifests`.
 
 ```yaml
-# config/crd/bases/platform.mycompany.io_environments.yaml (abridged, as generated)
+# target design (not the generated config/crd/bases/platform.mycompany.io_environments.yaml)
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -105,7 +108,7 @@ spec:
                 ttl:
                   type: string
                   pattern: '^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$'
-                  description: Go-style duration. Capped per type by the controller.
+                  description: Go-style duration.
                 template:
                   type: string
                   minLength: 1
@@ -113,7 +116,7 @@ spec:
                 cluster:
                   type: string
                   minLength: 1
-              x-kubernetes-validations:
+              x-kubernetes-validations:            # proposal: no CEL rules in code/ yet
                 - rule: "self.type != 'prod' || !has(self.ttl)"
                   message: "prod environments do not expire; remove spec.ttl"
                 - rule: "self.type == 'prod' || has(self.ttl)"
@@ -131,7 +134,7 @@ spec:
               properties:
                 phase:
                   type: string
-                  enum: [Pending, Provisioning, Ready, Expiring, Deleting, Failed]
+                  enum: [Pending, Ready, Failed, Expired, Terminating]   # the phases the operator writes
                 namespace:
                   type: string
                 url:
@@ -156,7 +159,7 @@ spec:
 A few details matter here:
 
 - **Field-level `format: date-time` and `pattern` checks are enforced by the API server.** A malformed `ttl` never reaches the controller.
-- **The `ttl` pattern accepts durations but not their values.** `ttl: 9999h` passes the schema and must be rejected by the controller (or by a CEL rule with a `self.ttl` comparison, which requires parsing; the controller is the right place for that).
+- **The `ttl` pattern accepts durations but not their values.** `ttl: 9999h` passes the schema. A cap belongs in the controller (or in a CEL rule with a `self.ttl` comparison, which requires parsing); the reference operator does not enforce one yet.
 - **Transition rules** (`self == oldSelf || ...`) run on updates only and compare the old and new object. They replace a large class of validating webhooks.
 - **Status fields are declared in the CRD** even though the controller writes them. This lets the API server validate what the controller writes and makes the status visible to `kubectl explain`.
 
@@ -483,7 +486,7 @@ A webhook that fails closed (`failurePolicy: Fail`) makes the whole API unavaila
 
 ## Hands-On Exercises
 
-### Exercise 1: Add a validated, versioned field and prove it round-trips
+### Exercise 1: Add a Validated, Versioned Field and Prove It Round-Trips
 
 **Goal:** Install the `Environment` CRD, test its validation, add a defaulted field, and (as a stretch) add a second version.
 

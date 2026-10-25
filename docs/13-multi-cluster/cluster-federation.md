@@ -101,7 +101,7 @@ graph TB
     P1 & P2 & P3 & P4 -.->|"metrics / status"| OBS
 ```
 
-### Design decisions for the hub
+### Design Decisions for the Hub
 
 | Decision | Options | Guidance |
 |----------|---------|----------|
@@ -234,7 +234,7 @@ spec:
 
 **Why this matters for platform teams:** ClusterClass is the multi-cluster equivalent of a Helm chart for clusters. The platform team owns the class; a fleet upgrade becomes "change `version` in N small files" — or one file if you template them with an ApplicationSet.
 
-### Self-healing nodes with MachineHealthCheck
+### Self-Healing Nodes with MachineHealthCheck
 
 ```yaml
 # clusters/prod-eu-1/machinehealthcheck.yaml
@@ -259,7 +259,7 @@ spec:
       timeout: 300s
 ```
 
-### Bootstrapping baseline add-ons
+### Bootstrapping Baseline Add-Ons
 
 Two common options to install the CNI and other "day-0" add-ons into new clusters:
 
@@ -283,7 +283,7 @@ spec:
       name: cilium-manifests
 ```
 
-### Upgrading a cluster
+### Upgrading a Cluster
 
 ```bash
 # Change the topology version in Git (GitOps), or for a quick test:
@@ -352,7 +352,7 @@ sequenceDiagram
     M-->>K: status aggregated back to the template
 ```
 
-### Joining member clusters
+### Joining Member Clusters
 
 ```bash
 # Install the Karmada control plane into a host cluster (one of several install methods;
@@ -376,7 +376,7 @@ kubectl --kubeconfig /etc/karmada/karmada-apiserver.config \
 kubectl --kubeconfig /etc/karmada/karmada-apiserver.config get clusters
 ```
 
-### PropagationPolicy: where should this run?
+### PropagationPolicy: Where Should This Run?
 
 ```yaml
 # federation/checkout-api/deployment.yaml — a plain Deployment, applied to Karmada
@@ -437,7 +437,7 @@ spec:
         dynamicWeight: AvailableReplicas  # Weight by how many replicas each cluster can fit
 ```
 
-### OverridePolicy: per-cluster differences
+### OverridePolicy: Per-Cluster Differences
 
 ```yaml
 # federation/checkout-api/override.yaml
@@ -469,13 +469,13 @@ spec:
                 value: eu
 ```
 
-### Cluster-scoped and namespace-wide policies
+### Cluster-Scoped and Namespace-Wide Policies
 
 - `ClusterPropagationPolicy` — the cluster-scoped variant, for CRDs, ClusterRoles, Namespaces, or for matching resources across namespaces.
 - `FederatedResourceQuota` — quota for a namespace across the whole fleet, split per cluster.
 - Priority and preemption between policies let a platform-wide default policy coexist with team-specific ones.
 
-### Inspecting what Karmada did
+### Inspecting What Karmada Did
 
 ```bash
 export KUBECONFIG=/etc/karmada/karmada-apiserver.config
@@ -551,11 +551,11 @@ spec:
           platform.mycompany.io/environment: production
 ```
 
-### KubeFed (historical)
+### KubeFed (Historical)
 
 Kubernetes Cluster Federation (KubeFed, "Federation v2") introduced `Federated*` wrapper types (e.g. `FederatedDeployment`). The project was **archived by SIG Multicluster in 2023**. Its lesson — wrapping every type in a federated twin is cumbersome — influenced Karmada's design of reusing native Kubernetes APIs. Don't start new work on KubeFed.
 
-### SIG Multicluster standards
+### SIG Multicluster Standards
 
 Rather than one federation tool, SIG Multicluster now focuses on small standard APIs that tools can share:
 
@@ -600,7 +600,6 @@ kind: ClusterPolicy
 metadata:
   name: require-fleet-labels
 spec:
-  validationFailureAction: Enforce
   rules:
     - name: cluster-labels
       match:
@@ -608,6 +607,7 @@ spec:
           - resources:
               kinds: ["cluster.x-k8s.io/v1beta1/Cluster"]
       validate:
+        failureAction: Enforce
         message: "Clusters must declare environment, region, and upgrade-wave labels."
         pattern:
           metadata:
@@ -623,7 +623,10 @@ See [Policy Engine](../12-security-compliance/policy-engine.md) for more on Kyve
 
 ## Hands-On Exercises
 
-### Lab: Provision two clusters with CAPI (Docker) and federate a workload with Karmada
+### Exercise 1: Provision Two Clusters with CAPI (Docker) and Federate a Workload with Karmada
+
+**Goal:** create two Cluster API workload clusters on Docker, join them to Karmada, and propagate
+one Deployment so the replicas are divided 2:1 between them.
 
 **Prerequisites:** Docker with ~8 GB RAM free, `kind`, `kubectl`, `clusterctl`, `karmadactl`, `yq`.
 
@@ -647,13 +650,13 @@ clusterctl init --infrastructure docker
 # 3. Generate and apply two workload clusters (development flavor uses ClusterClass)
 for c in member-a member-b; do
   clusterctl generate cluster $c --flavor development \
-    --kubernetes-version v1.30.0 \
+    --kubernetes-version v1.35.8 \
     --control-plane-machine-count=1 --worker-machine-count=1 > $c.yaml
   kubectl apply -f $c.yaml
 done
 
 # 4. Wait and fetch kubeconfigs
-kubectl get clusters -w           # until both are Provisioned
+kubectl get clusters               # repeat until both show Provisioned
 for c in member-a member-b; do
   clusterctl get kubeconfig $c > $c.kubeconfig
 done
@@ -698,9 +701,32 @@ spec:
 EOF
 
 # 7. Verify
-kubectl --kubeconfig member-a.kubeconfig get deploy nginx   # expect 2 replicas
-kubectl --kubeconfig member-b.kubeconfig get deploy nginx   # expect 1 replica
+kubectl --kubeconfig member-a.kubeconfig get deploy nginx
+kubectl --kubeconfig member-b.kubeconfig get deploy nginx
 ```
+
+Expected output: `kubectl --kubeconfig $KARMADA get clusters` lists `member-a` and `member-b`
+with `READY` `True`. The final two commands show `member-a` running 2 replicas and `member-b`
+running 1 (columns abbreviated):
+
+```text
+NAME    READY   UP-TO-DATE   AVAILABLE
+nginx   2/2     2            2          # member-a
+nginx   1/1     1            1          # member-b
+```
+
+**Check:**
+
+- Both members report `READY` `True` in the Karmada cluster list.
+- `kubectl --kubeconfig $KARMADA get resourcebinding nginx-deployment -o jsonpath='{.spec.clusters}'`
+  shows `member-a` with 2 replicas and `member-b` with 1.
+- The replica counts across both members add up to the 3 requested.
+
+> **Version note:** `v1.35.8` matches the `kindest/node` version pinned in
+> [Lab 01](../../labs/lab-01-cluster-setup/). CAPD (the Docker provider) builds node images for
+> the version you request; if your `clusterctl` release does not yet publish images for it,
+> pick the newest version its [support matrix](https://cluster-api.sigs.k8s.io/reference/versions)
+> lists.
 
 > **Note:** `karmadactl init` may store generated kubeconfigs under `/etc/karmada` and need elevated permissions on some systems; check the output for the exact path. On macOS, CAPD API-server endpoints may require extra kubeconfig tweaks — see the CAPI quick start.
 

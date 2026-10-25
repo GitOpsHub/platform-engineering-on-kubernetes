@@ -12,7 +12,8 @@
 - A working Prometheus stack — see [Metrics Stack](../10-observability/metrics-stack.md)
 - Familiarity with Alertmanager routing — see [Alerting](../10-observability/alerting.md)
 - PromQL basics (`rate`, `sum by`, `histogram_quantile`)
-- Lab environment from [Lab 06: Observability Stack](../../labs/lab-06-observability-stack/)
+- The kube-prometheus-stack install from [Metrics Stack](../10-observability/metrics-stack.md)
+  (release `kps`, namespace `monitoring`), which the exercise uses
 
 ---
 
@@ -418,7 +419,7 @@ graph LR
     Sloth --> PR[PrometheusRule]
     PR --> Prom[Prometheus]
     Prom --> AM[Alertmanager]
-    AM -->|route by platform.mycompany.io/tenant| Team[Owning team]
+    AM -->|"route by platform.mycompany.io/tenant"| Team[Owning team]
 ```
 
 ```yaml
@@ -578,7 +579,7 @@ fi
 Goal: generate SLO recording and alert rules with Sloth, then burn the error budget and watch the
 alert fire.
 
-**Prerequisites:** a kind cluster with kube-prometheus-stack installed as in [Metrics Stack](../10-observability/metrics-stack.md) (release `kps`, namespace `monitoring`). [Lab 06](../../labs/lab-06-observability-stack/) uses a different release and namespace, so adjust service names if you use it.
+**Prerequisites:** a kind cluster with kube-prometheus-stack installed as in [Metrics Stack](../10-observability/metrics-stack.md) (release `kps`, namespace `monitoring`). [Lab 06](../../labs/lab-06-observability-stack/) uses namespace `platform-monitoring` and service `kps-kube-prometheus-stack-prometheus`, so adjust the namespace and service names if you use it.
 
 ```bash
 # 1. Deploy a demo app that exposes http_requests_total with an error knob.
@@ -656,16 +657,54 @@ failing request per iteration.
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| SLI shows `NaN` or no data | Zero traffic → `0/0`; or label mismatch | Check `totalQuery` alone; add synthetic probes; verify label names (`code` vs `status`) |
-| Sloth CR exists but no `PrometheusRule` | Controller not running or CRD version mismatch | `kubectl logs -n monitoring deploy/sloth`; `kubectl get crd prometheusservicelevels.sloth.slok.dev` |
-| Rules exist but Prometheus doesn't load them | `ruleSelector` label mismatch | Compare `kubectl get prometheus -o yaml \| grep -A5 ruleSelector` to rule labels |
-| Page alert flaps | Low traffic; short window too sensitive | Minimum-traffic guard, longer short window, or synthetic load |
-| Latency SLI always 100% or 0% | `le` bucket doesn't exist at the threshold | List buckets: `count by (le) (..._bucket)`; align threshold |
-| Budget "recovers" instantly after outage | Window is too short (e.g. 1d) | Use 28d/30d rolling windows for the objective |
-| Error budget negative but no alert | Alerts route to a receiver nobody watches | Test routing with `amtool config routes test severity=page` |
-| Recording rule evaluation slow | High-cardinality `sum by` in SLI | Aggregate early; drop unneeded labels in recording rules |
+### SLI shows `NaN` or no data
+
+**Cause:** Zero traffic → `0/0`; or label mismatch
+
+**Fix:** Check `totalQuery` alone; add synthetic probes; verify label names (`code` vs `status`)
+
+### Sloth CR exists but no `PrometheusRule`
+
+**Cause:** Controller not running or CRD version mismatch
+
+**Fix:** `kubectl logs -n monitoring deploy/sloth`; `kubectl get crd prometheusservicelevels.sloth.slok.dev`
+
+### Rules exist but Prometheus doesn't load them
+
+**Cause:** `ruleSelector` label mismatch
+
+**Fix:** Compare `kubectl get prometheus -o yaml | grep -A5 ruleSelector` to rule labels
+
+### Page alert flaps
+
+**Cause:** Low traffic; short window too sensitive
+
+**Fix:** Minimum-traffic guard, longer short window, or synthetic load
+
+### Latency SLI always 100% or 0%
+
+**Cause:** `le` bucket doesn't exist at the threshold
+
+**Fix:** List buckets: `count by (le) (..._bucket)`; align threshold
+
+### Budget "recovers" instantly after outage
+
+**Cause:** Window is too short (e.g. 1d)
+
+**Fix:** Use 28d/30d rolling windows for the objective
+
+### Error budget negative but no alert
+
+**Cause:** Alerts route to a receiver nobody watches
+
+**Fix:** Test routing with `amtool config routes test severity=page`
+
+### Recording rule evaluation slow
+
+**Cause:** High-cardinality `sum by` in SLI
+
+**Fix:** Aggregate early; drop unneeded labels in recording rules
+
 
 ```bash
 # Useful checks

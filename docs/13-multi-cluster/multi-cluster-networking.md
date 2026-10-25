@@ -72,7 +72,7 @@ graph TB
 
 The single most painful multi-cluster networking mistake is **overlapping CIDRs**. Most cloud and local defaults (e.g. `10.244.0.0/16` for kind, `10.96.0.0/12` for services) are identical across clusters.
 
-### A fleet IPAM plan
+### A Fleet IPAM Plan
 
 ```yaml
 # fleet/ipam-plan.yaml — documentation-as-code, consumed by cluster templates
@@ -90,7 +90,7 @@ reserved:
 
 Feed these values into Cluster API `spec.clusterNetwork` (see [Cluster Federation](./cluster-federation.md)) or the Terraform modules in [`code/terraform-modules/networking/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/terraform-modules/).
 
-### When CIDRs already overlap
+### When CIDRs Already Overlap
 
 | Option | How | Trade-off |
 |--------|-----|-----------|
@@ -143,7 +143,7 @@ Implementations include **Submariner Lighthouse**, **GKE Multi-cluster Services*
 
 ---
 
-## Option 1: Submariner (flat L3 between clusters)
+## Option 1: Submariner (Flat L3 Between Clusters)
 
 [Submariner](https://submariner.io/) (CNCF Sandbox) creates encrypted tunnels between clusters so pods and services can reach each other by IP, and implements the MCS API through its **Lighthouse** component.
 
@@ -248,7 +248,7 @@ cilium clustermesh connect --context kind-cluster-a --destination-context kind-c
 cilium clustermesh status --context kind-cluster-a --wait
 ```
 
-### Global services and affinity
+### Global Services and Affinity
 
 ```yaml
 # Deploy the same Service (same name/namespace) in both clusters
@@ -273,7 +273,7 @@ spec:
 | `service.cilium.io/shared: "false"` | This cluster consumes remote endpoints but doesn't share its own |
 | `service.cilium.io/affinity: local\|remote\|none` | Endpoint preference — `local` gives automatic failover |
 
-### Cross-cluster network policy
+### Cross-Cluster Network Policy
 
 Because Cilium identities are cluster-aware, policies can select peers by cluster:
 
@@ -301,7 +301,7 @@ spec:
 
 A service mesh solves discovery, mTLS identity, and traffic management in one layer, and with **east-west gateways** it doesn't need a flat network.
 
-### Deployment models
+### Deployment Models
 
 | Model | Control plane | Network | When |
 |-------|---------------|---------|------|
@@ -327,7 +327,7 @@ graph LR
     FA -->|mTLS, SNI routed| EWB --> CB
 ```
 
-### Multi-primary, multi-network setup (outline)
+### Multi-Primary, Multi-Network Setup (Outline)
 
 **Prerequisite:** a **shared root of trust**. Each cluster's istiod needs an intermediate CA signed by a common root (from your PKI, Vault, or cert-manager istio-csr) so that workload identities (`spiffe://cluster.local/ns/shop/sa/cart`) are mutually trusted.
 
@@ -375,7 +375,7 @@ The `expose-services.yaml` sample creates an Istio `Gateway` on port 15443 with 
 
 > **Ambient mode:** Istio's sidecar-less ambient data plane reached GA for single-cluster use first; multi-cluster ambient support arrived later. Check the Istio release notes for your version before designing an ambient multi-cluster mesh.
 
-### Locality-aware failover
+### Locality-Aware Failover
 
 By default Istio treats endpoints in all clusters equally. Enable locality load balancing so traffic stays in-region and fails over only when needed:
 
@@ -442,7 +442,10 @@ flowchart TD
 
 ## Hands-On Exercises
 
-### Lab: Cilium Cluster Mesh between two kind clusters
+### Exercise 1: Cilium Cluster Mesh Between Two Kind Clusters
+
+**Goal:** connect two kind clusters with Cilium Cluster Mesh and call a global Service that is
+answered by pods in both clusters.
 
 **Prerequisites:** Docker, `kind`, `helm`, `cilium` CLI.
 
@@ -517,6 +520,23 @@ done
 kubectl --context kind-c1 -n shop run client --rm -it --image=curlimages/curl --restart=Never -- \
   sh -c 'for i in $(seq 1 10); do curl -s echo:8080; done'
 ```
+
+Expected output: `cilium clustermesh status --context kind-c1 --wait` ends with a line such as
+`All 2 nodes are connected to all clusters [min:1 / avg:1.0 / max:1]` and lists cluster `c2` as
+connected. The curl loop prints a mix of both replies:
+
+```text
+hello from c1
+hello from c2
+hello from c2
+hello from c1
+...
+```
+
+**Check:**
+
+- `cilium clustermesh status` reports no errors and shows `c2` as a connected remote cluster.
+- The ten responses contain both `hello from c1` and `hello from c2`.
 
 **Challenges:**
 1. Add `service.cilium.io/affinity: "local"` to the Service in c1; confirm all responses come from c1. Then scale c1's echo to 0 and watch failover to c2.

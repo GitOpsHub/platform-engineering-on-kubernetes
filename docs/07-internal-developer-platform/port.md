@@ -633,7 +633,7 @@ terraform apply tf.plan
 
 ## Hands-On Exercises
 
-### Exercise 1: Model the platform in Port
+### Exercise 1: Model the Platform in Port
 
 **Goal:** Ingest the platform's Kubernetes resources into Port, score them, and trigger one self-service action.
 

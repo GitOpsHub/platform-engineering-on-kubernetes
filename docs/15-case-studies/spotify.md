@@ -211,7 +211,9 @@ Do not start at stage 5. A scorecard without a catalog produces a list of unowne
 
 ## Hands-On Exercises
 
-### Exercise: Design a first golden path
+### Exercise 1: Design a First Golden Path
+
+**Goal:** design a golden path for one service type, from repository skeleton to catalog entry and a baseline adoption number.
 
 **Time:** 90 minutes. **Materials:** the template example above, a repository layout for one service type, a catalog entity template.
 
@@ -221,6 +223,16 @@ Do not start at stage 5. A scorecard without a catalog produces a list of unowne
 4. Write the TechDocs page sections: goal, background, implementation, dos and don'ts.
 5. Write the first "day-two" task for this path (for example, upgrading the base image across all services) and decide whether it is in the template, a script, or a separate platform process.
 6. Measure: how many services of this type exist, and how many are registered in the catalog with an owner? That number is your baseline.
+
+Expected output: a skeleton file list (ten files or fewer), a `catalog-info.yaml`, the TechDocs
+section outline, the day-two task decision and the baseline count.
+
+**Check:**
+
+- The skeleton has ten files or fewer and covers every day-one need you listed.
+- `catalog-info.yaml` sets `owner`, `lifecycle` and `system`.
+- The day-two task is assigned to the template, a script or a platform process.
+- The baseline is two numbers: services of this type, and how many of them have a catalog owner.
 
 **Discussion questions:**
 - Which parts of your golden path would a team want to change? Which changes should be allowed, and which should trigger a review?
@@ -243,7 +255,7 @@ Do not start at stage 5. A scorecard without a catalog produces a list of unowne
 
 ## Further Reading
 
-### Primary sources (verify before citing)
+### Primary Sources (Verify Before Citing)
 - Henrik Kniberg and Anders Ivarsson — *Scaling Agile @ Spotify with Tribes, Squads, Chapters & Guilds* (2012 whitepaper)
 - Spotify Engineering blog — [engineering.atspotify.com](https://engineering.atspotify.com/) — search for "golden path" and "Backstage" for posts on fragmentation and golden paths
 - Backstage — [backstage.io](https://backstage.io/) — project documentation, including the background overview and the "Backstage turns two" post (March 2022)
@@ -251,11 +263,11 @@ Do not start at stage 5. A scorecard without a catalog produces a list of unowne
 - CNCF — Backstage project page — [cncf.io/projects/backstage](https://www.cncf.io/projects/backstage/)
 - CNCF — Spotify end-user journey report (2021) — [PDF](https://www.cncf.io/wp-content/uploads/2021/09/CNCF_Spotify_EndUser_Journey_Report.pdf)
 
-### Secondary and analysis
+### Secondary and Analysis
 - InfoQ, 2021 — coverage of Spotify's paved paths — [infoq.com](https://www.infoq.com/news/2021/03/spotify-paved-paths)
 - Port glossary entry on Spotify Backstage — [port.io](https://www.port.io/glossary/spotify-backstage) (vendor-authored; read with that in mind)
 
-### Related in this repo
+### Related in This Repo
 - [Case Studies overview](./README.md)
 - [Netflix](./netflix.md), [Airbnb](./airbnb.md), [Generic Enterprise](./generic-enterprise.md)
 - [Backstage](../07-internal-developer-platform/backstage.md), [Scaffolding](../08-self-service/scaffolding.md), [Service Catalog](../08-self-service/service-catalog.md)

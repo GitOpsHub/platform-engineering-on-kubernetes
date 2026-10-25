@@ -91,29 +91,37 @@ metadata:
 spec:
   tenant: payments                    # must match an existing Tenant
   type: preview                       # dev | staging | prod | preview
-  ttl: 72h                            # expiry relative to creation; capped per type
-  template: standard-web              # selects the environment template
+  ttl: 72h                            # expiry relative to creation (no per-type cap in code/ yet)
+  template: baseline                  # the only template set embedded in the operator
   cluster: dev-eu-1                   # target cluster from the fleet inventory
 ```
+
+The reference operator embeds one template set, `baseline`, under [`code/environment-operator/templates/baseline/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/environment-operator/templates/baseline/), with a subdirectory per type (`dev`, `preview`, `staging`, `prod`). An unknown set name, such as the `standard-web` example below, puts the Environment in `Failed` with reason `UnknownTemplate`. The operator also verifies `spec.tenant` against the `platform.mycompany.io/tenant` label on the Environment's own namespace, so `team-payments` must carry `platform.mycompany.io/tenant: payments`.
 
 What the controller reports back:
 
 ```yaml
 # status (written by environment-operator, abbreviated)
 status:
-  phase: Ready                        # Pending | Provisioning | Ready | Expiring | Deleting | Failed
-  namespace: env-payments-checkout-pr-482
-  url: https://checkout-pr-482.preview.dev.mycompany.io
+  phase: Ready                        # Pending | Ready | Failed | Expired | Terminating
+  namespace: payments-checkout-pr-482 # <tenant>-<name>
+  url: https://checkout-pr-482.payments.apps.example.internal   # <name>.<tenant>.<base-domain>
   expiresAt: "2026-10-27T10:00:00Z"
   conditions:
-    - type: Ready
+    - type: TenantVerified
+      status: "True"
+      reason: Verified
+    - type: NamespaceReady
       status: "True"
       reason: Provisioned
-      message: All 4 owned objects reconciled
-      lastTransitionTime: "2026-10-24T10:00:03Z"
-    - type: TTLExpired
-      status: "False"
-      reason: NotExpired
+    - type: TemplatesReady
+      status: "True"
+      reason: Applied
+      message: 3 baseline object(s) applied
+    - type: Ready
+      status: "True"
+      reason: Reconciled
+      message: environment is ready
       lastTransitionTime: "2026-10-24T10:00:03Z"
 ```
 
@@ -128,6 +136,9 @@ Design decisions worth noting:
 ## Templates: What an Environment Contains
 
 An environment is more than a namespace. The template is the reviewed, versioned definition of what gets created. It is stored in Git and referenced by name, so a platform team can change the template in one place.
+
+!!! note "Design material"
+    The `standard-web` template below is a design sketch. The operator in this repository embeds only the `baseline` set: one `configmap.yaml.tmpl`, `networkpolicy.yaml.tmpl` and `resourcequota.yaml.tmpl` per type under `code/environment-operator/templates/baseline/<type>/`. It does not create an Argo CD `Application` and does not check the tenant's remaining budget.
 
 ```yaml
 # standard-web template (illustrative; the schema is a design sketch, not a shipped format)
@@ -161,12 +172,22 @@ Two rules keep templates maintainable:
 
 ## The Environment Controller
 
-The controller is a standard reconcile loop built with controller-runtime (see [Controller Runtime](../09-platform-apis/controller-runtime.md)). Its job for TTL is narrow: make sure every environment is deleted at `expiresAt`, and no earlier. The snippets below show the intended shape of the code; the `environment-operator` in this repository is still a skeleton, so treat the identifiers as the design, not as a copy of existing source.
+The controller is a standard reconcile loop built with controller-runtime (see [Controller Runtime](../09-platform-apis/controller-runtime.md)). Its job for TTL is narrow: make sure every environment is deleted at `expiresAt`, and no earlier.
+
+The reconciler in this repository, [`code/environment-operator/internal/controller/environment_controller.go`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/blob/main/code/environment-operator/internal/controller/environment_controller.go), already implements TTL expiry, `status.expiresAt`, `RequeueAfter` at the deadline, a cleanup finalizer and annotation-based ownership of the namespace and child objects. Its controller entry point is not in the repository yet (`code/environment-operator/cmd/` is empty), so you can test the reconciler but not run it as a process.
+
+!!! note "Design sketch"
+    The excerpts below are a design sketch and differ from the code in `internal/controller/`:
+
+    - The real `Spec.TTL` is a `*metav1.Duration`, not a string, so there is no `time.ParseDuration` step.
+    - The real code expires any Environment that sets `ttl`, including `staging` and `prod`; it does not skip those types.
+    - There is no `maxTTL` cap and no validating webhook.
+    - The file paths (`controllers/ttl.go`, `controllers/environment_controller.go`) and the `reconcileOwned` and `setCondition` helpers do not exist; the real helpers are `reconcileEnvironment`, `ensureNamespace`, `ensureOwned` and `finalize`.
 
 The important design choice is **requeue at the deadline**, not poll on an interval. A 1-minute poll across 2,000 environments is 2,000 reconciles per minute doing nothing; a `RequeueAfter` set to the time remaining is one reconcile per environment per lifetime, plus the event-driven ones.
 
 ```go
-// code/environment-operator/controllers/ttl.go (excerpt)
+// design sketch: controllers/ttl.go (not in code/environment-operator)
 package controllers
 
 import (
@@ -214,7 +235,7 @@ func computeExpiry(env *platformv1alpha1.Environment) (*metav1.Time, error) {
 The reconcile method uses the expiry to decide whether to delete now or wait:
 
 ```go
-// code/environment-operator/controllers/environment_controller.go (excerpt)
+// design sketch: controllers/environment_controller.go (see internal/controller/ for the real code)
 func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var env platformv1alpha1.Environment
 	if err := r.Get(ctx, req.NamespacedName, &env); err != nil {
@@ -260,9 +281,9 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 ```
 
-Notes on this excerpt:
+Notes on this sketch:
 
-- **Owner references only reach so far.** Namespaced children (ResourceQuota, NetworkPolicy, the Argo CD Application) are garbage-collected when the `Environment` is deleted. The Namespace itself is cluster-scoped, and a cluster-scoped object cannot have a namespaced owner, so the controller must delete it explicitly in a finalizer, along with anything outside the cluster such as DNS records. See [Controller Runtime: Finalizers](../09-platform-apis/controller-runtime.md#finalizers).
+- **Owner references only reach so far.** The Namespace is cluster-scoped, and a cluster-scoped object cannot have a namespaced owner, so the controller must delete it explicitly in a finalizer, along with anything outside the cluster such as DNS records. The real operator records ownership in the `platform.mycompany.io/owner-uid` annotation instead of owner references, checks it before adopting or deleting anything, and deletes the namespace in its finalizer. See [Controller Runtime: Finalizers](../09-platform-apis/controller-runtime.md#finalizers).
 - **`ttl` changes** are reflected because the reconciler recomputes `expiry` from the spec every time. Extending a TTL is an explicit spec change, so it appears in Git and in the audit log.
 - **`setCondition` and `reconcileOwned`** are omitted for brevity. They render the template's `owned` list and write the `Ready` condition.
 
@@ -386,7 +407,7 @@ helm upgrade --install preview-checkout-pr-482 loft/vcluster \
 vcluster connect preview-checkout-pr-482 -n preview-checkout-pr-482 --update-current=false
 ```
 
-Pin the chart version explicitly. vCluster evolves quickly, and a floating version turns "the preview works" into a moving target. The environment controller records the chart version in the `Environment` status so a support request can be reproduced.
+Pin the chart version explicitly. vCluster evolves quickly, and a floating version turns "the preview works" into a moving target. Have the environment controller record the chart version in the `Environment` status so a support request can be reproduced (the reference operator in `code/` does not do this).
 
 ---
 
@@ -396,7 +417,7 @@ Self-service without guardrails is a budget leak. The platform should bound cost
 
 | Guardrail | Mechanism | Where enforced |
 |-----------|-----------|----------------|
-| Max lifetime per type | `maxTTL` map plus validating webhook | Controller and admission |
+| Max lifetime per type | `maxTTL` map plus validating webhook (design only; not in `code/`) | Controller and admission |
 | Max size per environment | ResourceQuota from template | Kubernetes API server |
 | Max total per tenant | Tenant quota and environment count check | Controller (rejects with condition) |
 | Idle reclamation | Scale-to-zero after N hours without traffic | Scheduled job or KEDA `ScaledObject` |
@@ -436,7 +457,7 @@ spec:
 
 The provisioning path is part of the product. Three properties matter most:
 
-1. **Visible progress.** The developer sees `Pending → Provisioning → Ready` and the conditions when something stalls. Silence during a 60-second create is where developers start asking in chat.
+1. **Visible progress.** The developer sees `Pending → Ready` (or `Failed`) and the conditions when something stalls. Silence during a 60-second create is where developers start asking in chat.
 2. **A stable URL.** The preview URL is written to `status.url` and posted back to the PR as a comment or check run. Developers should never have to look up a hostname.
 3. **Predictable teardown.** The PR comment should say when the preview expires and how to extend it. Surprise deletion destroys trust faster than any outage.
 
@@ -444,7 +465,7 @@ The platform CLI (`code/platform-cli`) exposes the same flow without a UI. Envir
 
 ```bash
 platform-cli -n team-payments env create checkout-pr-482 --tenant payments --type preview --ttl 72h \
-  --template standard-web --cluster dev-eu-1
+  --template baseline --cluster dev-eu-1
 
 platform-cli -n team-payments env get checkout-pr-482   # status, conditions, expiresAt
 platform-cli -n team-payments env list
@@ -476,74 +497,73 @@ Track these metrics for the environment service (see [Measuring Success](../14-p
 
 ## Hands-On Exercises
 
-### Exercise 1: Provision a preview, watch it, and force an expiry
+### Exercise 1: Validate an Environment and Test TTL Expiry
 
-**Goal:** Create an `Environment` with a short TTL, confirm it becomes ready, and confirm it is deleted at `expiresAt`.
+**Goal:** Install the `Environment` CRD, confirm the API server accepts a valid spec and rejects an invalid one, and confirm the TTL, expiry and template behaviour in the reconciler's unit tests.
 
-**Before you start:** the kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md) with the environment operator running. Lab 03 does not install it, so deploy it from [`code/environment-operator`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/environment-operator/):
+**Before you start:** the kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md) and Go 1.26 or later (`code/environment-operator/go.mod` declares `go 1.26.0`). The controller entry point is not in the repository yet: `code/environment-operator/cmd/` is empty, so `make run`, `make build` and `make docker-build` fail. This exercise uses the CRD and the unit tests in [`internal/controller/environment_controller_test.go`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/blob/main/code/environment-operator/internal/controller/environment_controller_test.go), which run against a fake client and need no running controller.
 
-```bash
-kubectl config use-context kind-platform-engineering
-make -C code/environment-operator install
-make -C code/environment-operator run     # keep this terminal open; the controller logs here
-```
+1. **Install the CRD.**
 
-1. **Create the environment.** Save the `Environment` manifest from this page as `environment-checkout-pr-482.yaml`, set `ttl: 5m`, and apply it from a second terminal. Create the `team-payments` namespace first if it does not exist:
+   ```bash
+   kubectl config use-context kind-platform-engineering
+   make -C code/environment-operator install
+   kubectl get crd environments.platform.mycompany.io
+   ```
+
+   Expected output: one row named `environments.platform.mycompany.io`.
+
+2. **Validate a good spec.** Save the `Environment` manifest from this page as `environment-checkout-pr-482.yaml` (with `type: preview` and `template: baseline`), set `ttl: 5m`, and apply it with a server-side dry run. Create the labelled `team-payments` namespace first:
 
    ```bash
    kubectl create namespace team-payments --dry-run=client -o yaml | kubectl apply -f -
-   kubectl apply -f environment-checkout-pr-482.yaml
-   kubectl get environment checkout-pr-482 -n team-payments -w
+   kubectl label namespace team-payments platform.mycompany.io/tenant=payments --overwrite
+   kubectl apply --dry-run=server -f environment-checkout-pr-482.yaml
    ```
 
-   Expected output: the phase moves from `Pending` to `Ready`. Record how long it took.
+   Expected output: `environment.platform.mycompany.io/checkout-pr-482 created (server dry run)`.
 
-2. **Verify the expiry schedule.** `status.expiresAt` should be the creation time plus the TTL:
-
-   ```bash
-   kubectl get environment checkout-pr-482 -n team-payments \
-     -o jsonpath='{.metadata.creationTimestamp}{"\n"}{.status.expiresAt}{"\n"}'
-   ```
-
-   Expected output: two timestamps exactly five minutes apart.
-
-3. **Wait for expiry and confirm deletion.** The environment and its namespace disappear within a few seconds of `expiresAt`. If they linger, check the finalizer and the operator logs:
-
-   ```bash
-   kubectl describe environment checkout-pr-482 -n team-payments
-   ```
-
-4. **Break it on purpose.** Set `type: bogus` and apply with a server-side dry run. The CRD enum rejects it before the controller sees it:
+3. **Break it on purpose.** Set `type: bogus` and repeat the dry run. The CRD enum rejects it before any controller sees it:
 
    ```bash
    kubectl apply --dry-run=server -f environment-checkout-pr-482.yaml
    ```
 
-   Expected output: `Unsupported value: "bogus": supported values: "dev", "staging", "prod", "preview"`. The `maxTTL` guard described earlier on this page is a design pattern; the reference operator in `code/` does not enforce it, so add it to your own controller if you need it.
+   Expected output: `Unsupported value: "bogus": supported values: "dev", "staging", "prod", "preview"`. Set `type` back to `preview`.
+
+4. **Run the reconciler tests for TTL, expiry and templates.**
+
+   ```bash
+   cd code/environment-operator
+   go test ./internal/controller/ -v \
+     -run 'TestTTLRequeuesUntilExpiry|TestExpiredEnvironmentIsDeleted|TestUnknownTemplateSetFails|TestRenderBaselinePerType'
+   ```
+
+   Expected output: four `--- PASS` lines and a final `ok` line for the `internal/controller` package. `TestTTLRequeuesUntilExpiry` shows the `RequeueAfter` set to the time left until `expiresAt`; `TestExpiredEnvironmentIsDeleted` shows the delete once the TTL has elapsed; `TestUnknownTemplateSetFails` shows the `UnknownTemplate` reason for a template set that does not exist, which is what `template: standard-web` would get.
 
 5. **Stretch.** Add the ApplicationSet from this page to a test Argo CD instance, open a pull request with the `preview` label, and close it. Confirm the Application is removed.
 
 **Check:**
 
-- [ ] Every expiry happens at `expiresAt`, not at the next poll.
-- [ ] An invalid spec never creates resources.
-- [ ] Closing the pull request removes the preview.
+- [ ] The server-side dry run accepts the `baseline` preview spec and rejects `type: bogus`.
+- [ ] The four reconciler tests pass, including the requeue at `expiresAt` rather than at a poll interval.
+- [ ] You can name what is missing before the operator can run in a cluster (the `cmd/` entry point).
 
 ---
 
 ## Troubleshooting
 
-### Environment stuck in `Provisioning`
+### Environment in `Failed` or Stuck in `Pending`
 
-**Cause:** Tenant quota exhausted, or template references a missing kind
+**Cause:** The `Ready` condition reason says which step failed: `TenantMismatch` (the Environment's namespace has no matching `platform.mycompany.io/tenant` label), `UnknownTemplate` (the `template` set does not exist), `InvalidNamespace`, `NamespaceConflict` or `ObjectConflict` (an object exists that the operator does not own), or `RenderFailed`. A phase that stays `Pending` with no conditions means no controller is reconciling the Environment.
 
-**Fix:** Read `conditions[].message`; check the Tenant's status and the template's `owned` list
+**Fix:** Read `kubectl get environment <name> -n <namespace> -o jsonpath='{.status.conditions}'` and fix the spec or the conflicting object
 
 ### Preview deleted before the PR closed
 
 **Cause:** Shorter TTL than expected; `expiresAt` computed from creation
 
-**Fix:** Extend `ttl`; check the type's `maxTTL` default
+**Fix:** Extend `ttl`. There is no per-type `maxTTL` default in `code/`; the expiry is always `creationTimestamp + ttl`
 
 ### Preview survives past `expiresAt`
 
@@ -579,7 +599,7 @@ make -C code/environment-operator run     # keep this terminal open; the control
 
 **Cause:** No TTL cap, or many PRs labelled `preview`
 
-**Fix:** Enforce `maxTTL`; reduce the template's quota; check the label policy
+**Fix:** Add a TTL cap (the `maxTTL` design above; not in `code/`); reduce the template's quota; check the label policy
 
 
 ---
@@ -601,4 +621,4 @@ make -C code/environment-operator run     # keep this terminal open; the control
 1. **Measure the experience**: [Developer Experience](developer-experience.md) — feedback loops and DX metrics for provisioning
 2. **Build the API behind it**: [Kubernetes CRDs](../09-platform-apis/kubernetes-crds.md) and [Controller Runtime](../09-platform-apis/controller-runtime.md)
 3. **Protect the namespaces**: [Network Policies](../03-networking-fundamentals/network-policies.md) and [Policy Engine](../12-security-compliance/policy-engine.md)
-4. **Practice**: [Lab 03: Platform API] (a CRD and controller walkthrough)(../../labs/lab-03-platform-api/README.md) and [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/README.md)
+4. **Practice**: [Lab 03: Platform API](../../labs/lab-03-platform-api/README.md) (a CRD and controller walkthrough) and [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/README.md)

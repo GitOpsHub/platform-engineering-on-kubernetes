@@ -455,7 +455,7 @@ spec:
   validationActions: ["Deny"]   # start with ["Audit"] or ["Warn"] to measure impact
 ```
 
-> Controllers like HPA update the `scale` subresource, which is a separate resource (`deployments/scale`) that the rule above doesn't match. Test any such policy in `Audit` mode first and check that the controllers you rely on (rollout restarts, VPA, etc.) still work. See [Policy Engine](../12-security-compliance/policy-engine.md) and [Lab 05](../../labs/lab-05-policy-engine/README.md) for Kyverno/Gatekeeper equivalents.
+> Controllers like HPA update the `scale` subresource, which is a separate resource (`deployments/scale`) that the rule above doesn't match. Test any such policy in `Audit` mode first and check that the controllers you rely on (rollout restarts, VPA, and similar controllers) still work. See [Policy Engine](../12-security-compliance/policy-engine.md) and [Lab 05](../../labs/lab-05-policy-engine/README.md) for Kyverno/Gatekeeper equivalents.
 
 3. **Cloud guardrails.** AWS SCPs / Azure Policy / GCP Org Policy to deny console changes to tagged resources (`platform.mycompany.io/managed-by`).
 4. **Pin versions.** Chart `version: 4.12.1`, not `*`; image digests where possible.
@@ -500,9 +500,9 @@ Useful SLOs: *"95% of drift events are remediated within 1 hour"* and *"zero unt
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Create, Detect, and Remediate Drift Three Ways
+### Exercise 1: Create, Detect, and Remediate Drift Three Ways
 
 Use the Kind cluster with Argo CD and Flux from the [GitOps Tool Comparison](./gitops-tool-comparison.md) exercise.
 
@@ -549,16 +549,45 @@ kubectl -n demo-flux get deploy podinfo -o jsonpath='{.spec.template.spec.contai
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| Argo CD app permanently `OutOfSync` with no visible diff | Defaulted fields / CRD schema pruning | Enable server-side diff (`ServerSideDiff=true`); compare `argocd app manifests --source live` with `--source git` |
-| Constant flapping between two values | Two controllers own the same field | Inspect `managedFields`; remove one owner or add ignore rule |
-| Self-heal doesn't revert a change | Field covered by `ignoreDifferences`, or `RespectIgnoreDifferences` absent during sync | Review ignore rules; verify `automated.selfHeal: true` |
-| Flux doesn't revert an edited field | Field not present in Git manifest (SSA doesn't own it) | Declare the field in Git if it should be enforced |
-| HelmRelease drift detection noisy | Chart has mutated fields (webhooks, generated certs) | `driftDetection.ignore` paths; start with `mode: warn` |
-| `terraform plan` shows drift on every run | Provider normalizes values (JSON policy ordering, tags) | Normalize in HCL (`jsonencode`), `ignore_changes`, or upgrade provider |
-| Crossplane keeps "updating" a resource | `forProvider` value the API normalizes differently (late-initialization loop) | Match the API's canonical format; use `initProvider` |
-| VAP blocks legitimate controller | Controller SA not in allow-list | Add it; test with `Audit` before `Deny` |
+### Argo CD app permanently `OutOfSync` with no visible diff
+
+**Cause:** Defaulted fields / CRD schema pruning  
+**Fix:** Enable server-side diff (`ServerSideDiff=true`); compare `argocd app manifests --source live` with `--source git`
+
+### Constant flapping between two values
+
+**Cause:** Two controllers own the same field  
+**Fix:** Inspect `managedFields`; remove one owner or add ignore rule
+
+### Self-heal doesn't revert a change
+
+**Cause:** Field covered by `ignoreDifferences`, or `RespectIgnoreDifferences` absent during sync  
+**Fix:** Review ignore rules; verify `automated.selfHeal: true`
+
+### Flux doesn't revert an edited field
+
+**Cause:** Field not present in Git manifest (SSA doesn't own it)  
+**Fix:** Declare the field in Git if it should be enforced
+
+### HelmRelease drift detection noisy
+
+**Cause:** Chart has mutated fields (webhooks, generated certs)  
+**Fix:** `driftDetection.ignore` paths; start with `mode: warn`
+
+### `terraform plan` shows drift on every run
+
+**Cause:** Provider normalizes values (JSON policy ordering, tags)  
+**Fix:** Normalize in HCL (`jsonencode`), `ignore_changes`, or upgrade provider
+
+### Crossplane keeps "updating" a resource
+
+**Cause:** `forProvider` value the API normalizes differently (late-initialization loop)  
+**Fix:** Match the API's canonical format; use `initProvider`
+
+### VAP blocks legitimate controller
+
+**Cause:** Controller SA not in allow-list  
+**Fix:** Add it; test with `Audit` before `Deny`
 
 ---
 

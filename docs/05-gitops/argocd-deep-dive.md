@@ -690,21 +690,32 @@ groups:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
+
+### Exercise 1: Self-Healing Application
 
 **Goal**: Install Argo CD, register a project-scoped Application, and watch it self-heal drift.
 
+1. Install Argo CD into a local cluster (any kind cluster from Lab 01 works)
+
 ```bash
-# 1. Install Argo CD into a local cluster (any kind cluster from Lab 01 works)
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 kubectl -n argocd rollout status deploy/argocd-server
+```
 
-# 2. Get the initial admin password and port-forward the API server
+Expected output: the `argocd-server` deployment reports `successfully rolled out`.
+
+2. Get the initial admin password and port-forward the API server
+
+```bash
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 kubectl -n argocd port-forward svc/argocd-server 8080:443 &
+```
 
-# 3. Apply a project and an Application that tracks a Git path
+3. Apply a project and an Application that tracks a Git path
+
+```bash
 kubectl apply -f - <<'EOF'
 # argocd-exercise.yaml
 apiVersion: argoproj.io/v1alpha1
@@ -728,15 +739,21 @@ spec:
     syncOptions:
       - CreateNamespace=true
 EOF
+```
 
-# 4. Check status
+4. Check status
+
+```bash
 kubectl -n argocd get applications
 ```
 
-**Verify**:
-1. `kubectl -n argocd get application guestbook` reports `Synced` and `Healthy`.
-2. Scale the Deployment by hand (`kubectl -n guestbook scale deploy/guestbook-ui --replicas=5`) and confirm Argo CD restores the replica count from Git within a few minutes (`selfHeal: true`).
-3. Remove the `automated` block, repeat step 2, and observe that the drift is reported as `OutOfSync` but not corrected. This is the difference between detection and remediation.
+Expected output: the `guestbook` application is listed with `SYNC STATUS` `Synced` and `HEALTH STATUS` `Healthy`.
+
+**Check:**
+
+- `kubectl -n argocd get application guestbook` reports `Synced` and `Healthy`.
+- Scale the Deployment by hand (`kubectl -n guestbook scale deploy/guestbook-ui --replicas=5`) and confirm Argo CD restores the replica count from Git within a few minutes (`selfHeal: true`).
+- Remove the `automated` block, repeat step 2, and observe that the drift is reported as `OutOfSync` but not corrected. This is the difference between detection and remediation.
 
 **Cleanup**: `kubectl -n argocd delete application guestbook` and `kubectl delete namespace guestbook`.
 

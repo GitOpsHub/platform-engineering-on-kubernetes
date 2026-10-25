@@ -208,7 +208,7 @@ sequenceDiagram
     participant K as Kubernetes API
     B->>P: request (session cookie)
     P->>A: request + user's OIDC bearer token
-    A->>A: verify token; map subject and groups
+    A->>A: verify token, then map subject and groups
     A->>K: request with Impersonate-User and Impersonate-Group headers
     K->>K: RBAC evaluated for the user
     K-->>A: allowed (or 403)
@@ -617,7 +617,7 @@ spec:
 
 ## Hands-On Exercises
 
-### Exercise 1: A minimal portal over the Workload API
+### Exercise 1: A Minimal Portal over the Workload API
 
 **Goal:** Build a two-page portal (workload list and create form) that calls the cluster as the signed-in user and shows live status.
 

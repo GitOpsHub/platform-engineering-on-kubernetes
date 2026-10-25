@@ -4,14 +4,14 @@
 - Understand what scaffolding should (and should not) generate for a platform golden path
 - Compare template engines (Go `text/template`, Jinja2, Nunjucks) and tools (Cookiecutter, Copier, Backstage Scaffolder, `gonew`)
 - Write a Copier template with questions, validation, tasks, and **updates** for day-2 drift
-- Build a Go scaffolder (`code/service-catalog/templates`) that renders file trees from `embed.FS`
+- Build a Go scaffolder that renders file trees from `embed.FS`, and compare it with the real `catalog.Render` in `code/service-catalog`
 - Test templates in CI: render matrix, build, lint, and policy checks
 - Minimize long-term drift by moving shared logic out of templates into versioned dependencies
 
 ## Prerequisites
 - [Service Catalog](service-catalog.md)
 - [Backstage Software Templates](../07-internal-developer-platform/backstage.md#software-templates-the-scaffolder)
-- Go 1.22+; Python tooling via [uv](https://docs.astral.sh/uv/) for Copier/Cookiecutter
+- Go 1.22+ for `code/service-catalog` (its `go.mod` declares `go 1.22`) and Go 1.26+ for the other modules in `code/`, such as `code/workload-operator` (`go 1.26.0`); Python tooling via [uv](https://docs.astral.sh/uv/) for Copier/Cookiecutter
 - Git and GitHub Actions basics
 
 ---
@@ -287,10 +287,15 @@ uvx cruft update
 
 ## A Go Scaffolder for the Platform
 
-When scaffolding must run inside the platform API or CLI (no Python, no Node), a small Go renderer over `embed.FS` is enough. It renders both file *contents* and file *paths*.
+When scaffolding must run inside the platform API or CLI (no Python, no Node), a small Go renderer over `embed.FS` is enough.
+
+The repository has a working one. [`code/service-catalog/catalog.go`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/blob/main/code/service-catalog/catalog.go) parses a template's `template.yaml` with `ParseTemplate`, resolves and validates the parameters (required, default, pattern, enum), renders every `.tmpl` file with `Render` (`text/template`, `missingkey=error`), and writes the result with `WriteTree`. The built-in templates, `go-http-service` and `static-site`, are embedded by [`templates/embed.go`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/blob/main/code/service-catalog/templates/embed.go) (see [`templates/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/service-catalog/templates/)).
+
+!!! note "Design sketch"
+    The code below is a design sketch, not the repository's code. It differs from `catalog.Render` in four ways: it also renders file *paths* (the real `Render` only strips the `.tmpl` suffix), it uses Sprig functions (the real code defines only `lower`, `upper` and `quote`), it takes `map[string]any` values (the real code takes `map[string]string`), and it writes files directly (the real code returns `[]File` and leaves writing to `WriteTree`). The files `templates/scaffold.go` and `templates/go-service/` do not exist.
 
 ```go
-// code/service-catalog/templates/scaffold.go
+// design sketch: scaffold.go (the real renderer is catalog.Render in code/service-catalog/catalog.go)
 package templates
 
 import (
@@ -376,10 +381,10 @@ func renderString(name, text string, v Values, funcs template.FuncMap) (string, 
 }
 ```
 
-> **Always validate inputs before rendering.** Use the offering's JSON Schema from [Service Catalog](service-catalog.md) — a regex on `name` is your first defense against path traversal and YAML injection.
+> **Always validate inputs before rendering.** The real `catalog.Render` does this with the `pattern` on each parameter in `template.yaml`; the offering JSON Schema in [Service Catalog](service-catalog.md) is the design equivalent. A regex on `name` is your first defense against path traversal and YAML injection.
 
 ```go
-// code/service-catalog/templates/go-service/cmd/{{ .name }}/main.go.tmpl
+// design sketch: go-service/cmd/{{ .name }}/main.go.tmpl (compare templates/go-http-service/main.go.tmpl)
 package main
 
 import (
@@ -504,11 +509,11 @@ graph TB
 
 ## Hands-On Exercises
 
-### Exercise 1: Build, test, and update a Copier template
+### Exercise 1: Build, Test, and Update a Copier Template
 
 **Goal:** Generate a service from a Copier template, validate its `Workload`, then evolve the template and pull the change into the generated project.
 
-**Before you start:** [uv](https://docs.astral.sh/uv/) (provides `uvx`), Go 1.22 or later, git, and the kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md) with the `Workload` CRD installed (`make -C code/workload-operator install`).
+**Before you start:** [uv](https://docs.astral.sh/uv/) (provides `uvx`), Go 1.26 or later (`code/workload-operator/go.mod` declares `go 1.26.0`; `code/service-catalog` needs only Go 1.22), git, and the kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md) with the `Workload` CRD installed (`make -C code/workload-operator install`).
 
 1. **Create** the `go-service` Copier template from this page in a scratch repository named `platform-templates`. Commit it and tag it `v1.0.0`.
 2. **Generate a service** and check that it serves `/healthz`:
@@ -541,7 +546,7 @@ graph TB
    ```
 
    Expected output: the diff shows the new probe path and none of your local edits reverted.
-6. **Bonus.** Implement the Go scaffolder from this page and compare its output with Copier's for the same answers using `diff -r`. (The `platform-cli service create` command is planned and does not exist yet.)
+6. **Bonus.** Scaffold the same service with the real Go scaffolder (`go run ./cmd/catalog scaffold go-http-service ...` in `code/service-catalog`, see [Service Catalog](service-catalog.md#hands-on-exercises)) and compare its output with Copier's using `diff -r`. (The `platform-cli service create` command is planned and does not exist yet.)
 
 **Check:**
 

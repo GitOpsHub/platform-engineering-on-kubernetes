@@ -461,6 +461,8 @@ Uses kind's built-in `standard` StorageClass (rancher local-path-provisioner, `W
 
 ### Exercise 1: Dynamic Provisioning and Binding Mode
 
+**Goal:** see a PVC stay `Pending` until a Pod uses it, then bind to a dynamically provisioned PV.
+
 ```bash
 kubectl create namespace storage-lab
 kubectl get storageclass
@@ -499,7 +501,25 @@ PV=$(kubectl -n storage-lab get pvc data -o jsonpath='{.spec.volumeName}')
 kubectl get pv "$PV" -o jsonpath='{.spec.nodeAffinity}{"\n"}'   # local volume pinned to a node
 ```
 
+Expected output (abbreviated; the PV name and node vary):
+
+```text
+rancher.io/local-path WaitForFirstConsumer
+NAME   STATUS    VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+data   Pending                                      standard       <age>
+...
+data   Bound     pvc-<uid>   1Gi     RWO            standard       <age>
+{"required":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"kubernetes.io/hostname","operator":"In","values":["<node>"]}]}]}}
+```
+
+**Check:**
+
+- The first `get pvc` shows `Pending`, the one after the Pod is Ready shows `Bound`.
+- `kubectl -n storage-lab exec writer -- cat /data/log.txt` prints one timestamp.
+
 ### Exercise 2: Data Survives Pod Deletion; Protection Finalizers
+
+**Goal:** show data outliving its Pod, and the PVC protection finalizer blocking deletion while a Pod uses the claim.
 
 ```bash
 kubectl -n storage-lab delete pod writer
@@ -513,7 +533,25 @@ kubectl -n storage-lab delete pod writer                   # now the PVC goes aw
 kubectl get pv "$PV"                                       # deleted too (reclaimPolicy Delete)
 ```
 
+Expected output (timestamps vary):
+
+```text
+<date-1>
+<date-2>
+NAME   STATUS        VOLUME      CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+data   Terminating   pvc-<uid>   1Gi        RWO            standard       <age>
+Error from server (NotFound): persistentvolumes "pvc-<uid>" not found
+```
+
+**Check:**
+
+- The recreated `writer` shows two timestamps in `/data/log.txt`.
+- While the Pod runs, the PVC reports `Terminating` and is not removed.
+- After the Pod is deleted, `kubectl -n storage-lab get pvc data` and `kubectl get pv "$PV"` both return `NotFound`.
+
 ### Exercise 3: Retain Policy
+
+**Goal:** show that a `Retain` reclaim policy keeps the PV after its PVC is deleted.
 
 ```bash
 cat <<EOF | kubectl apply -f -
@@ -528,7 +566,20 @@ EOF
 kubectl get pv     # STATUS Released — disk kept, needs manual cleanup
 ```
 
+Expected output (abbreviated):
+
+```text
+NAME        CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM                 STORAGECLASS      AGE
+pvc-<uid>   1Gi        RWO            Retain           Released   storage-lab/<claim>   standard-retain   <age>
+```
+
+**Check:**
+
+- `kubectl get pv -o jsonpath='{.items[?(@.spec.storageClassName=="standard-retain")].status.phase}'` prints `Released`.
+
 ### Exercise 4 (Optional): Snapshots with the CSI Hostpath Driver
+
+**Goal:** install the snapshot CRDs and the demo CSI driver, then take and restore a snapshot.
 
 ```bash
 # Install snapshot CRDs + controller, then the csi-driver-host-path demo driver
@@ -541,6 +592,15 @@ git clone https://github.com/kubernetes-csi/csi-driver-host-path.git
 kubectl apply -f csi-driver-host-path/examples/csi-storageclass.yaml
 # Then follow csi-driver-host-path/docs/example-snapshots-1.17-and-later.md to snapshot and restore a PVC
 ```
+
+Expected output: the example guide ends with a `VolumeSnapshot` whose `READYTOUSE` column is `true`, and a restored PVC that reads back the original data.
+
+**Check:**
+
+- `kubectl get crd volumesnapshots.snapshot.storage.k8s.io` exists.
+- `kubectl get volumesnapshot` shows `READYTOUSE true`.
+
+Clean up:
 
 ```bash
 kubectl delete namespace storage-lab
@@ -558,13 +618,11 @@ kubectl get pv | grep Released | awk '{print $1}' | xargs -r kubectl delete pv
 kubectl -n <ns> describe pvc <name>        # read Events first
 ```
 
-| Event / symptom | Cause | Fix |
-|-----------------|-------|-----|
-| `waiting for first consumer to be created before binding` | Normal for `WaitForFirstConsumer` | Create the Pod |
-| `no persistent volumes available for this claim and no storage class is set` | No default StorageClass | Set `storageClassName` or annotate a default class |
-| `storageclass.storage.k8s.io "x" not found` | Typo / class not installed | `kubectl get sc` |
-| `waiting for a volume to be created, either by external provisioner "..."` (persisting) | CSI controller not running or lacking cloud permissions | Check provisioner logs (below) |
-| `exceeded quota` | Tenant ResourceQuota | Raise quota or clean up PVCs |
+- **`waiting for first consumer to be created before binding`**: Cause: Normal for `WaitForFirstConsumer`. Fix: Create the Pod.
+- **`no persistent volumes available for this claim and no storage class is set`**: Cause: No default StorageClass. Fix: Set `storageClassName` or annotate a default class.
+- **`storageclass.storage.k8s.io "x" not found`**: Cause: Typo / class not installed. Fix: `kubectl get sc`.
+- **`waiting for a volume to be created, either by external provisioner "..."` (persisting)**: Cause: CSI controller not running or lacking cloud permissions. Fix: Check provisioner logs (below).
+- **`exceeded quota`**: Cause: Tenant ResourceQuota. Fix: Raise quota or clean up PVCs.
 
 ```bash
 kubectl -n kube-system get pods -l app=ebs-csi-controller
@@ -573,13 +631,11 @@ kubectl -n kube-system logs deploy/ebs-csi-controller -c csi-provisioner --tail=
 
 ### Pod Stuck in `ContainerCreating` with Volume Errors
 
-| Event | Cause | Fix |
-|-------|-------|-----|
-| `Multi-Attach error for volume ... Volume is already exclusively attached to one node` | RWO disk still attached to the old node (e.g. after node failure) | Wait for detach (~6 min force-detach) or delete stale `VolumeAttachment` after confirming the node is gone |
-| `AttachVolume.Attach failed ... volume node affinity conflict` | Zonal PV, Pod scheduled in another zone | Use `WaitForFirstConsumer`; pin Pod to the PV's zone |
-| `MountVolume.MountDevice failed ... driver name X not found in the list of registered CSI drivers` | Node plugin DaemonSet not running on this node (taints!) | Add tolerations to the CSI node DaemonSet |
-| `Unable to attach or mount volumes: timed out` | Node at its attach limit | Check `kubectl get csinode <node> -o yaml` `allocatable.count` |
-| `fsGroup` slow startup | Recursive `chown` on large volumes | `securityContext.fsGroupChangePolicy: OnRootMismatch` |
+- **`Multi-Attach error for volume ... Volume is already exclusively attached to one node`**: Cause: RWO disk still attached to the old node (e.g. after node failure). Fix: Wait for detach (~6 min force-detach) or delete stale `VolumeAttachment` after confirming the node is gone.
+- **`AttachVolume.Attach failed ... volume node affinity conflict`**: Cause: Zonal PV, Pod scheduled in another zone. Fix: Use `WaitForFirstConsumer`; pin Pod to the PV's zone.
+- **`MountVolume.MountDevice failed ... driver name X not found in the list of registered CSI drivers`**: Cause: Node plugin DaemonSet not running on this node (taints!). Fix: Add tolerations to the CSI node DaemonSet.
+- **`Unable to attach or mount volumes: timed out`**: Cause: Node at its attach limit. Fix: Check `kubectl get csinode <node> -o yaml` `allocatable.count`.
+- **`fsGroup` slow startup**: Cause: Recursive `chown` on large volumes. Fix: `securityContext.fsGroupChangePolicy: OnRootMismatch`.
 
 ### PV Stuck `Released` and Can't Be Reused
 

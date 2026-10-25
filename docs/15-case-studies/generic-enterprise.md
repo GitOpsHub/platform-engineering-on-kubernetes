@@ -297,7 +297,10 @@ These patterns recur in enterprise platform work. They are generalizations, not 
 
 ## Hands-On Exercises
 
-### Exercise: Run the assessment on your own organization
+### Exercise 1: Run the Assessment on Your Own Organization
+
+**Goal:** repeat the Meridian modernization analysis for your own organization and finish with a
+sequenced plan that outsiders have reviewed.
 
 **Time:** half a day with a small group. **Materials:** this document, the [Maturity Model](../14-platform-evolution/maturity-model.md) scorecard, an inventory export from your source control and CI system (or the composite numbers above if you have none).
 
@@ -308,6 +311,16 @@ These patterns recur in enterprise platform work. They are generalizations, not 
 5. **Contract.** Write a `Tenant` or `Workload` spec for one real service, and list what the platform does and does not guarantee.
 6. **Sequence.** Produce a four-quarter plan with one exit criterion per item. Put measurement first unless you have a strong reason not to.
 7. **Review.** Show the plan to two people who do not work on the platform and record the three questions they ask.
+
+Expected output: an inventory table, a five-aspect scorecard with evidence, a one-constraint
+statement, a team map, one contract spec, a four-quarter plan and the reviewers' questions.
+
+**Check:**
+
+- Every inventory row has an owner, runtime, deployment method and lifecycle, or is counted as a gap.
+- Each aspect score cites evidence, and the constraint is justified in two sentences.
+- Every plan item has one exit criterion, and measurement comes first or you wrote down why not.
+- You recorded the three questions each of the two reviewers asked.
 
 **Discussion questions:**
 - Which score would your leadership dispute most? What evidence would settle it?
@@ -336,7 +349,7 @@ These patterns recur in enterprise platform work. They are generalizations, not 
 - Nicole Forsgren, Jez Humble, Gene Kim — *Accelerate* (IT Revolution, 2018)
 - DORA — [dora.dev](https://dora.dev/)
 
-### Related in this repo
+### Related in This Repo
 - [Maturity Model](../14-platform-evolution/maturity-model.md), [Team Topologies](../14-platform-evolution/team-topologies.md), [Platform as a Product](../14-platform-evolution/platform-product.md), [Measuring Success](../14-platform-evolution/measuring-success.md)
 - [Netflix](./netflix.md), [Spotify](./spotify.md), [Airbnb](./airbnb.md)
 - [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/), [Lab 08: Platform Upgrade](../../labs/lab-08-platform-upgrade/)

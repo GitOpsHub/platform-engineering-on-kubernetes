@@ -615,15 +615,48 @@ Check: the TraceQL query in step 8 returns at least one trace whose root span is
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| No init container injected | Annotation added after Pod creation; wrong `ns/name`; webhook not ready | Restart the Deployment; `kubectl get instrumentation -A`; check operator logs |
-| Spans arrive with no `k8s.*` attributes | `k8sattributes` RBAC missing, or the Pod IP is hidden by a proxy/NAT | Grant `pods`/`namespaces` list/watch; add `from: connection` association |
-| Broken traces (orphan spans) | A hop doesn't propagate `traceparent` (custom HTTP client, message queue) | Instrument the client; propagate context in message headers |
-| Tail sampler drops traces under load | `num_traces` too low, or spans of a trace split across replicas | Increase `num_traces`; make sure the `loadbalancing` exporter routes by `traceID` |
-| Collector OOMKilled | `memory_limiter` missing or not first; huge batches | Put `memory_limiter` first; set `GOMEMLIMIT` to about 80% of the limit |
-| TraceQL search finds nothing for recent traces | Ingester hasn't flushed; querier misconfigured | Search by trace ID first; check `tempo_ingester_live_traces`; review query-frontend logs |
-| `exemplars` not shown in Grafana | Exemplar storage disabled, or the panel isn't using exemplars | Enable `exemplar-storage`; toggle "Exemplars" in the panel query options |
+### No init container injected
+
+**Cause:** Annotation added after Pod creation; wrong `ns/name`; webhook not ready
+
+**Fix:** Restart the Deployment; `kubectl get instrumentation -A`; check operator logs
+
+### Spans arrive with no `k8s.*` attributes
+
+**Cause:** `k8sattributes` RBAC missing, or the Pod IP is hidden by a proxy/NAT
+
+**Fix:** Grant `pods`/`namespaces` list/watch; add `from: connection` association
+
+### Broken traces (orphan spans)
+
+**Cause:** A hop doesn't propagate `traceparent` (custom HTTP client, message queue)
+
+**Fix:** Instrument the client; propagate context in message headers
+
+### Tail sampler drops traces under load
+
+**Cause:** `num_traces` too low, or spans of a trace split across replicas
+
+**Fix:** Increase `num_traces`; make sure the `loadbalancing` exporter routes by `traceID`
+
+### Collector OOMKilled
+
+**Cause:** `memory_limiter` missing or not first; huge batches
+
+**Fix:** Put `memory_limiter` first; set `GOMEMLIMIT` to about 80% of the limit
+
+### TraceQL search finds nothing for recent traces
+
+**Cause:** Ingester hasn't flushed; querier misconfigured
+
+**Fix:** Search by trace ID first; check `tempo_ingester_live_traces`; review query-frontend logs
+
+### `exemplars` not shown in Grafana
+
+**Cause:** Exemplar storage disabled, or the panel isn't using exemplars
+
+**Fix:** Enable `exemplar-storage`; toggle "Exemplars" in the panel query options
+
 
 ```bash
 # Collector self-telemetry (port 8888 by default)

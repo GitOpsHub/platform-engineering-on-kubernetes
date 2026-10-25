@@ -121,7 +121,7 @@ Use GitHub Issues with:
 ## Development Setup
 
 ### Prerequisites
-- Go 1.21+
+- Go 1.26+ (module-specific: see each module's go.mod)
 - kubectl 1.28+
 - kind/k3d
 - Helm 3.12+
@@ -131,17 +131,13 @@ Use GitHub Issues with:
 ### Local Development
 ```bash
 # Clone repository
-git clone https://github.com/your-org/platform-engineering-on-kubernetes
+git clone https://github.com/GitOpsHub/platform-engineering-on-kubernetes
 cd platform-engineering-on-kubernetes
 
-# Install tools
-make install-tools
-
-# Run tests
-make test
-
-# Run linters
-make lint
+# There is no root Makefile. Each module under code/ has its own targets.
+# Example: the platform CLI
+make -C code/platform-cli test
+make -C code/platform-cli lint
 ```
 
 ## Review Process

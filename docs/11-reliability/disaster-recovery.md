@@ -156,7 +156,7 @@ graph TB
     CLI["velero CLI / GitOps"] --> API[Kubernetes API]
     API --> CRDs["Backup / Schedule / Restore CRs"]
     CRDs --> VS[Velero server]
-    VS -->|list/get all resources| API
+    VS -->|"list/get all resources"| API
     VS -->|tarball of manifests| BSL[(BackupStorageLocation<br/>S3 / GCS / Blob / MinIO)]
     VS -->|CSI VolumeSnapshot| CSI[CSI driver]
     VS -->|DataUpload| NA[node-agent DaemonSet<br/>Kopia]
@@ -664,17 +664,60 @@ present after the restore. The `time` output from step 5 is your measured RTO.
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| BSL phase `Unavailable` | Wrong credentials, bucket, region or `s3Url` | `kubectl -n velero logs deploy/velero \| grep -i backupstoragelocation`; verify IAM/IRSA |
-| Backup `PartiallyFailed` | Some resources/volumes failed | `velero backup logs <name> \| grep -i error`; `velero backup describe --details` |
-| PV data not in backup | No snapshot location / CSI not enabled / FS backup not opted in | Enable `EnableCSI` + VolumeSnapshotClass label `velero.io/csi-volumesnapshot-class=true`, or opt pods in with `backup.velero.io/backup-volumes` annotation |
-| Restore skips PVC: "already exists" | GitOps or a previous attempt created it first | Pause sync; delete the empty PVC; restore again |
-| Restored pods Pending | StorageClass doesn't exist in target cluster | Use the `change-storage-class` restore item action ConfigMap |
-| CRs restored but nothing happens | Operator not installed in target cluster | Bootstrap platform via GitOps before restoring tenants |
-| Backups disappear early | TTL too short, or a second cluster's Velero GC'd a shared BSL | Separate prefixes per cluster; DR cluster uses `accessMode: ReadOnly` |
-| node-agent pod OOMKilled on large volumes | Kopia memory use | Raise node-agent limits; use CSI data mover with concurrency limits |
-| etcd restore: cluster ID mismatch | Members restored from different snapshots | Restore *all* members from the same snapshot with the same `--initial-cluster` |
+### BSL phase `Unavailable`
+
+**Cause:** Wrong credentials, bucket, region or `s3Url`
+
+**Fix:** `kubectl -n velero logs deploy/velero | grep -i backupstoragelocation`; verify IAM/IRSA
+
+### Backup `PartiallyFailed`
+
+**Cause:** Some resources/volumes failed
+
+**Fix:** `velero backup logs <name> | grep -i error`; `velero backup describe --details`
+
+### PV data not in backup
+
+**Cause:** No snapshot location / CSI not enabled / FS backup not opted in
+
+**Fix:** Enable `EnableCSI` + VolumeSnapshotClass label `velero.io/csi-volumesnapshot-class=true`, or opt pods in with `backup.velero.io/backup-volumes` annotation
+
+### Restore skips PVC: "already exists"
+
+**Cause:** GitOps or a previous attempt created it first
+
+**Fix:** Pause sync; delete the empty PVC; restore again
+
+### Restored pods Pending
+
+**Cause:** StorageClass doesn't exist in target cluster
+
+**Fix:** Use the `change-storage-class` restore item action ConfigMap
+
+### CRs restored but nothing happens
+
+**Cause:** Operator not installed in target cluster
+
+**Fix:** Bootstrap platform via GitOps before restoring tenants
+
+### Backups disappear early
+
+**Cause:** TTL too short, or a second cluster's Velero GC'd a shared BSL
+
+**Fix:** Separate prefixes per cluster; DR cluster uses `accessMode: ReadOnly`
+
+### node-agent pod OOMKilled on large volumes
+
+**Cause:** Kopia memory use
+
+**Fix:** Raise node-agent limits; use CSI data mover with concurrency limits
+
+### etcd restore: cluster ID mismatch
+
+**Cause:** Members restored from different snapshots
+
+**Fix:** Restore *all* members from the same snapshot with the same `--initial-cluster`
+
 
 ---
 

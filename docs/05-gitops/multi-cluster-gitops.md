@@ -577,9 +577,9 @@ count by (dest_server) (argocd_app_info{health_status!="Healthy", project="platf
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Hub-and-Spoke Argo CD with Two Kind Clusters and Rings
+### Exercise 1: Hub-and-Spoke Argo CD with Two Kind Clusters and Rings
 
 ```bash
 # 1. Create a hub and two spokes on a shared Docker network
@@ -666,17 +666,50 @@ kind delete cluster --name hub; kind delete cluster --name spoke-dev; kind delet
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| Argo CD cluster `Unknown` / `connection refused` | Hub can't reach spoke API server (network, private endpoint) | Check routing, security groups, private link; for Kind, use container IP |
-| `the server has asked for the client to provide credentials` | Expired token or wrong IAM role mapping | Use workload identity (`awsAuthConfig`/exec); verify EKS access entry for the role |
-| ApplicationSet generates nothing | Selector labels don't match cluster Secret labels; the in-cluster cluster has no Secret by default | `kubectl -n argocd get secret -l argocd.argoproj.io/secret-type=cluster --show-labels` |
-| `map has no entry for key` in ApplicationSet | Cluster lacks an annotation used in a template (with `missingkey=error`) | Add the annotation, or use `default` in the template |
-| Flux `${VAR}` left literally in manifests | Missing `postBuild.substituteFrom` or ConfigMap not found | Check Kustomization status; ensure the vars ConfigMap exists before reconcile (`dependsOn`) |
-| Flux corrupts scripts containing `$` | `postBuild` substituted shell variables | Escape as `$${VAR}` or annotate with `kustomize.toolkit.fluxcd.io/substitute: disabled` |
-| Hub controller OOM / slow syncs | Too many clusters per controller shard | Enable sharding (`replicas` + `ARGOCD_CONTROLLER_REPLICAS`), exclude noisy kinds |
-| Change rolled to all clusters at once | No ring design | Adopt version pins, OCI tags, or RollingSync |
-| Rebuilt cluster stuck: CRs before CRDs | Missing ordering | Sync waves / `dependsOn`; split CRDs into their own Application/Kustomization |
+### Argo CD cluster `Unknown` / `connection refused`
+
+**Cause:** Hub can't reach spoke API server (network, private endpoint)  
+**Fix:** Check routing, security groups, private link; for Kind, use container IP
+
+### `the server has asked for the client to provide credentials`
+
+**Cause:** Expired token or wrong IAM role mapping  
+**Fix:** Use workload identity (`awsAuthConfig`/exec); verify EKS access entry for the role
+
+### ApplicationSet generates nothing
+
+**Cause:** Selector labels don't match cluster Secret labels; the in-cluster cluster has no Secret by default  
+**Fix:** `kubectl -n argocd get secret -l argocd.argoproj.io/secret-type=cluster --show-labels`
+
+### `map has no entry for key` in ApplicationSet
+
+**Cause:** Cluster lacks an annotation used in a template (with `missingkey=error`)  
+**Fix:** Add the annotation, or use `default` in the template
+
+### Flux `${VAR}` left literally in manifests
+
+**Cause:** Missing `postBuild.substituteFrom` or ConfigMap not found  
+**Fix:** Check Kustomization status; ensure the vars ConfigMap exists before reconcile (`dependsOn`)
+
+### Flux corrupts scripts containing `$`
+
+**Cause:** `postBuild` substituted shell variables  
+**Fix:** Escape as `$${VAR}` or annotate with `kustomize.toolkit.fluxcd.io/substitute: disabled`
+
+### Hub controller OOM / slow syncs
+
+**Cause:** Too many clusters per controller shard  
+**Fix:** Enable sharding (`replicas` + `ARGOCD_CONTROLLER_REPLICAS`), exclude noisy kinds
+
+### Change rolled to all clusters at once
+
+**Cause:** No ring design  
+**Fix:** Adopt version pins, OCI tags, or RollingSync
+
+### Rebuilt cluster stuck: CRs before CRDs
+
+**Cause:** Missing ordering  
+**Fix:** Sync waves / `dependsOn`; split CRDs into their own Application/Kustomization
 
 ---
 

@@ -32,122 +32,167 @@ graph TB
 
 ## Loki Stack Deployment
 
-### Install via Helm
+### Install Loki via Helm
+
+This page uses the `grafana/loki` chart (the chart and version Lab 06 pins) in single-binary
+mode. The older `grafana/loki-stack` chart is deprecated and bundles Promtail, which is
+end-of-life, so it is not used here. Grafana comes from the [Metrics Stack](./metrics-stack.md)
+install.
+
 ```bash
 helm repo add grafana https://grafana.github.io/helm-charts
 helm repo update
 
-helm upgrade --install loki grafana/loki-stack \
+helm upgrade --install loki grafana/loki \
   --namespace monitoring --create-namespace \
-  --version 2.9.0 \
+  --version 7.3.0 \
+  --wait \
   --values - <<EOF
+deploymentMode: SingleBinary
+
 loki:
-  enabled: true
-  image:
-    tag: 2.9.0
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+  limits_config:
+    reject_old_samples: true
+    reject_old_samples_max_age: 168h
+    ingestion_rate_mb: 10
+    ingestion_burst_size_mb: 20
+    per_stream_rate_limit: 3MB
+    per_stream_rate_limit_burst: 10MB
+    max_entries_limit_per_query: 5000
+    max_query_parallelism: 32
+    retention_period: 720h
+  compactor:
+    retention_enabled: true
+    delete_request_store: filesystem
+
+singleBinary:
+  replicas: 1
   persistence:
     enabled: true
-    size: 100Gi
-    storageClassName: fast-ssd
-  config: |
-    auth_enabled: false
-    server:
-      http_listen_port: 3100
-      grpc_listen_port: 9096
-    common:
-      path_prefix: /loki
-      storage:
-        filesystem:
-          chunks_directory: /loki/chunks
-          rules_directory: /loki/rules
-      replication_factor: 1
-      ring:
-        instance_addr: 127.0.0.1
-        kvstore:
-          store: inmemory
-    schema_config:
-      configs:
-        - from: 2024-01-01
-          store: boltdb-shipper
-          object_store: filesystem
-          schema: v12
-          index:
-            prefix: index_
-            period: 24h
-    limits_config:
-      reject_old_samples: true
-      reject_old_samples_max_age: 168h
-      ingestion_rate_mb: 10
-      ingestion_burst_size_mb: 20
-      per_stream_rate_limit: 3MB
-      per_stream_rate_limit_burst: 10MB
-      max_entries_limit_per_query: 5000
-      max_query_parallelism: 32
-    chunk_store_config:
-      max_look_back_period: 30d
-    table_manager:
-      retention_deletes_enabled: true
-      retention_period: 30d
+    size: 5Gi            # use 100Gi and a fast StorageClass outside a lab
   resources:
-    limits:
-      cpu: 2000m
-      memory: 4Gi
     requests:
-      cpu: 500m
-      memory: 1Gi
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
 
-promtail:
-  enabled: true
-  config:
-    clients:
-      - url: http://loki:3100/loki/api/v1/push
-    scrape_configs:
-      - job_name: kubernetes-pods
-        kubernetes_sd_configs:
-          - role: pod
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
-            action: keep
-            regex: true
-          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
-            action: replace
-            target_label: __metrics_path__
-            regex: (.+)
-          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
-            action: replace
-            regex: ([^:]+)(?::\d+)?;(\d+)
-            replacement: $1:$2
-            target_label: __address__
-          - action: labelmap
-            regex: __meta_kubernetes_pod_label_(.+)
-          - source_labels: [__meta_kubernetes_namespace]
-            action: replace
-            target_label: namespace
-          - source_labels: [__meta_kubernetes_pod_name]
-            action: replace
-            target_label: pod
-          - source_labels: [__meta_kubernetes_pod_container_name]
-            action: replace
-            target_label: container
+# Simple-scalable components are unused in SingleBinary mode.
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
 
-grafana:
-  enabled: true
-  persistence:
-    enabled: true
-    size: 10Gi
-  datasources:
-    datasources.yaml:
-      apiVersion: 1
-      datasources:
-        - name: Loki
-          type: loki
-          url: http://loki:3100
-          access: proxy
-          isDefault: true
-          jsonData:
-            maxLines: 1000
+# Laptop trims: no gateway, caches, canary or helm test pod.
+gateway:
+  enabled: false
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+lokiCanary:
+  enabled: false
+test:
+  enabled: false
 EOF
 ```
+
+The release is named `loki`, so the in-cluster push URL is
+`http://loki.monitoring.svc:3100/loki/api/v1/push`. Lab 06 installs the same chart in the
+`platform-monitoring` namespace; see `labs/lab-06-observability-stack/loki-stack.yaml`.
+
+### Install Grafana Alloy for Pod Logs
+
+Grafana Alloy (chart `grafana/alloy` 1.12.1, Alloy v1.19.2, the pins used by Lab 06) replaces
+Promtail. It reads pod logs through the Kubernetes API and pushes them to Loki, labelled with
+`namespace`, `pod`, `container`, and `app`.
+
+```bash
+helm upgrade --install alloy grafana/alloy \
+  --namespace monitoring \
+  --version 1.12.1 \
+  --wait \
+  --values - <<'EOF'
+controller:
+  type: deployment
+  replicas: 1
+
+alloy:
+  enableReporting: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+  configMap:
+    create: true
+    content: |
+      logging {
+        level  = "info"
+        format = "logfmt"
+      }
+
+      discovery.kubernetes "pods" {
+        role = "pod"
+      }
+
+      discovery.relabel "pods" {
+        targets = discovery.kubernetes.pods.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app"]
+          target_label  = "app"
+        }
+      }
+
+      loki.source.kubernetes "pods" {
+        targets    = discovery.relabel.pods.output
+        forward_to = [loki.write.default.receiver]
+      }
+
+      loki.write "default" {
+        endpoint {
+          url = "http://loki.monitoring.svc:3100/loki/api/v1/push"
+        }
+      }
+EOF
+```
+
+Expected output: each command ends with `STATUS: deployed`, and
+`kubectl -n monitoring get pod loki-0` shows `Running`. A single Alloy Deployment is enough for a
+lab because `loki.source.kubernetes` reads every pod through the API. For production, run a
+node-local collector (Alloy as a DaemonSet, Vector, or Fluent Bit as described below).
+
+Add Loki to Grafana as a data source with URL `http://loki.monitoring.svc:3100`.
 
 ---
 
@@ -579,13 +624,14 @@ loki:
 
 ## Hands-On Exercises
 
-These exercises assume Loki and Promtail from [Install via Helm](#install-via-helm) run in the
-`monitoring` namespace. On a kind or k3d cluster, replace `storageClassName: fast-ssd` with the
-name from `kubectl get storageclass` and lower `persistence.size` to `5Gi`.
+These exercises assume Loki and Alloy from [Install Loki via Helm](#install-loki-via-helm) and
+[Install Grafana Alloy for Pod Logs](#install-grafana-alloy-for-pod-logs) run in the `monitoring`
+namespace. Lab 06 runs the same chart pins in `platform-monitoring`; if you use it, replace
+`-n monitoring` and `loki.monitoring.svc` in the commands.
 
 ### Exercise 1: Ship logs from a workload
 
-Goal: confirm that a pod's logs reach Loki with the labels you expect.
+**Goal:** confirm that a pod's logs reach Loki with the labels you expect.
 
 ```bash
 kubectl run log-demo -n default --image=busybox --restart=Never -- \
@@ -606,12 +652,14 @@ Expected output (label values vary by cluster):
 }
 ```
 
-Check: `curl -s http://localhost:3100/loki/api/v1/labels | jq -r '.data[]'` lists `pod` and
-`namespace`. If the query returns `null`, wait 15 seconds and run it again.
+**Check:**
+
+- `curl -s http://localhost:3100/loki/api/v1/labels | jq -r '.data[]'` lists `pod` and `namespace`.
+- If the Exercise 1 query returns `null`, wait 15 seconds and run it again.
 
 ### Exercise 2: Parse and filter with LogQL
 
-Goal: extract JSON fields at query time and aggregate them. Run these in Grafana
+**Goal:** extract JSON fields at query time and aggregate them. Run these in Grafana
 (Explore, Loki data source) against the pod from Exercise 1.
 
 ```logql
@@ -622,11 +670,13 @@ sum by (namespace) (count_over_time({namespace=~".+"} | json | level="info" [5m]
 Expected output: the first query returns no lines (the pod only writes `info`). The second
 returns one series for `default` with a count that grows by about 30 every minute.
 
-Check: change `level="info"` to `level="error"` in the second query. The result is empty.
+**Check:**
+
+- Change `level="info"` to `level="error"` in the second query. The result is empty.
 
 ### Exercise 3: Break and fix ingestion
 
-Goal: see how a new label value becomes a new stream and why cardinality matters.
+**Goal:** see how a new label value becomes a new stream and why cardinality matters.
 
 ```bash
 kubectl delete pod log-demo
@@ -639,22 +689,27 @@ curl -G -s http://localhost:3100/loki/api/v1/query_range \
 
 Expected output: `1`.
 
-Check: the stream appears within one scrape interval. Then explain why a high-cardinality label
-(for example, a request ID) would create one stream per request and hurt Loki, and how you would
-move that value into the log line instead. Clean up with
-`kubectl delete pod log-demo-2; kill %1`.
+**Check:**
+
+- The stream appears within one scrape interval (the query above prints `1`).
+- You can explain why a high-cardinality label (for example, a request ID) would create one
+  stream per request and hurt Loki, and how you would move that value into the log line instead.
+
+Clean up with `kubectl delete pod log-demo-2; kill %1`.
 
 ---
 
 ## Troubleshooting
 
-### Symptom: Loki is not receiving logs
+### Loki is not receiving logs
 
-Cause: the collector cannot reach Loki, or Loki rejects the push. Check each hop in order.
+**Cause:** the collector cannot reach Loki, or Loki rejects the push.
+
+**Fix:** check each hop in order.
 
 ```bash
-# Check Promtail/Vector logs
-kubectl logs -n monitoring -l app.kubernetes.io/name=promtail
+# Check Alloy/Vector logs
+kubectl logs -n monitoring -l app.kubernetes.io/name=alloy
 kubectl logs -n monitoring -l app.kubernetes.io/name=vector
 
 # Check Loki logs
@@ -666,9 +721,11 @@ curl -X POST http://loki.monitoring.svc:3100/loki/api/v1/push \
   -d '{"streams":[{"stream":{"job":"test"},"values":[["'$(date +%s%N)'","test message"]]}]}'
 ```
 
-### Symptom: Loki memory usage is high
+### Loki memory usage is high
 
-Cause: too many streams (high-cardinality labels) or oversized chunks. Check usage, then tune limits.
+**Cause:** too many streams (high-cardinality labels) or oversized chunks.
+
+**Fix:** check usage, then tune limits.
 
 ```bash
 # Check Loki memory
@@ -679,9 +736,11 @@ kubectl top pods -n monitoring -l app.kubernetes.io/name=loki
 # Increase chunk_target_size
 ```
 
-### Symptom: queries are slow
+### Queries are slow
 
-Cause: wide time ranges, no caching, or unselective stream selectors. Tune as follows.
+**Cause:** wide time ranges, no caching, or unselective stream selectors.
+
+**Fix:** tune as follows.
 
 ```bash
 # Enable query caching
@@ -699,3 +758,11 @@ Cause: wide time ranges, no caching, or unselective stream selectors. Tune as fo
 - [Vector Documentation](https://vector.dev/docs/)
 - [LogQL Reference](https://grafana.com/docs/loki/latest/logql/)
 - [Grafana Loki Dashboards](https://grafana.com/grafana/dashboards/?dataSource=loki)
+
+---
+
+## Next Steps
+
+1. **Read**: [Tracing Stack](./tracing-stack.md). Link log lines to traces with `trace_id`.
+2. **Read**: [Alerting](./alerting.md). Route Loki ruler alerts through Alertmanager.
+3. **Practice**: [Lab 06: Observability Stack](../../labs/lab-06-observability-stack/)

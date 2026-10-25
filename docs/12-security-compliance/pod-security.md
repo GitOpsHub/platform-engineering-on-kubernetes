@@ -407,8 +407,6 @@ metadata:
     policies.kyverno.io/title: Pod Security Standards (Restricted) for tenants
     policies.kyverno.io/category: Pod Security
 spec:
-  # Kyverno 1.13+ also supports a per-rule `failureAction`; the spec-level field still works
-  validationFailureAction: Enforce
   background: true
   rules:
     - name: restricted
@@ -421,6 +419,7 @@ spec:
                   - key: platform.mycompany.io/tenant
                     operator: Exists
       validate:
+        failureAction: Enforce
         podSecurity:
           level: restricted
           version: latest

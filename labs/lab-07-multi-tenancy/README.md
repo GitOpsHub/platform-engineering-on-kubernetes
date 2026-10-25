@@ -29,6 +29,22 @@ Background reading:
 30-40 minutes, about 5 of which are pulling the demo images on the first run.
 Difficulty: Intermediate.
 
+## Files in this lab
+
+| File | Purpose |
+|------|---------|
+| [`setup.sh`](setup.sh) | Creates tenants `acme` and `globex` (manifest mode, or operator mode if the `Tenant` CRD exists), then the demo app. Idempotent |
+| [`teardown.sh`](teardown.sh) | Deletes the `Tenant` CRs (if the CRD exists) and the tenant namespaces. Leaves the Lab 01 cluster alone |
+| [`namespace-templates/namespace.yaml`](namespace-templates/namespace.yaml) | Tenant namespace template with tenant labels and restricted Pod Security |
+| [`resource-quotas/quota.yaml`](resource-quotas/quota.yaml) | `ResourceQuota tenant-quota` and `LimitRange tenant-limits` |
+| [`network-isolation/network-policies.yaml`](network-isolation/network-policies.yaml) | Default-deny, same-tenant, DNS and Traefik-ingress NetworkPolicies |
+| [`rbac/tenant-owner.yaml`](rbac/tenant-owner.yaml) | `RoleBinding tenant-owners` template for the tenant owner group |
+| [`rbac/examples/tenant-acme-owner.yaml`](rbac/examples/tenant-acme-owner.yaml) | The owner RoleBinding rendered for `acme`, for reference |
+| [`tests/demo-app.yaml`](tests/demo-app.yaml) | `echo` Deployment and Service, and a `client` pod with curl |
+| [`tests/verify-isolation.sh`](tests/verify-isolation.sh) | Pass/fail checks: same-tenant and cross-tenant HTTP, DNS, quota rejection, owner RBAC |
+| [`tenant-operator/README.md`](tenant-operator/README.md) | Operator mode and how it differs from manifest mode |
+| [`tenant-operator/tenant-acme.yaml`](tenant-operator/tenant-acme.yaml), [`tenant-operator/tenant-globex.yaml`](tenant-operator/tenant-globex.yaml) | `Tenant` CRs, applied only in operator mode |
+
 ---
 
 ## Steps

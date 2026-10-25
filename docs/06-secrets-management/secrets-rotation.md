@@ -474,18 +474,24 @@ documentation.
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
+
+### Exercise 1: Rotate a Secret with Reloader
 
 **Goal**: Rotate a static secret through ESO, have Reloader restart the consuming Deployment, and confirm the
 new value is in use. Then repeat with a dynamic database credential if you have a database in the lab.
 
+1. Install Reloader in the cluster
+
 ```bash
-# 1. Install Reloader in the cluster
 helm upgrade --install reloader stakater/reloader \
   --namespace reloader --create-namespace \
   --set reloader.watchGlobally=false
+```
 
-# 2. Create a namespace, a Secret, and a Deployment that opts in to reloads
+2. Create a namespace, a Secret, and a Deployment that opts in to reloads
+
+```bash
 kubectl create namespace rotation-lab
 kubectl -n rotation-lab create secret generic api-key --from-literal=key=v1
 kubectl -n rotation-lab apply -f - <<'EOF'
@@ -518,12 +524,20 @@ spec:
                   name: api-key
                   key: key
 EOF
+```
 
-# 3. Record the current pod names and the value each pod printed
+3. Record the current pod names and the value each pod printed
+
+```bash
 kubectl -n rotation-lab get pods -l app=echo -o name > before.txt
 kubectl -n rotation-lab logs deploy/echo | head -1
+```
 
-# 4. Rotate the value and watch the rollout
+Expected output: two pod names are recorded and the first log line is `key=v1`.
+
+4. Rotate the value and watch the rollout
+
+```bash
 kubectl -n rotation-lab create secret generic api-key --from-literal=key=v2 \
   --dry-run=client -o yaml | kubectl -n rotation-lab apply -f -
 kubectl -n rotation-lab rollout status deploy/echo
@@ -532,11 +546,14 @@ diff before.txt after.txt || true
 kubectl -n rotation-lab logs deploy/echo | head -1
 ```
 
-**Verify**:
-1. `before.txt` and `after.txt` list different pod names, showing that Reloader replaced the pods.
-2. The log line changes from `key=v1` to `key=v2` after the rollout.
-3. `kubectl -n rotation-lab get deploy echo` shows `2/2` ready at every point during the rollout. A
-   PodDisruptionBudget with `minAvailable: 1` added to the lab would not change that for a rolling restart.
+Expected output: the rollout completes, the pod names differ between the two files, and the first log line is `key=v2`.
+
+**Check:**
+
+- `before.txt` and `after.txt` list different pod names, showing that Reloader replaced the pods.
+- The log line changes from `key=v1` to `key=v2` after the rollout.
+- `kubectl -n rotation-lab get deploy echo` shows `2/2` ready at every point during the rollout. A
+  PodDisruptionBudget with `minAvailable: 1` added to the lab would not change that for a rolling restart.
 
 **Stretch**: Replace the manual Secret with an `ExternalSecret` that reads from Vault (see
 [External Secrets](./external-secrets.md)). Change the Vault value and confirm that the Secret updates within
@@ -549,17 +566,59 @@ one `refreshInterval`, and that Reloader restarts the pods as a result.
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Diagnose | Fix |
-|---------|--------------|----------|-----|
-| Secret updated in Vault, cluster still has old value | `refreshInterval` not reached, or ExternalSecret not Ready | `kubectl get externalsecret -A`; check `status.refreshTime` | Force refresh with the annotation; fix the failing condition |
-| Pods did not restart after Secret change | Reloader annotation missing, or Reloader not watching the namespace | `kubectl -n reloader logs deploy/reloader`; check the annotation on the Deployment | Add the `secret.reloader.stakater.com/reload` annotation; set `watchGlobally` or add the namespace |
-| Application keeps using old password after restart | Secret consumed through a volume that is cached, or a connection pool holds the old credential | Compare `kubectl exec ... env` and the file content | Restart the pods; fix the pool to re-read credentials |
-| Dynamic DB credentials fail after an hour | Lease expired and the app did not reconnect | Agent logs show new lease; app logs show `password authentication failed` | Make the pool reconnect on auth errors; re-read the credential file |
-| `permission denied` reading `database/creds/*` | Policy missing `read` on that path, or wrong role | `vault token capabilities <token> database/creds/billing-app` | Fix the policy; confirm the role name in the Agent annotation |
-| Certificate renewed but app serves the old one | App loads the certificate once at startup | `openssl s_client -connect host:443` shows old serial | Restart via Reloader or implement file watch |
-| `certmanager` renewal stuck in `Issuing` | DNS-01 or HTTP-01 challenge failing | `kubectl describe certificaterequest`, `kubectl get challenges -A` | Fix the solver and DNS records |
-| All ExternalSecrets stopped syncing at once | The store credential was revoked before the new one was applied | `kubectl get clustersecretstore -o wide`; store status condition | Restore the previous credential, then perform overlap rotation correctly |
-| Token file unchanged after expiration | Application cached the token value | Compare the file's mtime with the `exp` claim | Read the file on each use, or use a client library that does |
+### Secret updated in Vault, cluster still has old value
+
+**Cause:** `refreshInterval` not reached, or ExternalSecret not Ready  
+**Diagnose:** `kubectl get externalsecret -A`; check `status.refreshTime`  
+**Fix:** Force refresh with the annotation; fix the failing condition
+
+### Pods did not restart after Secret change
+
+**Cause:** Reloader annotation missing, or Reloader not watching the namespace  
+**Diagnose:** `kubectl -n reloader logs deploy/reloader`; check the annotation on the Deployment  
+**Fix:** Add the `secret.reloader.stakater.com/reload` annotation; set `watchGlobally` or add the namespace
+
+### Application keeps using old password after restart
+
+**Cause:** Secret consumed through a volume that is cached, or a connection pool holds the old credential  
+**Diagnose:** Compare `kubectl exec ... env` and the file content  
+**Fix:** Restart the pods; fix the pool to re-read credentials
+
+### Dynamic DB credentials fail after an hour
+
+**Cause:** Lease expired and the app did not reconnect  
+**Diagnose:** Agent logs show new lease; app logs show `password authentication failed`  
+**Fix:** Make the pool reconnect on auth errors; re-read the credential file
+
+### `permission denied` reading `database/creds/*`
+
+**Cause:** Policy missing `read` on that path, or wrong role  
+**Diagnose:** `vault token capabilities <token> database/creds/billing-app`  
+**Fix:** Fix the policy; confirm the role name in the Agent annotation
+
+### Certificate renewed but app serves the old one
+
+**Cause:** App loads the certificate once at startup  
+**Diagnose:** `openssl s_client -connect host:443` shows old serial  
+**Fix:** Restart via Reloader or implement file watch
+
+### `certmanager` renewal stuck in `Issuing`
+
+**Cause:** DNS-01 or HTTP-01 challenge failing  
+**Diagnose:** `kubectl describe certificaterequest`, `kubectl get challenges -A`  
+**Fix:** Fix the solver and DNS records
+
+### All ExternalSecrets stopped syncing at once
+
+**Cause:** The store credential was revoked before the new one was applied  
+**Diagnose:** `kubectl get clustersecretstore -o wide`; store status condition  
+**Fix:** Restore the previous credential, then perform overlap rotation correctly
+
+### Token file unchanged after expiration
+
+**Cause:** Application cached the token value  
+**Diagnose:** Compare the file's mtime with the `exp` claim  
+**Fix:** Read the file on each use, or use a client library that does
 
 ---
 

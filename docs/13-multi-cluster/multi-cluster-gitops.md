@@ -49,7 +49,7 @@ graph LR
 
 ## GitOps Topologies for Fleets
 
-### 1. Hub-and-spoke (centralized)
+### 1. Hub-and-Spoke (Centralized)
 
 One GitOps control plane on a management cluster deploys to all workload clusters.
 
@@ -72,7 +72,7 @@ graph TB
 | One place to upgrade the GitOps tool | Scale limits: controller sharding needed at hundreds of clusters / thousands of apps |
 | | Requires network reachability hub → every API server |
 
-### 2. Standalone (decentralized)
+### 2. Standalone (Decentralized)
 
 Every cluster runs its own Argo CD or Flux, pointing at its own path in Git.
 
@@ -82,7 +82,7 @@ Every cluster runs its own Argo CD or Flux, pointing at its own path in Git.
 | Cluster keeps reconciling if anything central fails | N copies of the GitOps tool to upgrade |
 | Works through NAT/firewalls/edge | Fleet-wide targeting must be done in Git structure, not generators |
 
-### 3. Hybrid (most common at scale)
+### 3. Hybrid (Most Common at Scale)
 
 A hub manages **platform baseline and bootstrapping**; each workload cluster runs a local GitOps agent for **tenant applications**. Flux is popular for the local agent because it's lightweight; Argo CD's newer **agent** mode (argoproj-labs/argocd-agent) aims to combine a central UI with pull-based agents.
 
@@ -116,7 +116,7 @@ graph TB
 
 ## Repository Design: Clusters as Data
 
-### Recommended layout
+### Recommended Layout
 
 ```text
 fleet-config/
@@ -161,7 +161,7 @@ components:
 
 In practice, many teams keep inventory on the **Argo CD cluster Secrets** (as labels) instead of files, because they're created automatically during registration (next section). Either is fine — pick one source of truth.
 
-### Versioning components
+### Versioning Components
 
 Pin component versions so a change to `components/` doesn't instantly reach every cluster:
 
@@ -194,7 +194,7 @@ sequenceDiagram
     ARGO->>WC: ApplicationSets match labels → baseline installed
 ```
 
-### Argo CD: the cluster Secret
+### Argo CD: The Cluster Secret
 
 Argo CD stores clusters as labeled Secrets. Fleet labels on the Secret are what ApplicationSet cluster generators select on.
 
@@ -229,7 +229,7 @@ Implementation options for the registration controller:
 - Open Cluster Management's Argo CD integration, which generates cluster secrets from OCM placements
 - Community projects that sync CAPI clusters into Argo CD (evaluate maturity before adopting)
 
-### Flux: CAPI kubeconfig Secrets work directly
+### Flux: CAPI Kubeconfig Secrets Work Directly
 
 CAPI writes a `<cluster>-kubeconfig` Secret with the kubeconfig under the key `value`, which Flux's `kubeConfig.secretRef` can consume directly — no registration step needed for hub-mode Flux.
 
@@ -265,7 +265,7 @@ spec:
 
 ## Targeting Clusters with ApplicationSet
 
-### Baseline add-ons for every cluster (cluster generator)
+### Baseline Add-Ons for Every Cluster (Cluster Generator)
 
 ```yaml
 # fleet/baseline-appset.yaml
@@ -308,7 +308,7 @@ spec:
           - ServerSideApply=true
 ```
 
-### Many components × matching clusters (matrix generator)
+### Many Components × Matching Clusters (Matrix Generator)
 
 Rather than one ApplicationSet per component, combine a list of components with the cluster generator. Each component declares which clusters it applies to.
 
@@ -364,7 +364,7 @@ targetTier: general
 
 The second generator references parameters (`targetTier`) produced by the first — a supported matrix feature. Keep matrix nesting to two levels; deeper combinations get hard to reason about.
 
-### Guardrails for generated Applications
+### Guardrails for Generated Applications
 
 - Use an `AppProject` per concern (`platform-baseline`, `tenant-apps`) with restricted `destinations` and resource allow-lists.
 - Set `spec.syncPolicy.preserveResourcesOnDeletion: true` on fleet-critical ApplicationSets so that deleting or mis-editing the ApplicationSet doesn't cascade-delete workloads on every cluster.
@@ -382,7 +382,7 @@ The most important fleet GitOps capability is **not deploying everywhere at once
 | 1 | All non-prod + one low-traffic prod cluster | Real tenant workloads | 24 h |
 | 2 | Remaining production, region by region | Full rollout | Staggered |
 
-### Option A: ApplicationSet progressive syncs (RollingSync)
+### Option A: ApplicationSet Progressive Syncs (RollingSync)
 
 Argo CD's ApplicationSet controller supports a `RollingSync` strategy that syncs generated Applications step by step, based on labels on those Applications. It must be enabled on the controller (e.g. `applicationsetcontroller.enable.progressive.syncs: "true"` in `argocd-cmd-params-cm`), and while active, the controller manages syncing itself rather than relying on per-Application auto-sync.
 
@@ -411,7 +411,7 @@ spec:
 
 A step proceeds only when Applications in the previous step become Healthy. Note that "Healthy" is Argo CD resource health — it doesn't know about your SLOs. Combine with analysis (below) for real safety.
 
-### Option B: Promotion by Git ref
+### Option B: Promotion by Git Ref
 
 Each wave pins a different revision; promotion is a PR that moves the ref.
 
@@ -431,7 +431,7 @@ git push origin origin/main:refs/heads/fleet-wave-1
 
 This is tool-agnostic (works with Flux by pointing each cluster's `GitRepository.spec.ref` at its wave's branch/tag) and gives a clear audit trail.
 
-### Option C: Flux with dependsOn + health checks per wave
+### Option C: Flux with dependsOn + Health Checks per Wave
 
 On a Flux hub, model each wave as Kustomizations that `dependsOn` the previous wave being Ready. Within a single Flux instance `dependsOn` works across namespaces by reference:
 
@@ -454,7 +454,7 @@ spec:
     secretRef: { name: prod-eu-1-kubeconfig }
 ```
 
-### Gating on real signals
+### Gating on Real Signals
 
 Health checks only catch "pods aren't running". To catch "pods run but error rate doubled":
 
@@ -513,7 +513,7 @@ Build a "fleet version matrix" dashboard (component × cluster → version) from
 
 ## Hands-On Exercises
 
-### Lab: Label-driven fleet rollout with Argo CD on three kind clusters
+### Exercise 1: Label-Driven Fleet Rollout with Argo CD on Three Kind Clusters
 
 **Goal:** register two clusters with wave labels and watch an ApplicationSet sync the canary cluster before the production cluster.
 
@@ -567,8 +567,11 @@ Expected output: `argocd cluster list` shows `wl-canary` and `wl-prod` with stat
 `argocd app list` shows the canary Application as `Synced`/`Healthy` before the production one
 starts syncing. The Application names depend on your ApplicationSet template.
 
-Check: run `kubectl --context kind-wl-prod get deploy -A | grep podinfo`. It returns nothing
-until the canary Application is `Healthy`, then lists the `podinfo` Deployment.
+**Check:**
+
+- `kubectl --context kind-wl-prod get deploy -A | grep podinfo` returns nothing until the canary
+  Application is `Healthy`.
+- Once the canary is `Healthy`, the same command lists the `podinfo` Deployment.
 
 **Challenges:**
 1. Break the development overlay (e.g. a nonexistent image tag). Confirm wave 1 never syncs.
@@ -606,7 +609,7 @@ until the canary Application is `Healthy`, then lists the `podinfo` Deployment.
 - [argocd-agent (argoproj-labs)](https://github.com/argoproj-labs/argocd-agent)
 - [Kargo](https://kargo.io/)
 
-### Related in this repo
+### Related in This Repo
 - [docs/05-gitops/multi-cluster-gitops.md](../05-gitops/multi-cluster-gitops.md) — tool-level multi-cluster mechanics
 - [GitOps Tool Comparison](../04-infrastructure-as-code/gitops-tool-comparison.md)
 - [Drift Detection](../04-infrastructure-as-code/drift-detection.md)

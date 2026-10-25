@@ -591,6 +591,8 @@ See [Metrics Stack](../10-observability/metrics-stack.md) for scraping and dashb
 
 ### Exercise 1: Watch the Built-in Controllers Work
 
+**Goal:** see the Deployment, ReplicaSet and Pod controllers create children, follow the ownership chain, and watch a deleted Pod get replaced.
+
 ```bash
 # 1. Create a Deployment and watch the controller chain create children
 kubectl create deployment web --image=nginx:1.27 --replicas=3
@@ -612,7 +614,32 @@ kubectl get rs,pods -l app=web   # still there, ownerReferences removed
 kubectl delete rs -l app=web
 ```
 
+Expected output for the ownership chain in step 2 (the hash suffix varies):
+
+```text
+ReplicaSet/web-<hash>
+Deployment/web
+```
+
+Expected output for step 4 (after `--cascade=orphan`; names and ages vary):
+
+```text
+NAME                  DESIRED   CURRENT   READY   AGE
+replicaset.apps/web-<hash>   3         3         3       <age>
+
+NAME                  READY   STATUS    RESTARTS   AGE
+pod/web-<hash>-<id>   1/1     Running   0          <age>
+```
+
+**Check:**
+
+- Step 2 printed `ReplicaSet/web-<hash>` then `Deployment/web`.
+- After step 3, `kubectl get pods -l app=web` shows 3 Running Pods, one with a newer age.
+- After step 4, `kubectl get rs,pods -l app=web` printed the children even though the Deployment is gone, and after the last command it prints nothing for ReplicaSets.
+
 ### Exercise 2: Observe Generation vs. ObservedGeneration
+
+**Goal:** see that only spec changes bump `metadata.generation`, and that `status.observedGeneration` follows once the controller has acted.
 
 ```bash
 kubectl create deployment gen-demo --image=nginx:1.27
@@ -628,7 +655,22 @@ kubectl get deploy gen-demo -o jsonpath='gen={.metadata.generation}{"\n"}'
 kubectl delete deploy gen-demo
 ```
 
+Expected output (the second line may briefly show `observed` one behind `gen`):
+
+```text
+gen=1 observed=1
+gen=2 observed=2
+gen=2
+```
+
+**Check:**
+
+- `gen` rose from 1 to 2 after `kubectl scale`.
+- `gen` stayed at 2 after the label change.
+
 ### Exercise 3: Finalizers by Hand
+
+**Goal:** show that a finalizer keeps a deleted object alive until it is removed.
 
 ```bash
 # Simulate a controller that never finishes cleanup
@@ -644,7 +686,23 @@ kubectl patch configmap stuck-demo --type=json -p '[{"op":"remove","path":"/meta
 kubectl get configmap stuck-demo   # NotFound
 ```
 
+Expected output:
+
+```text
+2026-01-01T00:00:00Z
+Error from server (NotFound): configmaps "stuck-demo" not found
+```
+
+The first line is a `deletionTimestamp` (the value is the time you ran the delete).
+
+**Check:**
+
+- After `kubectl delete --wait=false`, `kubectl get configmap stuck-demo` still returns the object.
+- After the finalizer is removed, `kubectl get configmap stuck-demo` returns `NotFound`.
+
 ### Exercise 4: Scaffold and Run a Tenant Operator
+
+**Goal:** scaffold the operator, run it against your cluster, and confirm it creates, repairs and garbage-collects Tenant resources.
 
 ```bash
 # Requires Go 1.22+ and kubebuilder v4
@@ -686,6 +744,26 @@ kubectl get rolebinding tenant-admin -n team-a-dev
 kubectl delete tenant team-a
 kubectl get ns -l platform.mycompany.io/tenant=team-a
 ```
+
+Expected output (names and ages vary):
+
+```text
+tenant.platform.mycompany.io/team-a condition met
+NAME          STATUS   AGE
+team-a-dev    Active   <age>
+team-a-staging   Active   <age>
+NAME           ROLE                    AGE
+tenant-admin   ClusterRole/<role>      <age>
+No resources found
+```
+
+The last line appears after the Tenant is deleted and its namespaces are gone (namespace deletion can take a few seconds).
+
+**Check:**
+
+- `kubectl get ns -l platform.mycompany.io/tenant=team-a` lists a namespace per environment while the Tenant exists.
+- The deleted RoleBinding `tenant-admin` reappears within a reconcile.
+- After `kubectl delete tenant team-a`, the label query returns `No resources found`.
 
 Continue in [Lab 03: Platform API](../../labs/lab-03-platform-api/) and
 [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/), which build the full Tenant/Environment/Workload operators.

@@ -565,7 +565,9 @@ spec:
 
 ## Hands-On Exercises
 
-### Lab: Isolate Two Tenants and Observe Drops
+### Exercise 1: Isolate Two Tenants and Observe Drops
+
+**Goal:** apply default-deny plus same-tenant allow rules, prove cross-tenant traffic is dropped, and add an L7 rule.
 
 ```bash
 # 1. Two tenants, each with a server and client
@@ -652,6 +654,27 @@ hubble observe --namespace acme --protocol http --last 10
 kill %1
 kubectl delete namespace acme globex
 ```
+
+Expected output of the checked commands (Hubble lines abbreviated):
+
+```text
+200                                   # step 2 baseline
+blocked (even DNS fails)              # step 3
+same-tenant: 200                      # step 5
+cross-tenant: 000                     # curl timed out
+cross-tenant: blocked
+<flow> acme/client -> globex/web  Policy denied  DROPPED   # step 6
+GET /: 200                            # step 7
+GET /secret: 403
+```
+
+**Check:**
+
+- Step 2 returns `200` before any policy exists.
+- After step 3, the in-namespace request fails (DNS is blocked too).
+- After step 4, same-tenant returns `200` and cross-tenant times out (`000`).
+- `hubble observe --verdict DROPPED` lists the cross-tenant flows.
+- With `web-l7`, `GET /` returns `200` and `GET /secret` returns `403`.
 
 ### Stretch Goals
 1. Convert the per-namespace baseline into a single `CiliumClusterwideNetworkPolicy` with `ingressDeny`.

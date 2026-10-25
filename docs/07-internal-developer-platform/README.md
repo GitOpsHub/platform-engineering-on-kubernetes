@@ -13,7 +13,16 @@ The portal and capability layer of the platform: how developers discover, reques
 
 > Start with capabilities: the portal is only the front door. Every portal action should also be available through the [Platform API](../09-platform-apis/README.md), CLI, and GitOps.
 
-## Related
+## Related Labs
 
-- Labs: [Lab 04: Service Catalog](../../labs/lab-04-service-catalog/README.md)
-- Next section: [08 — Self-Service](../08-self-service/README.md)
+- [Lab 04: Service Catalog](../../labs/lab-04-service-catalog/README.md) — register templates and scaffold services that a portal would expose
+
+## Where This Leads
+
+- [Platform APIs](../09-platform-apis/README.md) — the API every portal action calls
+
+---
+
+## Next Section
+
+➡️ [08 — Self-Service](../08-self-service/README.md)

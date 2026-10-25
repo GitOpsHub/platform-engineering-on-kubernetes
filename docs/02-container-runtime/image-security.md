@@ -568,10 +568,11 @@ gh attestation verify oci://ghcr.io/mycompany/api@sha256:aaa... --owner mycompan
 
 ## Hands-On Exercises
 
-### Goal
-Sign an image, attach an SBOM attestation, and have Kyverno block unsigned images in a tenant namespace. We use [ttl.sh](https://ttl.sh), an anonymous ephemeral registry, so no credentials are needed, and a key pair so no OIDC provider is needed.
+We use [ttl.sh](https://ttl.sh), an anonymous ephemeral registry, so no credentials are needed, and a key pair so no OIDC provider is needed.
 
-### Part 1: Build, Push, and Sign
+### Exercise 1: Build, Push, and Sign
+
+**Goal:** sign an image, attach a signed SBOM attestation, and verify both locally.
 
 ```bash
 # 1. Push a uniquely named copy of an image to ttl.sh (expires after 1h)
@@ -602,7 +603,26 @@ cosign verify-attestation --key cosign.pub --type cyclonedx "$REF" > /dev/null &
 cosign tree "$REF"
 ```
 
-### Part 2: Enforce with Kyverno
+Expected output (digests, counts and findings vary):
+
+```text
+<trivy table of HIGH/CRITICAL findings, or "Total: 0">
+SBOM attestation OK
+{
+  "docker-manifest-digest": "sha256:<digest>",
+  "docker-reference": "<repo>/podinfo",
+  "type": "cosign container image signature"
+}
+```
+
+**Check:**
+
+- `cosign verify --key cosign.pub "$REF"` exits 0 and `cosign verify-attestation` prints `SBOM attestation OK`.
+- `cosign tree "$REF"` lists both a signature and an attestation.
+
+### Exercise 2: Enforce with Kyverno
+
+**Goal:** make Kyverno admit the signed image and reject the unsigned one in a tenant namespace.
 
 ```bash
 # 6. Install Kyverno
@@ -661,6 +681,21 @@ kubectl -n team-a run unsigned --image="$REPO/unsigned:1h"
 # 11. Same unsigned image in a non-tenant namespace: allowed (policy is scoped)
 kubectl -n default run unsigned --image="$REPO/unsigned:1h"
 ```
+
+Expected output:
+
+```text
+pod/signed created
+<repo>/podinfo@sha256:<digest>
+Error from server: admission webhook "mutate.kyverno.svc-fail" denied the request: ... no signatures found
+pod/unsigned created
+```
+
+**Check:**
+
+- `kubectl get clusterpolicy verify-lab-images` shows `READY` `True`.
+- The `signed` Pod's image ends with `@sha256:...` (the tag was rewritten to a digest).
+- Step 10 is denied, and step 11 in `default` succeeds.
 
 **Questions to answer:**
 1. What image reference does the `signed` Pod actually run? Why does this matter if someone re-pushes the `:1h` tag?

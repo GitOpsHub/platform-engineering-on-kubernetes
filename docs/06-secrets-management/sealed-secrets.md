@@ -375,27 +375,39 @@ working secret store, move application secrets there and keep only bootstrap val
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
+
+### Exercise 1: Seal a Secret and Test Cluster Scope
 
 **Goal**: Seal a Secret, commit it to a Git repository, apply it through the cluster, and then prove that
 the ciphertext is useless in another cluster.
 
+1. Two kind clusters from Lab 01 (names are examples)
+
 ```bash
-# 1. Two kind clusters from Lab 01 (names are examples)
 kind create cluster --name seal-a
 kind create cluster --name seal-b
+```
 
-# 2. Install the controller in both clusters
+2. Install the controller in both clusters
+
+```bash
 for c in seal-a seal-b; do
   helm --kube-context kind-$c upgrade --install sealed-secrets sealed-secrets/sealed-secrets \
     --namespace kube-system --set-string fullnameOverride=sealed-secrets-controller
 done
+```
 
-# 3. Fetch the public certificate for cluster A only
+3. Fetch the public certificate for cluster A only
+
+```bash
 kubeseal --fetch-cert --context kind-seal-a \
   --controller-name=sealed-secrets-controller --controller-namespace=kube-system > seal-a.pem
+```
 
-# 4. Create and seal a Secret
+4. Create and seal a Secret
+
+```bash
 kubectl --context kind-seal-a create namespace team-billing
 cat <<'EOF' > plain.secret.yaml
 apiVersion: v1
@@ -408,25 +420,36 @@ stringData:
 EOF
 kubeseal --format yaml --cert seal-a.pem < plain.secret.yaml > db-credentials.sealed.yaml
 rm plain.secret.yaml
+```
 
-# 5. Apply the SealedSecret to cluster A and read the decrypted value
+5. Apply the SealedSecret to cluster A and read the decrypted value
+
+```bash
 kubectl --context kind-seal-a apply -f db-credentials.sealed.yaml
 kubectl --context kind-seal-a -n team-billing get secret db-credentials \
   -o jsonpath='{.data.password}' | base64 -d; echo
+```
 
-# 6. Apply the same file to cluster B and observe that nothing decrypts
+Expected output: the decoded value is `s3cret-lab-value`.
+
+6. Apply the same file to cluster B and observe that nothing decrypts
+
+```bash
 kubectl --context kind-seal-b create namespace team-billing
 kubectl --context kind-seal-b apply -f db-credentials.sealed.yaml
 kubectl --context kind-seal-b -n team-billing get events --sort-by=.lastTimestamp | tail -5
 ```
 
-**Verify**:
-1. Cluster A has a `Secret` named `db-credentials` whose decoded value is `s3cret-lab-value`.
-2. `db-credentials.sealed.yaml` contains no plaintext; `grep -c s3cret db-credentials.sealed.yaml` returns `0`.
-3. In cluster B, the controller logs `unseal failed` or equivalent for the object, and no `Secret` appears:
-   `kubectl --context kind-seal-b -n team-billing get secret db-credentials` returns NotFound.
-4. Change the namespace in the SealedSecret to `default` and apply it to cluster A. Confirm that no Secret is
-   created in `default`, which demonstrates strict scope.
+Expected output: the controller reports an unseal failure event, and no Secret is created in cluster B.
+
+**Check:**
+
+- Cluster A has a `Secret` named `db-credentials` whose decoded value is `s3cret-lab-value`.
+- `db-credentials.sealed.yaml` contains no plaintext; `grep -c s3cret db-credentials.sealed.yaml` returns `0`.
+- In cluster B, the controller logs `unseal failed` or equivalent for the object, and no `Secret` appears:
+  `kubectl --context kind-seal-b -n team-billing get secret db-credentials` returns NotFound.
+- Change the namespace in the SealedSecret to `default` and apply it to cluster A. Confirm that no Secret is
+  created in `default`, which demonstrates strict scope.
 
 **Cleanup**: `kind delete cluster --name seal-a && kind delete cluster --name seal-b`, then delete the
 generated `seal-a.pem` and `db-credentials.sealed.yaml` files.
@@ -435,16 +458,53 @@ generated `seal-a.pem` and `db-credentials.sealed.yaml` files.
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Diagnose | Fix |
-|---------|--------------|----------|-----|
-| `no key could decrypt secret` in controller logs | Sealed against a different cluster's certificate, or the key was rotated out | `kubectl -n kube-system logs deploy/sealed-secrets-controller` | Re-seal with the cluster's current certificate, or restore the old key backup |
-| `kubeseal` cannot fetch the cert | Controller name or namespace mismatch | `kubectl -n kube-system get deploy` | Pass the actual `--controller-name` and `--controller-namespace` |
-| Generated `Secret` missing; SealedSecret exists | Name or namespace in the SealedSecret differs from the sealed metadata | Compare `metadata.name` and `namespace` with the values used in `kubeseal` | Re-seal with the correct name and namespace, or use `namespace-wide` scope if only the name changed |
-| Value has a trailing newline | `echo` used instead of `printf '%s'` in `--raw` mode | Decode the Secret and check the last byte | Re-seal with `printf '%s'` |
-| Argo CD shows SealedSecret `OutOfSync` forever | Controller rewrites `metadata` (for example, adds annotations) | `argocd app diff team-billing` | Add `ignoreDifferences` for the annotations, or accept the drift |
-| Secret value changed in Git but not in cluster | Commit landed but GitOps sync is suspended or failed | `flux get kustomizations` or Argo CD app status | Resume or fix the sync; the controller only acts on applied objects |
-| Restored cluster cannot decrypt anything | Key backup from a different cluster, or taken after key rotation without all generations | Count key Secrets in `kube-system` against the backup | Restore every key generation from the same cluster's backup |
-| Deleted the controller namespace and lost keys | No backup existed | No recovery path | Re-create every secret from the source of truth and re-seal. This is why backup comes first |
+### `no key could decrypt secret` in controller logs
+
+**Cause:** Sealed against a different cluster's certificate, or the key was rotated out  
+**Diagnose:** `kubectl -n kube-system logs deploy/sealed-secrets-controller`  
+**Fix:** Re-seal with the cluster's current certificate, or restore the old key backup
+
+### `kubeseal` cannot fetch the cert
+
+**Cause:** Controller name or namespace mismatch  
+**Diagnose:** `kubectl -n kube-system get deploy`  
+**Fix:** Pass the actual `--controller-name` and `--controller-namespace`
+
+### Generated `Secret` missing; SealedSecret exists
+
+**Cause:** Name or namespace in the SealedSecret differs from the sealed metadata  
+**Diagnose:** Compare `metadata.name` and `namespace` with the values used in `kubeseal`  
+**Fix:** Re-seal with the correct name and namespace, or use `namespace-wide` scope if only the name changed
+
+### Value has a trailing newline
+
+**Cause:** `echo` used instead of `printf '%s'` in `--raw` mode  
+**Diagnose:** Decode the Secret and check the last byte  
+**Fix:** Re-seal with `printf '%s'`
+
+### Argo CD shows SealedSecret `OutOfSync` forever
+
+**Cause:** Controller rewrites `metadata` (for example, adds annotations)  
+**Diagnose:** `argocd app diff team-billing`  
+**Fix:** Add `ignoreDifferences` for the annotations, or accept the drift
+
+### Secret value changed in Git but not in cluster
+
+**Cause:** Commit landed but GitOps sync is suspended or failed  
+**Diagnose:** `flux get kustomizations` or Argo CD app status  
+**Fix:** Resume or fix the sync; the controller only acts on applied objects
+
+### Restored cluster cannot decrypt anything
+
+**Cause:** Key backup from a different cluster, or taken after key rotation without all generations  
+**Diagnose:** Count key Secrets in `kube-system` against the backup  
+**Fix:** Restore every key generation from the same cluster's backup
+
+### Deleted the controller namespace and lost keys
+
+**Cause:** No backup existed  
+**Diagnose:** No recovery path  
+**Fix:** Re-create every secret from the source of truth and re-seal. This is why backup comes first
 
 ---
 

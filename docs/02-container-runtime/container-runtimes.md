@@ -512,7 +512,9 @@ For fleets, prefer replacing nodes over in-place upgrades — see [Lab 08: Platf
 
 ## Hands-On Exercises
 
-### Explore the Runtime Inside a kind Node
+### Exercise 1: Explore the Runtime Inside a kind Node
+
+**Goal:** identify the runtime, socket, cgroup driver and runc handler on a real node.
 
 kind nodes are Docker containers running systemd, containerd, and the kubelet, so you can inspect a real runtime stack without a VM.
 
@@ -531,7 +533,28 @@ docker exec "$NODE" head -5 /etc/containerd/config.toml
 docker exec "$NODE" crictl info | jq '.config.containerd.runtimes | keys'
 ```
 
-### Trace a Pod from API to Process
+Expected output (abbreviated; versions and node name vary):
+
+```text
+<node-name>
+containerd://<version>
+containerRuntimeEndpoint: unix:///run/containerd/containerd.sock
+cgroupDriver: systemd
+version = 3
+[
+  "runc"
+]
+```
+
+**Check:**
+
+- `containerRuntimeVersion` starts with `containerd://`.
+- The kubelet config shows `cgroupDriver: systemd`.
+- The `runtimes` list contains `runc`.
+
+### Exercise 2: Trace a Pod from API to Process
+
+**Goal:** follow one Pod from the API through CRI to the sandbox, the container PID and the OCI spec.
 
 ```bash
 # 4. Start a pod pinned to that node
@@ -559,12 +582,29 @@ docker exec "$NODE" ps -o pid,ppid,cmd -e | grep -E 'containerd-shim|nginx: mast
 docker exec "$NODE" crictl inspect "$CTR_ID" | jq '.info.runtimeSpec.process.capabilities.bounding'
 ```
 
+Expected output of the two `readlink` commands in step 6 (PIDs and inode numbers vary):
+
+```text
+net:[<inode-1>]
+net:[<inode-1>]
+mnt:[<inode-2>]
+mnt:[<inode-3>]
+```
+
+**Check:**
+
+- The two `ns/net` links print the same `net:[...]` inode, and the two `ns/mnt` links print different inodes.
+- Step 7 shows `containerd-shim` as the parent of `nginx: master process`.
+- Step 8 prints a JSON list of capability names such as `CAP_CHOWN`.
+
 **Questions to answer:**
 1. Which namespaces are shared between the sandbox and the app container, and which are not?
 2. What is the parent PID of the nginx master process? Is it containerd?
 3. Which capabilities does nginx get by default? Which would you drop?
 
-### Restart the Runtime Without Killing Workloads
+### Exercise 3: Restart the Runtime Without Killing Workloads
+
+**Goal:** show that restarting containerd does not restart running containers.
 
 ```bash
 # 9. Restart containerd and confirm the pod keeps running
@@ -574,7 +614,20 @@ sleep 5
 kubectl get pod trace-demo -o jsonpath='{.status.containerStatuses[0].restartCount}{"\n"}'  # unchanged
 ```
 
-### Configure a Registry Mirror (No Restart Required)
+Expected output:
+
+```text
+0
+0
+```
+
+**Check:**
+
+- Both restart counts are equal and `kubectl get pod trace-demo` still shows `Running`.
+
+### Exercise 4: Configure a Registry Mirror (No Restart Required)
+
+**Goal:** point a node at a pull-through cache and confirm an image was cached by it.
 
 ```bash
 # 10. kind's containerd config already sets config_path=/etc/containerd/certs.d
@@ -597,6 +650,18 @@ EOF
 docker exec "$NODE" crictl pull docker.io/library/alpine:3.20
 docker exec hub-mirror ls /var/lib/registry/docker/registry/v2/repositories/library
 ```
+
+Expected output:
+
+```text
+config_path = "/etc/containerd/certs.d"
+<crictl pull output ending with the image ID>
+alpine
+```
+
+**Check:**
+
+- `docker exec hub-mirror ls /var/lib/registry/docker/registry/v2/repositories/library` lists `alpine`.
 
 ### Cleanup
 
@@ -630,13 +695,11 @@ sudo crictl pull <image>                  # reproduce on the node with full erro
 sudo journalctl -u containerd | grep -i "pull\|resolve" | tail
 ```
 
-| Error Text | Likely Cause | Fix |
-|------------|--------------|-----|
-| `not found` / `manifest unknown` | Wrong tag, or no manifest for node's platform | Check tag; check `crane manifest` for `linux/arm64` vs `amd64` ([Image Spec](image-spec.md)) |
-| `401 Unauthorized` / `denied` | Missing or wrong `imagePullSecrets` | Verify secret type `kubernetes.io/dockerconfigjson` in the pod's namespace |
-| `429 Too Many Requests` | Docker Hub rate limit | Configure a mirror (`hosts.toml`) |
-| `x509: certificate signed by unknown authority` | Private registry CA not trusted | `ca = "..."` in `hosts.toml` |
-| `context deadline exceeded` | Network/egress/proxy | Check node egress, `HTTPS_PROXY` in containerd systemd unit |
+- **`not found` / `manifest unknown`**: Cause: Wrong tag, or no manifest for node's platform. Fix: Check tag; check `crane manifest` for `linux/arm64` vs `amd64` ([Image Spec](image-spec.md)).
+- **`401 Unauthorized` / `denied`**: Cause: Missing or wrong `imagePullSecrets`. Fix: Verify secret type `kubernetes.io/dockerconfigjson` in the pod's namespace.
+- **`429 Too Many Requests`**: Cause: Docker Hub rate limit. Fix: Configure a mirror (`hosts.toml`).
+- **`x509: certificate signed by unknown authority`**: Cause: Private registry CA not trusted. Fix: `ca = "..."` in `hosts.toml`.
+- **`context deadline exceeded`**: Cause: Network/egress/proxy. Fix: Check node egress, `HTTPS_PROXY` in containerd systemd unit.
 
 ### `CreateContainerError` / `RunContainerError`
 

@@ -807,18 +807,66 @@ The replica count and percentages vary by machine.
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| HPA `TARGETS` shows `<unknown>` | metrics-server missing, or pods lack requests | `kubectl get apiservice v1beta1.metrics.k8s.io`; set CPU requests |
-| HPA flaps up/down | No scale-down stabilisation, noisy metric | Increase `scaleDown.stabilizationWindowSeconds`; smooth metric with longer `rate()` |
-| HPA at `maxReplicas`, latency still bad | Bottleneck elsewhere (DB), or max too low | Check dependency SLIs; raise max only if quota/nodes allow |
-| Pods Pending, no new nodes (CA) | Pod requirements match no node group; group at max | `kubectl describe pod` events (`NotTriggerScaleUp`); CA status ConfigMap `cluster-autoscaler-status` |
-| Pods Pending, no NodeClaim (Karpenter) | No NodePool satisfies requirements/taints; pool `limits` reached | `kubectl describe pod` and Karpenter controller logs ("incompatible with nodepool") |
-| Nodes never scale down | PDB allows 0 disruptions, `do-not-disrupt`/`safe-to-evict=false`, local storage | Audit PDBs; remove annotations; `--skip-nodes-with-local-storage=false` |
-| Constant node churn (Karpenter) | Aggressive consolidation | Raise `consolidateAfter`; add disruption `budgets` |
-| VPA recommends absurdly high memory | Memory leak or startup spike | Set `maxAllowed`; investigate with [Profiling](../10-observability/profiling.md) |
-| `exceeded quota` on ReplicaSet | HPA wants more than quota permits | Raise quota via `Tenant` spec or lower `maxReplicas` |
-| KEDA ScaledObject `READY=False` | Trigger auth / connectivity | `kubectl describe scaledobject`; KEDA operator logs; `TriggerAuthentication` |
+### HPA `TARGETS` shows `<unknown>`
+
+**Cause:** metrics-server missing, or pods lack requests
+
+**Fix:** `kubectl get apiservice v1beta1.metrics.k8s.io`; set CPU requests
+
+### HPA flaps up/down
+
+**Cause:** No scale-down stabilisation, noisy metric
+
+**Fix:** Increase `scaleDown.stabilizationWindowSeconds`; smooth metric with longer `rate()`
+
+### HPA at `maxReplicas`, latency still bad
+
+**Cause:** Bottleneck elsewhere (DB), or max too low
+
+**Fix:** Check dependency SLIs; raise max only if quota/nodes allow
+
+### Pods Pending, no new nodes (CA)
+
+**Cause:** Pod requirements match no node group; group at max
+
+**Fix:** `kubectl describe pod` events (`NotTriggerScaleUp`); CA status ConfigMap `cluster-autoscaler-status`
+
+### Pods Pending, no NodeClaim (Karpenter)
+
+**Cause:** No NodePool satisfies requirements/taints; pool `limits` reached
+
+**Fix:** `kubectl describe pod` and Karpenter controller logs ("incompatible with nodepool")
+
+### Nodes never scale down
+
+**Cause:** PDB allows 0 disruptions, `do-not-disrupt`/`safe-to-evict=false`, local storage
+
+**Fix:** Audit PDBs; remove annotations; `--skip-nodes-with-local-storage=false`
+
+### Constant node churn (Karpenter)
+
+**Cause:** Aggressive consolidation
+
+**Fix:** Raise `consolidateAfter`; add disruption `budgets`
+
+### VPA recommends absurdly high memory
+
+**Cause:** Memory leak or startup spike
+
+**Fix:** Set `maxAllowed`; investigate with [Profiling](../10-observability/profiling.md)
+
+### `exceeded quota` on ReplicaSet
+
+**Cause:** HPA wants more than quota permits
+
+**Fix:** Raise quota via `Tenant` spec or lower `maxReplicas`
+
+### KEDA ScaledObject `READY=False`
+
+**Cause:** Trigger auth / connectivity
+
+**Fix:** `kubectl describe scaledobject`; KEDA operator logs; `TriggerAuthentication`
+
 
 ---
 

@@ -444,7 +444,7 @@ spec:
 | `RequestedToCapacityRatio` | Custom utilization→score curve | Fine-grained tuning, extended resources |
 
 On managed clusters (EKS, GKE, AKS) you usually can't change the default scheduler's config; run a second
-scheduler instead (see the custom-scheduler example in [Kubernetes Architecture](./kubernetes-architecture.md#deploy-a-custom-scheduler)).
+scheduler instead (see [Exercise 2 in Kubernetes Architecture](./kubernetes-architecture.md#exercise-2-deploy-a-custom-scheduler)).
 
 ### Beyond the Default Scheduler
 
@@ -528,6 +528,8 @@ Uses the kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md) (
 
 ### Exercise 1: Read Scheduler Decisions
 
+**Goal:** create an unschedulable Pod and read the reason from its `FailedScheduling` event.
+
 ```bash
 # 1. Create something unschedulable: request more CPU than any node has
 kubectl create namespace sched-lab
@@ -542,7 +544,20 @@ kubectl -n sched-lab describe pod greedy | sed -n '/Events/,$p'
 kubectl -n sched-lab delete pod greedy
 ```
 
+Expected output of the events (node counts and taint text depend on your cluster):
+
+```text
+Warning  FailedScheduling  <age>  default-scheduler  0/<N> nodes are available: <n> node(s) had untolerated taint {...}, <n> Insufficient cpu. preemption: 0/<N> nodes are available: ...
+```
+
+**Check:**
+
+- `kubectl -n sched-lab get pod greedy` (run before the delete) shows `Pending`.
+- The event message contains `Insufficient cpu`.
+
 ### Exercise 2: Taints and Dedicated Pools
+
+**Goal:** dedicate a worker with a taint, show that only a tolerating Pod lands there, and show `NoExecute` eviction.
 
 ```bash
 # Pick one worker and dedicate it
@@ -575,7 +590,22 @@ kubectl taint node "$W1" maintenance=true:NoExecute
 kubectl -n sched-lab get pods -o wide -w       # gpu-sim is evicted (no NoExecute toleration)
 ```
 
+Expected output (names and ages vary; `<w1>` is the worker you picked):
+
+```text
+NAME      READY   STATUS    RESTARTS   AGE   IP           NODE   ...
+gpu-sim   1/1     Running   0          <age> <pod-ip>     <w1>   ...
+```
+
+**Check:**
+
+- None of the `general-*` Pods run on the tainted worker: `kubectl -n sched-lab get pods -o wide | grep general | grep -c "$W1"` prints `0`.
+- `gpu-sim` ran on `$W1` before the `NoExecute` taint.
+- After the `NoExecute` taint, `kubectl -n sched-lab get pod gpu-sim` reports `NotFound` (a bare Pod is not recreated).
+
 ### Exercise 3: Topology Spread
+
+**Goal:** spread six replicas evenly across simulated zones with `maxSkew: 1`.
 
 ```bash
 # Simulate zones on kind
@@ -605,7 +635,23 @@ kubectl -n sched-lab get pods -l app=spread \
   -o custom-columns=POD:.metadata.name,NODE:.spec.nodeName
 ```
 
+Expected output (with two workers, three Pods on each; Pod name suffixes vary):
+
+```text
+POD                     NODE
+spread-<hash>-<id>      <worker-1>
+spread-<hash>-<id>      <worker-2>
+...
+```
+
+**Check:**
+
+- `kubectl -n sched-lab get pods -l app=spread -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | sort | uniq -c` shows counts that differ by at most 1 between nodes.
+- All six Pods are `Running`.
+
 ### Exercise 4: Preemption
+
+**Goal:** make a high-priority Pod evict lower-priority Pods when the cluster is full.
 
 ```bash
 kubectl apply -f priorityclasses.yaml       # from the section above
@@ -620,7 +666,23 @@ kubectl -n sched-lab patch deployment filler --type=json -p '[
 kubectl -n sched-lab run vip --image=nginx:1.27 \
   --overrides='{"spec":{"priorityClassName":"tenant-production","containers":[{"name":"vip","image":"nginx:1.27","resources":{"requests":{"cpu":"1"}}}]}}'
 kubectl -n sched-lab get events --field-selector reason=Preempted
+```
 
+Expected output (the victim Pod names vary; this only appears if the cluster was actually full):
+
+```text
+LAST SEEN   TYPE     REASON      OBJECT                       MESSAGE
+<age>       Normal   Preempted   pod/filler-<hash>-<id>       Preempted by pod <uid> on node <node>
+```
+
+**Check:**
+
+- `kubectl -n sched-lab get pod vip` shows `Running`.
+- At least one `Preempted` event names a `filler-*` Pod. If none appear, the cluster had spare CPU: raise the `filler` replicas and repeat.
+
+Then clean up:
+
+```bash
 # Cleanup
 kubectl delete namespace sched-lab
 kubectl delete priorityclass platform-critical tenant-production tenant-batch tenant-default
@@ -632,17 +694,15 @@ kubectl delete priorityclass platform-critical tenant-production tenant-batch te
 
 ### Decoding `FailedScheduling` Messages
 
-| Message fragment | Meaning | Fix |
-|------------------|---------|-----|
-| `Insufficient cpu` / `Insufficient memory` | Sum of requests exceeds allocatable | Lower requests, add nodes, check autoscaler |
-| `had untolerated taint {k: v}` | Node tainted, Pod lacks toleration | Add toleration (if intended) or target other nodes |
-| `didn't match Pod's node affinity/selector` | No node has the required labels | Check labels: `kubectl get nodes --show-labels` |
-| `didn't match pod topology spread constraints` | Placing would exceed `maxSkew` | Add capacity in the lagging domain or use `ScheduleAnyway` |
-| `didn't match pod anti-affinity rules` | Hard anti-affinity + too few nodes | More nodes, or switch to `preferred` |
-| `node(s) had volume node affinity conflict` | PV is zonal and in another zone | Use `WaitForFirstConsumer` (see [Storage](./storage.md)) |
-| `node(s) didn't have free ports for the requested pod ports` | `hostPort` collision | Avoid `hostPort` |
-| `Too many pods` | Node at `maxPods` | Larger nodes / higher `maxPods` / prefix delegation in CNI |
-| Status `SchedulingGated` | Gates not removed | Check the controller responsible for the gate |
+- **`Insufficient cpu` / `Insufficient memory`**: Cause: Sum of requests exceeds allocatable. Fix: Lower requests, add nodes, check autoscaler.
+- **`had untolerated taint {k: v}`**: Cause: Node tainted, Pod lacks toleration. Fix: Add toleration (if intended) or target other nodes.
+- **`didn't match Pod's node affinity/selector`**: Cause: No node has the required labels. Fix: Check labels: `kubectl get nodes --show-labels`.
+- **`didn't match pod topology spread constraints`**: Cause: Placing would exceed `maxSkew`. Fix: Add capacity in the lagging domain or use `ScheduleAnyway`.
+- **`didn't match pod anti-affinity rules`**: Cause: Hard anti-affinity + too few nodes. Fix: More nodes, or switch to `preferred`.
+- **`node(s) had volume node affinity conflict`**: Cause: PV is zonal and in another zone. Fix: Use `WaitForFirstConsumer` (see [Storage](./storage.md)).
+- **`node(s) didn't have free ports for the requested pod ports`**: Cause: `hostPort` collision. Fix: Avoid `hostPort`.
+- **`Too many pods`**: Cause: Node at `maxPods`. Fix: Larger nodes / higher `maxPods` / prefix delegation in CNI.
+- **Status `SchedulingGated`**: Cause: Gates not removed. Fix: Check the controller responsible for the gate.
 
 ### Pods Pending but No Events
 

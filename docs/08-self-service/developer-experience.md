@@ -330,7 +330,7 @@ A repeatable review keeps the numbers useful:
 
 ## Hands-On Exercises
 
-### Exercise 1: Produce a one-page DX baseline for one tenant
+### Exercise 1: Produce a One-Page DX Baseline for One Tenant
 
 **Goal:** Measure lead time, deployment frequency, and one feedback loop for one tenant, and write a one-page summary. You need read access to your Git provider, Argo CD, and Prometheus.
 

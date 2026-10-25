@@ -83,7 +83,7 @@ Crossplane 2.0 (2025) reshaped the composition model. You will meet both styles 
 | Managed resources | Cluster-scoped (`s3.aws.upbound.io`) | Namespaced variants (`s3.aws.m.upbound.io`) alongside legacy |
 | What can be composed | Managed resources | Any Kubernetes resource (Deployments, ConfigMaps, other XRs...) |
 
-**This repo's approach:** compositions are always written in **Pipeline mode**, which works on Crossplane ≥ 1.14 and 2.x. The main walkthrough uses an `apiextensions.crossplane.io/v1` XRD with a claim (portable across both majors), followed by the 2.x namespaced equivalent. The code lives in [`code/crossplane-compositions/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/crossplane-compositions/) (`xrd/`, `compositions/`, `functions/`, `claims/`).
+**This repo's approach:** compositions are always written in **Pipeline mode**, which works on Crossplane ≥ 1.14 and 2.x. The main walkthrough uses an `apiextensions.crossplane.io/v1` XRD with a claim (portable across both majors), followed by the 2.x namespaced equivalent. The code lives in [`code/crossplane-compositions/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/crossplane-compositions/) (`xrd/`, `compositions/`, `functions/`, `claims/`). The repo ships `XDatabase` and `XEnvironment` examples; the `ObjectStorage` examples below are illustrative and are not files in this repo.
 
 ---
 
@@ -172,7 +172,7 @@ spec:
 Think of an XRD as a **product interface**: expose the few knobs developers care about, hide the 40 provider fields they don't. For a platform object-storage offering:
 
 ```yaml
-# code/crossplane-compositions/xrd/objectstorage.yaml
+# Illustrative XRD (not in this repo)
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
@@ -264,7 +264,7 @@ sequenceDiagram
 ```
 
 ```yaml
-# code/crossplane-compositions/compositions/objectstorage-aws.yaml
+# Illustrative Composition (not in this repo)
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
@@ -418,7 +418,7 @@ Other useful functions: `function-kcl`, `function-cel-filter`, `function-environ
 Developers create a namespaced claim. They never see `Bucket` or IAM.
 
 ```yaml
-# code/crossplane-compositions/claims/team-payments-artifacts.yaml
+# Illustrative claim (not in this repo)
 apiVersion: storage.platform.mycompany.io/v1alpha1
 kind: ObjectStorage
 metadata:
@@ -571,23 +571,23 @@ crossplane render xr.yaml composition.yaml functions.yaml \
 Combine with CI:
 
 ```yaml
-# .github/workflows/crossplane.yaml (excerpt)
+# Illustrative CI excerpt; adjust the paths to your own repository
 - name: Render compositions
   run: |
-    for xr in code/crossplane-compositions/examples/*.yaml; do
+    for xr in examples/*.yaml; do
       crossplane render "$xr" \
-        code/crossplane-compositions/compositions/objectstorage-aws.yaml \
-        code/crossplane-compositions/functions/functions.yaml > /dev/null
+        compositions/objectstorage-aws.yaml \
+        functions/functions.yaml > /dev/null
     done
 - name: Validate rendered output against provider schemas
-  run: crossplane beta validate code/crossplane-compositions/schemas rendered/
+  run: crossplane beta validate schemas rendered/
 ```
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Compose Kubernetes Resources Without a Cloud Account
+### Exercise 1: Compose Kubernetes Resources Without a Cloud Account
 
 You don't need AWS to learn composition. Use `provider-kubernetes` to compose in-cluster objects: a "team space" API that creates a namespace with a quota.
 
@@ -638,16 +638,45 @@ EOF
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| Provider `HEALTHY=False` | Package pull failure, missing dependency, or CRD conflict | `kubectl describe provider <name>`; check `providerrevision` events |
-| XR stuck `Synced=False` with `cannot compose resources` | Function not installed/healthy, or invalid input | `kubectl get functions`; `kubectl describe xobjectstorage <name>` |
-| `cannot find composition` | No `defaultCompositionRef`/selector match | Set `compositionRef` or fix labels |
-| MR `Synced=False`, `ReconcileError` with 403 | Cloud IAM permissions | Check ProviderConfig identity and the provider pod's ServiceAccount annotations |
-| Patch silently does nothing | Wrong field path (paths are not validated) | `crossplane render` and diff the output; check `spec.forProvider` structure in provider CRD docs |
-| Resources recreated on every reconcile (go-templating) | Missing `composition-resource-name` annotation | Add a stable annotation per resource |
-| Claim deleted but cloud resource remains | `deletionPolicy: Orphan` or stuck finalizer | Inspect MR finalizers; check provider logs |
-| API server slow / high memory after installing a provider | Thousands of CRDs from a monolithic provider | Use family providers; install only needed services; consider `ManagedResourceActivationPolicy` on 2.x |
+### Provider `HEALTHY=False`
+
+**Cause:** Package pull failure, missing dependency, or CRD conflict  
+**Fix:** `kubectl describe provider <name>`; check `providerrevision` events
+
+### XR stuck `Synced=False` with `cannot compose resources`
+
+**Cause:** Function not installed/healthy, or invalid input  
+**Fix:** `kubectl get functions`; `kubectl describe xobjectstorage <name>`
+
+### `cannot find composition`
+
+**Cause:** No `defaultCompositionRef`/selector match  
+**Fix:** Set `compositionRef` or fix labels
+
+### MR `Synced=False`, `ReconcileError` with 403
+
+**Cause:** Cloud IAM permissions  
+**Fix:** Check ProviderConfig identity and the provider pod's ServiceAccount annotations
+
+### Patch silently does nothing
+
+**Cause:** Wrong field path (paths are not validated)  
+**Fix:** `crossplane render` and diff the output; check `spec.forProvider` structure in provider CRD docs
+
+### Resources recreated on every reconcile (go-templating)
+
+**Cause:** Missing `composition-resource-name` annotation  
+**Fix:** Add a stable annotation per resource
+
+### Claim deleted but cloud resource remains
+
+**Cause:** `deletionPolicy: Orphan` or stuck finalizer  
+**Fix:** Inspect MR finalizers; check provider logs
+
+### API server slow / high memory after installing a provider
+
+**Cause:** Thousands of CRDs from a monolithic provider  
+**Fix:** Use family providers; install only needed services; consider `ManagedResourceActivationPolicy` on 2.x
 
 ```bash
 # Debugging toolkit

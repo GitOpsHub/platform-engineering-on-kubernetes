@@ -416,7 +416,7 @@ oasdiff breaking origin/main:code/platform-api/openapi.yaml code/platform-api/op
 
 ## Hands-On Exercises
 
-### Exercise 1: Review the API contract and make a breaking change safely
+### Exercise 1: Review the API Contract and Make a Breaking Change Safely
 
 **Goal:** Read the real contract, find a gap, classify four changes, and stage a rename across two releases.
 

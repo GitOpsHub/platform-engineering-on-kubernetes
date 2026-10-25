@@ -501,7 +501,7 @@ Weights are for traffic shifting between versions of one logical service. For fu
 
 ## Hands-On Exercises
 
-### Exercise 1: Expose a preview through the gateway and prove the guardrails
+### Exercise 1: Expose a Preview through the Gateway and Prove the Guardrails
 
 **Goal:** Serve a preview environment through a generated route, and show that each guardrail rejects what it should.
 

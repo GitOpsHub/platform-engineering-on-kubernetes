@@ -23,11 +23,33 @@ Only one place runs the new version at a time. Green is the canary cluster becau
    Expected result: you have a target version `<new-version>` and have read the CRD changes.
    Check: confirm the version exists with
    `helm show chart cert-manager --repo https://charts.jetstack.io --version <new-version>`.
-2. **Keep the shared ApplicationSet on the old version.** Blue and green both run v1.21.3.
-   Check: `kubectl --context kind-platform-engineering-green -n cert-manager get deploy cert-manager -o jsonpath='{.spec.template.spec.containers[0].image}'`
-   ends in `:v1.21.3`.
-3. **Add a canary Application that targets only green** with the new chart version. Give it a different name from the shared app so the two never fight over one Helm release.
-   ```yaml
+2. **Confirm both clusters run the old version.** Lab 01's `setup.sh` installed cert-manager v1.21.3 on blue,
+   and step 4a of [blue-green-deploy.md](blue-green-deploy.md) installed the same version on green. Both are
+   Helm releases named `cert-manager` in namespace `cert-manager`.
+   ```bash
+   for ctx in kind-platform-engineering kind-platform-engineering-green; do
+     kubectl --context "${ctx}" -n cert-manager get deploy cert-manager -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+   done
+   ```
+   Expected result: two image names, each ending in `:v1.21.3`.
+3. **Check that the shared ApplicationSet does not own cert-manager.** The `platform-addons` ApplicationSet
+   from step 4b syncs only `platform-components.yaml`, so it never renders the cert-manager chart. The canary
+   therefore needs no change to the ApplicationSet's cluster selector: excluding green from that selector would
+   remove green's whole platform baseline, not just cert-manager. Instead, the canary is a separate
+   Application for this one add-on, and its `destination` names green only.
+   ```bash
+   kubectl --context kind-platform-engineering -n argocd get applicationset platform-addons \
+     -o jsonpath='{.spec.template.spec.source.directory.include}{"\n"}'
+   ```
+   Expected result: `platform-components.yaml`. If your ApplicationSet also deploys cert-manager (for example
+   because you pointed it at your own add-on directory), remove cert-manager from that directory for green
+   before you continue, or the two Applications will fight over the same objects.
+4. **Create, apply and sync the canary Application.** `releaseName: cert-manager` makes Argo CD render the same
+   object names as the existing Helm release on green, so the canary upgrades green's cert-manager in place
+   instead of installing a second copy. The values match Lab 01's `values/cert-manager.yaml`. Replace
+   `<new-version>` with the version from step 1 before you run the block.
+   ```bash
+   cat > cert-manager-canary.yaml <<'EOF'
    apiVersion: argoproj.io/v1alpha1
    kind: Application
    metadata:
@@ -38,28 +60,32 @@ Only one place runs the new version at a time. Green is the canary cluster becau
      source:
        repoURL: https://charts.jetstack.io
        chart: cert-manager
-       targetRevision: <new-version>   # the canary version, unverified until you check the chart index
+       targetRevision: <new-version>   # the canary version from step 1
        helm:
-         valuesObject:
+         releaseName: cert-manager     # same object names as the Helm release on green
+         valuesObject:                 # same values as labs/lab-01-cluster-setup/values/cert-manager.yaml
            crds:
              enabled: true
              keep: true
+           prometheus:
+             enabled: true
+           webhook:
+             timeoutSeconds: 10
      destination:
-       name: platform-engineering-green
+       name: platform-engineering-green   # the cluster name from blue-green-deploy.md step 3; blue is never targeted
        namespace: cert-manager
      syncPolicy:
        syncOptions:
          - CreateNamespace=true
-   ```
-   Keep the shared ApplicationSet's selector from matching green for this add-on. Otherwise two Applications own one release. Label green's cluster Secret with a canary marker and exclude it in the selector, or keep the canary out of the set entirely.
-4. **Sync the canary** and wait for it to be Healthy:
-   ```bash
+         - ServerSideApply=true
+   EOF
+   kubectl --context kind-platform-engineering apply -f cert-manager-canary.yaml
    argocd app sync cert-manager-canary
    argocd app wait cert-manager-canary --health --timeout 600
    ```
-   Apply the Application first with `kubectl --context kind-platform-engineering apply -f cert-manager-canary.yaml`
-   (the YAML from step 3 saved to a file). Expected result: `argocd app wait` returns with `Health Status: Healthy`.
-   Check: the green deployment image from step 2 now ends in `:<new-version>`.
+   Expected result: `application.argoproj.io/cert-manager-canary created`, then `argocd app wait` returns with
+   `Health Status: Healthy`.
+   Check: run the step 2 loop again. Blue still ends in `:v1.21.3`; green now ends in `:<new-version>`.
 5. **Watch the metrics** (below) for one full soak period. Run the cert-manager canary check: issue a test Certificate from the `platform-ca` ClusterIssuer and confirm it becomes Ready.
    ```bash
    cat <<'EOF' | kubectl --context kind-platform-engineering-green apply -f -
@@ -84,15 +110,35 @@ Only one place runs the new version at a time. Green is the canary cluster becau
 
 ### Promotion
 
-Promotion means moving the shared ApplicationSet to the new version and deleting the canary Application:
+Promotion means moving blue to the new version and handing green's cert-manager back to Helm:
 
-1. Bump `targetRevision` in the shared app to the canary version. Commit it in Git.
-2. Let Argo CD sync blue first, then confirm blue is healthy.
-3. Delete `cert-manager-canary` without cascading, so its resources stay for the shared app to own: `argocd app delete cert-manager-canary --cascade=false`. Do not run `helm uninstall` on the canary: it would remove the CRDs.
+1. Upgrade blue with the same command Lab 01's `setup.sh` uses, at the new version, run from
+   `labs/lab-08-platform-upgrade`:
+   ```bash
+   helm upgrade --install cert-manager cert-manager \
+     --kube-context kind-platform-engineering \
+     --repo https://charts.jetstack.io --version <new-version> \
+     --namespace cert-manager --create-namespace \
+     --values ../lab-01-cluster-setup/values/cert-manager.yaml \
+     --wait --timeout 10m
+   ```
+   Expected result: `STATUS: deployed`. Then confirm blue is healthy: the step 2 loop shows `:<new-version>`
+   for both clusters.
+2. Delete `cert-manager-canary` without cascading, so its resources stay in place:
+   `argocd app delete cert-manager-canary --cascade=false --yes`. Do not run `helm uninstall` on green: it
+   would remove cert-manager from green.
+3. Run the same `helm upgrade --install` command against green (`--kube-context kind-platform-engineering-green`)
+   so that green's Helm release record matches the version that is running.
+   Expected result: `STATUS: deployed`.
+4. Bump `CERT_MANAGER_VERSION` in `labs/lab-01-cluster-setup/setup.sh` (and the Lab 01 README pin) in your
+   fork, so a rebuilt cluster gets the new version.
 
 ### Abort
 
-Abort by deleting `cert-manager-canary` with `argocd app delete cert-manager-canary --cascade=false`, then reverting green to the old version through the shared app (the shared app will re-adopt the release). Blue was never touched.
+Abort by deleting `cert-manager-canary` with `argocd app delete cert-manager-canary --cascade=false --yes`, then
+reverting green to the old version with step 4a's cert-manager command from
+[blue-green-deploy.md](blue-green-deploy.md#4a-install-traefik-and-cert-manager-on-green) (`--version v1.21.3`).
+Expected result: `STATUS: deployed`, and the step 2 loop shows `:v1.21.3` for green again. Blue was never touched.
 
 ---
 
@@ -203,7 +249,7 @@ Find them before upgrading.
 
 | Question | Answer |
 |----------|--------|
-| What do I canary first? | One add-on on green, then promote through the shared app |
+| What do I canary first? | One add-on on green, then promote it to blue |
 | What is the cutover canary? | Green as a whole, through the ingress switch |
 | What order for a minor? | Control plane, then workers one at a time, one minor per cycle |
 | Can I skip a minor? | No |

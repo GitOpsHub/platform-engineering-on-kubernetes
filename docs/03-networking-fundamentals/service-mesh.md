@@ -553,7 +553,9 @@ Platform responsibilities:
 
 ## Hands-On Exercises
 
-### Lab: Istio Ambient — mTLS and L7 Authorization Without Sidecars
+### Exercise 1: Istio Ambient — mTLS and L7 Authorization Without Sidecars
+
+**Goal:** enrol a namespace in ambient mode, enforce an L7 AuthorizationPolicy through a waypoint, and split traffic with a GAMMA HTTPRoute.
 
 ```bash
 # 1. Install Istio ambient (see "Installing Istio in Ambient Mode" above)
@@ -620,6 +622,24 @@ kubectl delete namespace mesh-lab
 istioctl uninstall --purge -y
 ```
 
+Expected output (abbreviated; names, counts and certificate details vary):
+
+```text
+mesh-lab   httpbin-<hash>-<id>   <pod-ip>   <node>   None   HBONE
+allowed GET /get: 200
+allowed POST /post: 403
+denied GET /get: 403
+     ~10 httpbin-<hash>-<id>
+     ~10 httpbin-v2-<hash>-<id>
+CERTIFICATE NAME   TYPE   STATUS   VALID CERT   SERIAL NUMBER   NOT AFTER   NOT BEFORE
+```
+
+**Check:**
+
+- Step 3 lists the `mesh-lab` workloads with protocol `HBONE`.
+- The three requests in step 6 return `200`, `403`, `403` in that order.
+- The 20-request loop in step 7 shows both `httpbin` and `httpbin-v2` hostnames, roughly evenly.
+
 ### Stretch Goals
 1. Apply mesh-wide `PeerAuthentication` `STRICT` and verify a non-meshed namespace can no longer reach `httpbin`.
 2. Install Linkerd in a fresh cluster and reproduce step 5 with `Server` + `AuthorizationPolicy`.
@@ -638,13 +658,11 @@ kubectl -n istio-system logs ds/ztunnel --tail=100   # L4 connection errors, RBA
 kubectl -n <ns> logs deploy/waypoint --tail=100      # L7 errors
 ```
 
-| Symptom | Likely cause |
-|---------|--------------|
-| `RBAC: access denied` / 403 | `AuthorizationPolicy` allow list doesn't match principal/path |
-| L7 policy ignored in ambient | No waypoint, or policy uses `selector` instead of `targetRefs` |
-| Connection reset after enabling `STRICT` | Client not in mesh (plaintext) |
-| Pods not captured in ambient | `istio-cni` not ready on node, or CNI conflist ordering issue |
-| Sidecar not injected | Namespace label missing, or pod created before label (restart it) |
+- **`RBAC: access denied` / 403**: Cause: `AuthorizationPolicy` allow list doesn't match principal/path.
+- **L7 policy ignored in ambient**: Cause: No waypoint, or policy uses `selector` instead of `targetRefs`.
+- **Connection reset after enabling `STRICT`**: Cause: Client not in mesh (plaintext).
+- **Pods not captured in ambient**: Cause: `istio-cni` not ready on node, or CNI conflist ordering issue.
+- **Sidecar not injected**: Cause: Namespace label missing, or pod created before label (restart it).
 
 ### Linkerd
 ```bash

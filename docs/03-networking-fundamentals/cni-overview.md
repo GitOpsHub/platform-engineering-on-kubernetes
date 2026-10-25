@@ -514,7 +514,9 @@ groups:
 
 ## Hands-On Exercises
 
-### Lab: Inspect Pod Networking End to End
+### Exercise 1: Inspect Pod Networking End to End
+
+**Goal:** follow a Pod's network from the CNI config on the node to the veth pair, and confirm Pod-to-Pod traffic crosses nodes without NAT.
 
 Use the kind cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md) with Cilium installed.
 
@@ -560,6 +562,29 @@ kubectl -n kube-system exec ds/cilium -c cilium-agent -- cilium-dbg service list
 # Cleanup
 kubectl delete namespace net-lab
 ```
+
+Expected output (abbreviated; IPs, ages and endpoint IDs vary):
+
+```text
+NAME                           STATUS   ROLES           ...
+platform-engineering-worker    Ready    <none>          ...
+05-cilium.conflist
+...
+hello
+NAME   READY   STATUS    ...   IP            NODE
+a      1/1     Running   ...   10.244.x.x    platform-engineering-worker
+b      1/1     Running   ...   10.244.y.y    platform-engineering-worker2
+kube-proxy not installed - eBPF handles Services
+```
+
+The `nc -v` listener in step 5 reports a connection from a's Pod IP, and `hello` is received.
+
+**Check:**
+
+- Step 1 shows every node `Ready` and the `cilium` DaemonSet fully available.
+- `kubectl -n net-lab get pods -o wide` shows `a` and `b` on different nodes.
+- The listener in step 5 prints a's Pod IP (not a node IP) as the source address.
+- `kubectl -n kube-system get ds kube-proxy` returns `NotFound`.
 
 ### Stretch Goals
 1. Switch Cilium to `tunnelProtocol: geneve` with `helm upgrade` and capture traffic on the node's `eth0` with

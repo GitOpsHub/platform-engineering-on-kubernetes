@@ -176,7 +176,7 @@ These are interpretations of the documented material. They are not Netflix's own
 
 ---
 
-## Mapping Netflix's Ideas onto This Repository
+## Mapping Netflix's Ideas Onto This Repository
 
 | Netflix idea (documented) | Where it appears in this repo |
 |---------------------------|-------------------------------|
@@ -190,7 +190,9 @@ These are interpretations of the documented material. They are not Netflix's own
 
 ## Hands-On Exercises
 
-### Exercise: Write a "paved road" comparison for one service
+### Exercise 1: Write a "Paved Road" Comparison for One Service
+
+**Goal:** classify the operational tasks of one service as on, off or missing from the paved road, and propose moving one of them on.
 
 **Time:** 60 minutes. **Materials:** the `Workload` example in [Team Topologies](../14-platform-evolution/team-topologies.md), a service you know (real or hypothetical).
 
@@ -199,6 +201,15 @@ These are interpretations of the documented material. They are not Netflix's own
 3. Estimate the cognitive load for each off-road task in terms of what the owning team must learn.
 4. Choose one off-road task and write a proposal to move it onto the paved road: the interface, the default, the escape hatch, and the owner.
 5. State one way in which the Netflix model would not fit your organization, with reasons.
+
+Expected output: a task table (task, on/off/missing, cognitive-load note), one move-to-the-paved-road
+proposal and one paragraph on fit.
+
+**Check:**
+
+- Every task in step 1 has exactly one of the three classifications.
+- The proposal names an interface, a default, an escape hatch and an owner.
+- The fit paragraph gives reasons specific to your organization, not general ones.
 
 **Discussion questions:**
 - What would make an engineer choose the off-road path even when a paved road exists?
@@ -222,7 +233,7 @@ When studying public case studies, these are common pitfalls:
 
 ## Further Reading
 
-### Primary sources (verify before citing)
+### Primary Sources (Verify Before Citing)
 - Netflix Technology Blog — [netflixtechblog.com](https://netflixtechblog.com/) — index of engineering posts on cloud, delivery, resilience and platform topics
 - Netflix Technology Blog — posts on Titus and container management (search the blog for "Titus")
 - Netflix OSS — [netflix.github.io](https://netflix.github.io/) — catalog of open-source projects such as Eureka, Zuul, Hystrix and Chaos Monkey
@@ -233,11 +244,11 @@ When studying public case studies, these are common pitfalls:
 - InfoQ, 2018 — coverage of the Titus container platform — [infoq.com](https://www.infoq.com/news/2018/04/titus-container-platform/)
 - Netflix Chaos Monkey — described in the Netflix Technology Blog (2011 era) and in the Simian Army material; search the blog for "Chaos Monkey"
 
-### Secondary and analysis
+### Secondary and Analysis
 - Public podcast and article coverage of Netflix's paved road (search for "paved road" with "Netflix"; the material is mostly secondary and dated, so treat it as context rather than current policy)
 - Titus and Mesos background: [sdxcentral.com coverage of Netflix's Mesos use (2016)](https://www.sdxcentral.com/articles/news/netflix-desribes-use-apache-mesos/2016/08/)
 
-### Related in this repo
+### Related in This Repo
 - [Case Studies overview](./README.md)
 - [Spotify](./spotify.md), [Airbnb](./airbnb.md), [Generic Enterprise](./generic-enterprise.md)
 - [Team Topologies](../14-platform-evolution/team-topologies.md)

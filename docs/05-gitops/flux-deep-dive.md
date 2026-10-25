@@ -572,15 +572,23 @@ flux diff helmrelease prometheus -n monitoring
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
+
+### Exercise 1: Bootstrap Flux and Reconcile a Kustomization
 
 **Goal**: Bootstrap Flux against a Git repository, add a Kustomization, and observe reconciliation.
 
-```bash
-# 1. Install the Flux CLI and pre-check the cluster
-flux check --pre
+1. Install the Flux CLI and pre-check the cluster
 
-# 2. Bootstrap Flux into a Git repo (creates the repo layout and commits it)
+```bash
+flux check --pre
+```
+
+Expected output: the prerequisite checks end with `all checks passed`.
+
+2. Bootstrap Flux into a Git repo (creates the repo layout and commits it)
+
+```bash
 export GITHUB_USER=<your-user>
 flux bootstrap github \
   --owner=$GITHUB_USER \
@@ -588,8 +596,11 @@ flux bootstrap github \
   --branch=main \
   --path=clusters/local \
   --personal
+```
 
-# 3. Add a Kustomization that reconciles a podinfo overlay (run inside the cloned repo)
+3. Add a Kustomization that reconciles a podinfo overlay (run inside the cloned repo)
+
+```bash
 cd flux-exercise
 cat <<'EOF' > clusters/local/podinfo.yaml
 # clusters/local/podinfo.yaml
@@ -620,16 +631,22 @@ spec:
   createNamespace: true
 EOF
 git add clusters/local/podinfo.yaml && git commit -m "Add podinfo" && git push
+```
 
-# 4. Watch reconciliation
+4. Watch reconciliation
+
+```bash
 flux get sources git
 flux get kustomizations
 ```
 
-**Verify**:
-1. `flux get kustomizations` shows `podinfo` as `Ready=True` after the first interval.
-2. Change `replicaCount` in the upstream overlay (or a local patch) and confirm the cluster converges on the next reconcile.
-3. Run `flux reconcile kustomization podinfo --with-source` to force an immediate sync and compare the timestamps.
+Expected output: the `podinfo` source and Kustomization show `READY` `True` after the first interval.
+
+**Check:**
+
+- `flux get kustomizations` shows `podinfo` as `Ready=True` after the first interval.
+- Change `replicaCount` in the upstream overlay (or a local patch) and confirm the cluster converges on the next reconcile.
+- Run `flux reconcile kustomization podinfo --with-source` to force an immediate sync and compare the timestamps.
 
 **Cleanup**: `flux uninstall --namespace=flux-system` after removing the bootstrap repo.
 

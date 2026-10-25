@@ -24,12 +24,12 @@ Your cluster runs whatever image reference ends up in a Pod spec. Every step bet
 
 ```mermaid
 graph LR
-    Dev[Developer] -->|A: compromised account| SCM[(Source Repo)]
-    SCM -->|B: tampered source| CI[CI Build]
-    Deps[(Dependencies)] -->|C: malicious package| CI
-    CI -->|D: compromised build| Reg[(Registry)]
-    Reg -->|E: tag swapped| K8s[Kubernetes]
-    Reg -->|F: unsigned / unknown image| K8s
+    Dev[Developer] -->|"A: compromised account"| SCM[(Source Repo)]
+    SCM -->|"B: tampered source"| CI[CI Build]
+    Deps[(Dependencies)] -->|"C: malicious package"| CI
+    CI -->|"D: compromised build"| Reg[(Registry)]
+    Reg -->|"E: tag swapped"| K8s[Kubernetes]
+    Reg -->|"F: unsigned / unknown image"| K8s
 ```
 
 | Threat | Real-World Example | Control |
@@ -458,7 +458,6 @@ metadata:
   annotations:
     policies.kyverno.io/title: Verify signature, provenance and SBOM
 spec:
-  validationFailureAction: Enforce
   background: false                # verification needs registry access at admission time
   webhookTimeoutSeconds: 30        # registry + Rekor round-trips take time
   rules:
@@ -473,6 +472,7 @@ spec:
       verifyImages:
         - imageReferences:
             - "ghcr.io/mycompany/*"
+          failureAction: Enforce
           mutateDigest: true       # rewrite tag -> digest after verification
           verifyDigest: true       # require digest-referenced images
           required: true           # images must have been verified (prevents bypass via annotations)

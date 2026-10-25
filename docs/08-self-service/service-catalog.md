@@ -4,14 +4,14 @@
 - Distinguish the two catalogs every platform needs: an **inventory catalog** ("what exists, who owns it") and an **offering catalog** ("what can I request")
 - Design a catalog entity model with ownership, lifecycle, and dependency relations
 - Keep the catalog accurate with discovery, reconciliation from Kubernetes, and freshness checks
-- Implement an offering catalog in Go (`code/service-catalog`) with JSON Schema inputs and rendered platform resources
+- Design an offering catalog in Go with JSON Schema inputs and rendered platform resources (a design sketch; the repo's `code/service-catalog` is a template scaffolder, not an offering catalog)
 - Expose offerings through Kubernetes-native APIs (CRDs, Crossplane claims) rather than tickets
 - Measure catalog quality (coverage, ownership, freshness)
 
 ## Prerequisites
 - [Backstage](../07-internal-developer-platform/backstage.md) (Software Catalog basics)
 - [Platform Capabilities](../07-internal-developer-platform/platform-capabilities.md)
-- Go 1.22+ for the code examples
+- Go 1.22+ for the code examples (`code/service-catalog/go.mod` declares `go 1.22`)
 - [Crossplane](../04-infrastructure-as-code/crossplane.md) (helpful for data-service offerings)
 
 ---
@@ -155,6 +155,9 @@ echo "In catalog but not running:"; comm -13 running.txt catalog.txt
 
 ## The Offering Catalog
 
+!!! note "Design material"
+    The offering catalog in this section (the `Offering` type, `Load`, `Get`, the `registry/offerings/` directory and the `postgres` offering) is a design sketch. None of it exists in the repository. The real [`code/service-catalog`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/service-catalog/) package is a template scaffolder: `ParseTemplate`, `Render` and `WriteTree` in `catalog.go`, a `registry` package, and the embedded templates `go-http-service` and `static-site` under `templates/`. The hands-on exercise below uses that real tool.
+
 An **offering** is a versioned, self-service product of the platform. Each offering has:
 
 | Field | Purpose |
@@ -181,7 +184,7 @@ An **offering** is a versioned, self-service product of the platform. Each offer
 ### Offering Definition
 
 ```yaml
-# code/service-catalog/registry/offerings/postgres.yaml
+# design sketch: offerings/postgres.yaml (not in code/service-catalog)
 apiVersion: catalog.platform.mycompany.io/v1
 kind: Offering
 metadata:
@@ -227,7 +230,7 @@ spec:
 The implementation template renders a Crossplane claim (namespaced, owned by the tenant):
 
 ```yaml
-# code/service-catalog/templates/postgres-claim.yaml.tmpl
+# design sketch: templates/postgres-claim.yaml.tmpl (not in code/service-catalog)
 apiVersion: data.platform.mycompany.io/v1alpha1
 kind: PostgreSQLInstance
 metadata:
@@ -253,7 +256,7 @@ spec:
 
 ## Implementing the Offering Catalog in Go
 
-The repo's `code/service-catalog` provides the core: a registry of offerings, input validation, and rendering. The same library backs the platform API, the CLI, and Backstage/Port actions so behavior is identical everywhere.
+A design for the core library: a registry of offerings, input validation, and rendering. The same library would back the platform API, the CLI, and Backstage/Port actions so behavior is identical everywhere. This is not the code in `code/service-catalog`; see the note at the top of [The Offering Catalog](#the-offering-catalog).
 
 ```mermaid
 graph LR
@@ -268,7 +271,7 @@ graph LR
 ```
 
 ```go
-// code/service-catalog/catalog.go
+// design sketch: offering catalog (not code/service-catalog/catalog.go)
 package catalog
 
 import (
@@ -447,7 +450,7 @@ func (e *ValidationError) Error() string {
 Unit-test every offering against golden files so template changes are reviewed as diffs:
 
 ```go
-// code/service-catalog/catalog_test.go
+// design sketch: offering catalog tests (not code/service-catalog/catalog_test.go)
 func TestRenderPostgres(t *testing.T) {
 	c, err := catalog.Load(os.DirFS("."))
 	require.NoError(t, err)
@@ -479,7 +482,7 @@ func TestRenderRejectsBadName(t *testing.T) {
 
 ### Exposing the Catalog
 
-Serve the same library over HTTP in the platform API:
+Serve the same library over HTTP in the platform API (**design**: these endpoints are not implemented in `code/platform-api`):
 
 ```text
 GET  /api/v1/catalog/offerings                    -> list (name, latest version, lifecycle, category)
@@ -528,7 +531,7 @@ groups:
 
 ## Hands-On Exercises
 
-### Exercise 1: Scaffold services with the service-catalog tool
+### Exercise 1: Scaffold Services with the Service-Catalog Tool
 
 **Goal:** Use the repo's [`code/service-catalog`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/service-catalog/) tool to list templates, scaffold a service, and validate the generated `Workload`. This complements [Lab 04: Service Catalog](../../labs/lab-04-service-catalog/README.md).
 
@@ -563,7 +566,7 @@ groups:
    kubectl apply --dry-run=server -f ./orders/workload.yaml
    ```
 
-4. **Add a template.** Create a team template directory with `template.yaml` and `.tmpl` files (see the [service-catalog README](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/service-catalog/README.md) for the format) and load it with `--templates ./team-templates`.
+4. **Add a template.** Create a team template directory with `template.yaml` and `.tmpl` files (see the [service-catalog README](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/blob/main/code/service-catalog/README.md) for the format) and load it with `--templates ./team-templates`.
 5. **Design the offering catalog.** Using the offering definition in this page, write a `redis` offering with `size` and `persistence` inputs. The Go offering catalog and `platform-cli catalog` shown in this page are design material and do not exist in the repo yet.
 
 **Check:**

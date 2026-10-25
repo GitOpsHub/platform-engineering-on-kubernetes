@@ -322,7 +322,7 @@ Internal platforms have costs and, often, no price. Make the economics visible:
 
 A platform that is free to use and invisible in cost will be used whether or not it is good. Visibility makes the value conversation honest in both directions.
 
-### The Build-or-Buy Decision
+### The Build-Or-Buy Decision
 
 A product mindset asks whether a capability should be built at all. For each candidate, consider:
 - Is there a mature open-source project that meets 80% of the need? (Argo CD, Crossplane, Backstage, External Secrets are examples in this repo)
@@ -349,7 +349,7 @@ Build what differentiates, adopt what is commodity, and document the reasons eit
 
 ## Hands-On Exercises
 
-### Exercise: Write a one-quarter product plan for your platform
+### Exercise 1: Write a One-Quarter Product Plan for Your Platform
 
 **Goal:** finish a one-quarter plan that a user has reviewed and that you revised once.
 
@@ -369,8 +369,16 @@ Review with a sample user (a colleague who does not work on the platform). Ask t
 
 Record their answers and revise the roadmap once.
 
-Check: your plan contains two personas, a categorized request count, one problem brief, three scored
-initiatives, a Now / Next / Later roadmap, one service contract, and the reviewer's three answers.
+Expected output: a plan document with each of the six parts above plus the reviewer's answers and
+your revision.
+
+**Check:**
+
+- The plan contains two personas and a categorized request count.
+- It contains one problem brief and three scored initiatives with their inputs.
+- It contains a Now / Next / Later roadmap with one "not doing this quarter" entry.
+- It contains one service contract and the reviewer's three answers.
+- The roadmap changed at least once after the review.
 
 **Discussion questions:**
 - Which of your roadmap items would you still do if the users did not ask for them? Should you?
@@ -395,14 +403,14 @@ initiatives, a Now / Next / Later roadmap, one service contract, and the reviewe
 
 ## Further Reading
 
-### Primary sources
+### Primary Sources
 - Evan Bottcher — *What I Talk About When I Talk About Platforms* (martinfowler.com)
 - CNCF TAG App Delivery — [Platforms White Paper](https://tag-app-delivery.cncf.io/whitepapers/platforms/)
 - CNCF TAG App Delivery — [Platform Engineering Maturity Model](https://tag-app-delivery.cncf.io/whitepapers/platform-eng-maturity-model/)
 - Matthew Skelton & Manuel Pais — *Team Topologies* (IT Revolution, 2019)
 - Marty Cagan — *Inspired* and *Empowered* (Wiley) — product discovery and product team practice
 
-### Related in this repo
+### Related in This Repo
 - [Platform Capabilities](../07-internal-developer-platform/platform-capabilities.md)
 - [Developer Experience](../08-self-service/developer-experience.md)
 - [Measuring Success](./measuring-success.md)

@@ -380,7 +380,6 @@ metadata:
     policies.kyverno.io/severity: medium
     compliance.platform.mycompany.io/controls: "CIS-5.4.1,SOC2-CC6.1,ISO27001-A.8.12"
 spec:
-  validationFailureAction: Audit
   background: true
   rules:
     - name: no-secretkeyref
@@ -389,6 +388,7 @@ spec:
           - resources:
               kinds: ["Pod"]
       validate:
+        failureAction: Audit
         message: "Use a mounted Secret volume instead of env[].valueFrom.secretKeyRef (CIS 5.4.1)"
         pattern:
           spec:
@@ -405,7 +405,6 @@ metadata:
   annotations:
     compliance.platform.mycompany.io/controls: "ISO27001-A.5.12,PCI-DSS-12.5.1"
 spec:
-  validationFailureAction: Enforce
   rules:
     - name: data-classification-label
       match:
@@ -417,6 +416,7 @@ spec:
                   - key: platform.mycompany.io/tenant
                     operator: Exists
       validate:
+        failureAction: Enforce
         message: "Tenant namespaces must declare platform.mycompany.io/data-classification"
         pattern:
           metadata:

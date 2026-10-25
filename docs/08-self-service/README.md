@@ -29,8 +29,22 @@ graph LR
 - **In scope:** catalog, templates, preview and long-lived environment lifecycle, feedback loop and DX measurement.
 - **Defined elsewhere:** the portal UI ([07 — Internal Developer Platform](../07-internal-developer-platform/README.md)), the API that backs every action ([09 — Platform APIs](../09-platform-apis/README.md)), and policies that gate what self-service may create ([Policy Engine](../12-security-compliance/policy-engine.md)).
 
-## Related
+## Related Labs
 
-- Labs: [Lab 04: Service Catalog](../../labs/lab-04-service-catalog/) and [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/)
+- [Lab 04: Service Catalog](../../labs/lab-04-service-catalog/README.md) — scaffold services from the catalog templates
+- [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/README.md) — tenant namespaces and quotas that environments draw from
+
+## Related Code
+
+- [`code/service-catalog/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/service-catalog/) — the template scaffolder (`catalog list`, `describe`, `scaffold`)
+- [`code/environment-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/environment-operator/) — the `Environment` reconciler with TTL expiry (its `cmd/` entry point is not in the repository yet)
+
+## Where This Leads
+
 - Previous section: [07 — Internal Developer Platform](../07-internal-developer-platform/README.md)
-- Next section: [09 — Platform APIs](../09-platform-apis/README.md)
+
+---
+
+## Next Section
+
+➡️ [09 — Platform APIs](../09-platform-apis/README.md)

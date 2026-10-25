@@ -374,10 +374,11 @@ graph TD
 
 ## Hands-On Exercises
 
-### Goal
-Install gVisor into one kind worker node, expose it via a RuntimeClass, and observe the differences from runc. gVisor's `systrap` platform works inside a kind node container (on Linux hosts and in Docker Desktop's Linux VM); Kata is not covered here because it needs `/dev/kvm`.
+### Exercise 1: Run Pods Under gVisor with a RuntimeClass
 
-### Step 1: Install `runsc` into a Worker Node
+**Goal:** install gVisor into one kind worker node, expose it via a RuntimeClass, and and observe the differences from runc. gVisor's `systrap` platform works inside a kind node container (on Linux hosts and in Docker Desktop's Linux VM); Kata is not covered here because it needs `/dev/kvm`.
+
+**Step 1: Install `runsc` into a Worker Node**
 
 ```bash
 NODE=$(kubectl get nodes -o jsonpath='{.items[1].metadata.name}')
@@ -398,7 +399,9 @@ docker exec "$NODE" bash -c "
 "
 ```
 
-### Step 2: Register the Handler with containerd
+Expected output: `sha512sum` prints `runsc: OK` and `containerd-shim-runsc-v1: OK`, then `runsc --version` prints `runsc version release-<date>.0`.
+
+**Step 2: Register the Handler with containerd**
 
 ```bash
 # Check which config version the node uses
@@ -428,7 +431,17 @@ docker exec "$NODE" systemctl restart containerd
 docker exec "$NODE" crictl info | jq '.config.containerd.runtimes | keys'   # should include "runsc"
 ```
 
-### Step 3: Label, Taint, and Create the RuntimeClass
+Expected output:
+
+```text
+version = 3
+[
+  "runc",
+  "runsc"
+]
+```
+
+**Step 3: Label, Taint, and Create the RuntimeClass**
 
 ```bash
 kubectl label node "$NODE" platform.mycompany.io/runtime-gvisor=true
@@ -437,7 +450,14 @@ kubectl apply -f runtimeclass-gvisor.yaml      # from the RuntimeClass section a
 kubectl get runtimeclass gvisor
 ```
 
-### Step 4: Compare runc and gVisor
+Expected output:
+
+```text
+NAME     HANDLER   AGE
+gvisor   runsc     <age>
+```
+
+**Step 4: Compare runc and gVisor**
 
 ```yaml
 # compare-runtimes.yaml
@@ -482,12 +502,31 @@ kubectl get pod on-gvisor -o jsonpath='{.spec.overhead}{"\n"}{.spec.nodeName}{"\
 docker exec "$NODE" ps -eo pid,cmd | grep -E 'runsc-sandbox|containerd-shim-runsc' | grep -v grep
 ```
 
+Expected output (versions, PIDs and overhead values vary):
+
+```text
+<host-kernel-version>
+4.4.0
+<runc: dmesg error or empty>
+[    0.000000] Starting gVisor...
+{"cpu":"<overhead-cpu>","memory":"<overhead-memory>"}
+<node-name>
+<pid> /usr/local/bin/containerd-shim-runsc-v1 ...
+<pid> runsc-sandbox ...
+```
+
+**Check:**
+
+- `on-gvisor` reports a different `uname -r` than `on-runc` (gVisor reports its emulated kernel, typically `4.4.0`).
+- `kubectl get pod on-gvisor -o jsonpath='{.spec.runtimeClassName}'` prints `gvisor`, and the Pod runs on `$NODE`.
+- `docker exec "$NODE" ps ...` shows `runsc-sandbox` or `containerd-shim-runsc` processes.
+
 **Questions to answer:**
 1. What kernel version does each Pod report, and why?
 2. How much CPU and memory does the scheduler account for `on-gvisor` versus `on-runc`?
 3. Delete the toleration from the RuntimeClass and create a new gVisor Pod. What happens? Now delete the `nodeSelector` instead and schedule several gVisor Pods — where do they fail and with what event?
 
-### Step 5 (Optional): Measure the Cost
+**Step 5: Measure the Cost (Optional)**
 
 ```bash
 # Syscall-heavy loop: compare wall time
@@ -495,6 +534,8 @@ for p in on-runc on-gvisor; do
   echo "== $p"; kubectl exec "$p" -- sh -c 'time (for i in $(seq 1 20000); do :; done; dd if=/dev/zero of=/tmp/f bs=4k count=20000 2>/dev/null)'
 done
 ```
+
+Expected output: a `real`/`user`/`sys` timing for each Pod; the numbers vary by host, and `on-gvisor` is typically slower for syscall-heavy work.
 
 ### Cleanup
 

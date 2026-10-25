@@ -320,7 +320,7 @@ Score candidate capabilities to choose what's next:
 
 ## Hands-On Exercises
 
-### Exercise 1: Write a capability map for your platform
+### Exercise 1: Write a Capability Map for Your Platform
 
 **Goal:** Produce a capability map, two capability specs, and one measurable SLO for a platform you know. You need a text editor; step 4 needs the cluster from [Lab 01](../../labs/lab-01-cluster-setup/README.md) and the `Workload` CRD (`make -C code/workload-operator install`).
 

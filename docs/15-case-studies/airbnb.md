@@ -140,7 +140,7 @@ Because this talk is recent and the summary is secondary, use it as a pattern to
 
 ---
 
-## Planning a Legacy-to-Kubernetes Migration (Analysis)
+## Planning a Legacy-To-Kubernetes Migration (Analysis)
 
 | Phase | Activities | Exit criterion |
 |-------|-----------|----------------|
@@ -157,7 +157,10 @@ The inventory phase is consistently the most underestimated. Use the [Service Ca
 
 ## Hands-On Exercises
 
-### Exercise: Plan a batch migration
+### Exercise 1: Plan a Batch Migration
+
+**Goal:** write a migration plan for the first batch of services, with a cutover, a rollback path
+and exit criteria.
 
 **Time:** 90 minutes. **Materials:** the composite organization in [Generic Enterprise](./generic-enterprise.md), the workload contract example in [Team Topologies](../14-platform-evolution/team-topologies.md).
 
@@ -166,6 +169,16 @@ The inventory phase is consistently the most underestimated. Use the [Service Ca
 3. Define the exit criteria for the batch using SLO attainment and incident count from [Measuring Success](../14-platform-evolution/measuring-success.md).
 4. Decide the discovery strategy during coexistence: which names resolve to the old system, which to the new, and who owns the mapping.
 5. Write a one-paragraph risk statement for the batch and the mitigation for the top risk.
+
+Expected output: a one-to-two page batch plan with the three dependency clusters, the cutover and
+rollback steps, the exit criteria, the discovery mapping and the risk statement.
+
+**Check:**
+
+- The rollback trigger is a measurable condition, not a judgment call.
+- The exit criteria use SLO attainment and incident count with explicit thresholds.
+- Every name that resolves during coexistence has a named owner.
+- The batch contains no service that depends on a service outside the batch or an earlier batch.
 
 **Discussion questions:**
 - What would you do if a batch's rollback path is slower than its cutover?
@@ -188,7 +201,7 @@ The inventory phase is consistently the most underestimated. Use the [Service Ca
 
 ## Further Reading
 
-### Primary sources (verify before citing)
+### Primary Sources (Verify Before Citing)
 - Airbnb Engineering blog — [airbnb.tech](https://airbnb.tech/) — search for SmartStack, Airflow, Kubernetes and service migration posts
 - SmartStack — Airbnb Engineering post on service discovery (2013); search "SmartStack service discovery in the cloud" on the Airbnb Engineering blog
 - Apache Airflow — [airflow.apache.org](https://airflow.apache.org/) — project documentation and history
@@ -196,11 +209,11 @@ The inventory phase is consistently the most underestimated. Use the [Service Ca
 - KubeCon EU 2026 — talk "1000 Services, 1 Year, 0 Downtime" (recording and slides, when published; confirm details there)
 - InfoQ — talk page on Airbnb's Kubernetes services — [infoq.com](https://infoq.com/presentations/airbnb-kubernetes-services) (verify date and content)
 
-### Secondary and analysis
+### Secondary and Analysis
 - Altoros — blog coverage of Airbnb's multi-cluster Kubernetes work (search "Airbnb multicluster Kubernetes" on altoros.com). Secondary; its headline figures are unverified until checked against Airbnb's own material, so this document does not repeat them.
 - Rootly — KubeCon EU 26 SRE track overview — [rootly.com](https://rootly.com/blog/the-unofficial-kubecon-eu-26-sre-track) (secondary)
 
-### Related in this repo
+### Related in This Repo
 - [Case Studies overview](./README.md)
 - [Netflix](./netflix.md), [Spotify](./spotify.md), [Generic Enterprise](./generic-enterprise.md)
 - [Multi-Cluster GitOps](../13-multi-cluster/multi-cluster-gitops.md)

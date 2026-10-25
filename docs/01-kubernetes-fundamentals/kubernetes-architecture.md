@@ -210,7 +210,10 @@ func (c *Controller) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 ## Hands-On Exercises
 
-### Explore Your Cluster
+### Exercise 1: Explore Your Cluster
+
+**Goal:** identify the control plane components, confirm the API server is healthy, and see how the scheduler placed Pods.
+
 ```bash
 # 1. View control plane components
 kubectl get pods -n kube-system -l tier=control-plane
@@ -228,7 +231,23 @@ kubectl get node <node-name> -o jsonpath='{.spec.kubeletConfig}'
 kubectl get events -n kube-system --field-selector involvedObject.kind=Pod,reason=Scheduled
 ```
 
-### Deploy a Custom Scheduler
+Expected output for command 2:
+
+```text
+ok
+```
+
+Commands 1 and 5 print one row per control plane Pod and one `Scheduled` event per Pod placed (names and ages vary by cluster).
+
+**Check:**
+
+- `kubectl get --raw=/healthz` prints `ok`.
+- `kubectl get pods -n kube-system -l tier=control-plane` lists `kube-apiserver-*`, `kube-controller-manager-*`, `kube-scheduler-*` and `etcd-*`, all `Running`.
+
+### Exercise 2: Deploy a Custom Scheduler
+
+**Goal:** run a second scheduler under its own name alongside the default one.
+
 ```yaml
 # custom-scheduler.yaml
 apiVersion: v1
@@ -276,7 +295,29 @@ spec:
         - --kubeconfig=/etc/kubernetes/scheduler.conf
 ```
 
-### Test Custom Scheduler
+Apply it and wait for the Pod:
+
+```bash
+kubectl apply -f custom-scheduler.yaml
+kubectl -n kube-system get pods -l component=custom-scheduler
+```
+
+Expected output (the Pod name suffix varies; the Pod stays `Running` only if the kubeconfig path above exists in the container, which depends on your cluster):
+
+```text
+NAME                               READY   STATUS    RESTARTS   AGE
+custom-scheduler-<hash>-<suffix>   1/1     Running   0          <age>
+```
+
+**Check:**
+
+- `kubectl -n kube-system get deploy custom-scheduler` shows `1/1` ready.
+- `kubectl -n kube-system logs deploy/custom-scheduler` shows leader election being acquired and no `unable to load kubeconfig` error.
+
+### Exercise 3: Schedule a Pod with the Custom Scheduler
+
+**Goal:** show that a Pod is bound by the scheduler named in `spec.schedulerName`.
+
 ```yaml
 # pod-with-custom-scheduler.yaml
 apiVersion: v1
@@ -289,6 +330,23 @@ spec:
   - name: nginx
     image: nginx:alpine
 ```
+
+```bash
+kubectl apply -f pod-with-custom-scheduler.yaml
+kubectl get events --field-selector involvedObject.name=nginx-custom-scheduler
+```
+
+Expected output (abbreviated):
+
+```text
+LAST SEEN   TYPE     REASON      OBJECT                       MESSAGE
+<age>       Normal   Scheduled   pod/nginx-custom-scheduler   Successfully assigned default/nginx-custom-scheduler to <node-name>
+```
+
+**Check:**
+
+- `kubectl get pod nginx-custom-scheduler -o jsonpath='{.spec.schedulerName}'` prints `custom-scheduler`.
+- The `Scheduled` event's source is `custom-scheduler`, not `default-scheduler`: `kubectl get events --field-selector involvedObject.name=nginx-custom-scheduler -o jsonpath='{.items[*].reportingComponent}'`.
 
 ---
 

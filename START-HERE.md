@@ -25,12 +25,12 @@ Claude will pace you through it and check your answers.
 | kind | 0.33+ | Lab 01 |
 | k3d | 5.6+ (optional) | Lab 01 |
 | Helm | 3.12+ | Labs 01, 04, 06 |
-| Go | 1.22+ (1.26 for the Go modules that need it) | Labs 03, 07; `code/` |
+| Go | 1.26+ (`code/service-catalog` needs 1.22, Lab 03 needs 1.25; the other `code/` modules declare 1.26.0) | Labs 03, 07; `code/` |
 | Terraform or OpenTofu | 1.6+ | `code/terraform-modules` |
 
 Resources: 8 GB RAM and 4 CPU cores are the minimum for the full stack. Labs 01 and 02 run on less.
 
-### Ground rules
+### Ground Rules
 
 - Labs share one kind cluster, named `platform-engineering`, created in Lab 01. Tear down a lab only when its **Cleanup** section says so.
 - Never run lab scripts against a production cluster. Check your context first: `kubectl config current-context`.
@@ -40,13 +40,13 @@ Resources: 8 GB RAM and 4 CPU cores are the minimum for the full stack. Labs 01 
 
 ## Part 1: Foundations (Phase 1)
 
-### Step 1. Kubernetes architecture
+### Step 1. Kubernetes Architecture
 
 - **Read:** [docs/01-kubernetes-fundamentals/kubernetes-architecture.md](docs/01-kubernetes-fundamentals/kubernetes-architecture.md)
 - **Do:** nothing yet. Draw the control plane and node components on paper.
 - **Check:** you can name what etcd, the scheduler, and the kubelet each do without looking.
 
-### Step 2. API primer, controllers and scheduling
+### Step 2. API Primer, Controllers and Scheduling
 
 - **Read:** [api-primer.md](docs/01-kubernetes-fundamentals/api-primer.md), [controllers-operators.md](docs/01-kubernetes-fundamentals/controllers-operators.md), [scheduling.md](docs/01-kubernetes-fundamentals/scheduling.md)
 - **Check:** you can explain the reconcile loop in one sentence.
@@ -56,7 +56,7 @@ Resources: 8 GB RAM and 4 CPU cores are the minimum for the full stack. Labs 01 
 - **Read:** [storage.md](docs/01-kubernetes-fundamentals/storage.md), [rbac.md](docs/01-kubernetes-fundamentals/rbac.md)
 - **Check:** you can write a Role and RoleBinding that lets one user read Pods in one namespace, and say why a ClusterRole is the wrong tool for that.
 
-### Step 4. Containers, images and runtime security
+### Step 4. Containers, Images and Runtime Security
 
 - **Read:** [container-runtimes.md](docs/02-container-runtime/container-runtimes.md), [image-spec.md](docs/02-container-runtime/image-spec.md), [image-security.md](docs/02-container-runtime/image-security.md), [runtime-classes.md](docs/02-container-runtime/runtime-classes.md)
 - **Check:** you can list three ways to reduce image attack surface.
@@ -66,7 +66,7 @@ Resources: 8 GB RAM and 4 CPU cores are the minimum for the full stack. Labs 01 
 - **Read:** [cni-overview.md](docs/03-networking-fundamentals/cni-overview.md), [service-mesh.md](docs/03-networking-fundamentals/service-mesh.md), [ingress-controllers.md](docs/03-networking-fundamentals/ingress-controllers.md), [network-policies.md](docs/03-networking-fundamentals/network-policies.md)
 - **Check:** you can say what a default-deny NetworkPolicy does to a Pod with no policies selecting it.
 
-### Step 6. Your first cluster (Lab 01)
+### Step 6. Your First Cluster (Lab 01)
 
 - **Read:** [labs/lab-01-cluster-setup/README.md](labs/lab-01-cluster-setup/README.md)
 - **Do:**
@@ -83,13 +83,13 @@ Resources: 8 GB RAM and 4 CPU cores are the minimum for the full stack. Labs 01 
 
 ## Part 2: Platform Building Blocks (Phase 2)
 
-### Step 7. Infrastructure as code
+### Step 7. Infrastructure as Code
 
 - **Read:** [terraform-kubernetes.md](docs/04-infrastructure-as-code/terraform-kubernetes.md), [crossplane.md](docs/04-infrastructure-as-code/crossplane.md), [gitops-tool-comparison.md](docs/04-infrastructure-as-code/gitops-tool-comparison.md), [drift-detection.md](docs/04-infrastructure-as-code/drift-detection.md)
 - **Explore:** [code/terraform-modules](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/terraform-modules/README.md), [code/crossplane-compositions](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/crossplane-compositions/README.md). You don't need to apply anything.
 - **Check:** you can explain the difference between a Terraform module and a Crossplane composition in one paragraph.
 
-### Step 8. GitOps principles
+### Step 8. GitOps Principles
 
 - **Read:** [gitops-principles.md](docs/05-gitops/gitops-principles.md), [argocd-deep-dive.md](docs/05-gitops/argocd-deep-dive.md), [flux-deep-dive.md](docs/05-gitops/flux-deep-dive.md)
 - **Check:** you can explain the difference between push-based and pull-based deployment.
@@ -111,12 +111,12 @@ Resources: 8 GB RAM and 4 CPU cores are the minimum for the full stack. Labs 01 
 
 ## Part 3: Developer Platform (Phase 3)
 
-### Step 11. Internal developer platform
+### Step 11. Internal Developer Platform
 
 - **Read:** [backstage.md](docs/07-internal-developer-platform/backstage.md), [port.md](docs/07-internal-developer-platform/port.md), [custom-portal.md](docs/07-internal-developer-platform/custom-portal.md), [platform-capabilities.md](docs/07-internal-developer-platform/platform-capabilities.md)
 - **Check:** you can explain why a portal should act as the signed-in user and not with its own cluster credentials.
 
-### Step 12. Self-service
+### Step 12. Self-Service
 
 - **Read:** [service-catalog.md](docs/08-self-service/service-catalog.md), [scaffolding.md](docs/08-self-service/scaffolding.md), [environment-provisioning.md](docs/08-self-service/environment-provisioning.md), [developer-experience.md](docs/08-self-service/developer-experience.md)
 - **Check:** you can describe what a preview environment is and when it should expire.
@@ -126,7 +126,7 @@ Resources: 8 GB RAM and 4 CPU cores are the minimum for the full stack. Labs 01 
 - **Read:** [platform-api-design.md](docs/09-platform-apis/platform-api-design.md), [kubernetes-crds.md](docs/09-platform-apis/kubernetes-crds.md), [controller-runtime.md](docs/09-platform-apis/controller-runtime.md), [api-gateway.md](docs/09-platform-apis/api-gateway.md)
 - **Check:** you can name the three platform CRDs (`Tenant`, `Environment`, `Workload`) and say which one is cluster-scoped.
 
-### Step 14. Your first custom resource (Lab 03)
+### Step 14. Your First Custom Resource (Lab 03)
 
 - **Read:** [labs/lab-03-platform-api/README.md](labs/lab-03-platform-api/README.md)
 - **Do:**
@@ -139,7 +139,7 @@ Resources: 8 GB RAM and 4 CPU cores are the minimum for the full stack. Labs 01 
   ```
 - **Check:** the `WebApp` shows a `Ready` condition, and `kubectl get deploy,svc` shows the objects it created.
 
-### Step 15. Service catalog (Lab 04)
+### Step 15. Service Catalog (Lab 04)
 
 - **Read:** [labs/lab-04-service-catalog/README.md](labs/lab-04-service-catalog/README.md)
 - **Check:** you understand the two Software Templates and can say what each one scaffolds.
@@ -162,13 +162,13 @@ Resources: 8 GB RAM and 4 CPU cores are the minimum for the full stack. Labs 01 
 - **Read:** [slos-slis.md](docs/11-reliability/slos-slis.md), [chaos-engineering.md](docs/11-reliability/chaos-engineering.md), [disaster-recovery.md](docs/11-reliability/disaster-recovery.md), [capacity-planning.md](docs/11-reliability/capacity-planning.md)
 - **Check:** you can write an SLO and calculate the error budget it leaves.
 
-### Step 18. Policy enforcement (Lab 05)
+### Step 18. Policy Enforcement (Lab 05)
 
 - **Read:** [policy-engine.md](docs/12-security-compliance/policy-engine.md), then [labs/lab-05-policy-engine/README.md](labs/lab-05-policy-engine/README.md)
 - **Do:** run `setup.sh`, then `test-policies.sh`.
 - **Check:** `test-policies.sh` shows the bad fixtures denied and the good ones allowed.
 
-### Step 19. Pod security, supply chain and compliance
+### Step 19. Pod Security, Supply Chain and Compliance
 
 - **Read:** [pod-security.md](docs/12-security-compliance/pod-security.md), [supply-chain.md](docs/12-security-compliance/supply-chain.md), [compliance.md](docs/12-security-compliance/compliance.md)
 - **Check:** you can name the three Pod Security Standard levels and say which one a platform namespace should enforce.
@@ -185,12 +185,12 @@ Resources: 8 GB RAM and 4 CPU cores are the minimum for the full stack. Labs 01 
 
 ## Part 5: Advanced Topics (Phase 5)
 
-### Step 21. Multi-cluster
+### Step 21. Multi-Cluster
 
 - **Read:** [cluster-federation.md](docs/13-multi-cluster/cluster-federation.md), [multi-cluster-networking.md](docs/13-multi-cluster/multi-cluster-networking.md), [workload-distribution.md](docs/13-multi-cluster/workload-distribution.md), and the GitOps view in [docs/05-gitops/multi-cluster-gitops.md](docs/05-gitops/multi-cluster-gitops.md)
 - **Check:** you can explain what changes when a second cluster joins the fleet.
 
-### Step 22. Platform evolution
+### Step 22. Platform Evolution
 
 - **Read:** [maturity-model.md](docs/14-platform-evolution/maturity-model.md), [team-topologies.md](docs/14-platform-evolution/team-topologies.md), [platform-product.md](docs/14-platform-evolution/platform-product.md), [measuring-success.md](docs/14-platform-evolution/measuring-success.md)
 - **Check:** you can place your current team on the maturity model and name one next step.
@@ -201,7 +201,7 @@ Resources: 8 GB RAM and 4 CPU cores are the minimum for the full stack. Labs 01 
 - **Do:** run `upgrade-automation.sh --help`. The script is read-only unless you pass `--execute`.
 - **Check:** you can say which runbook to use for a blue/green upgrade and which for a canary.
 
-### Step 24. Case studies
+### Step 24. Case Studies
 
 - **Read:** [docs/15-case-studies/](docs/15-case-studies/README.md). Start with the generic enterprise case, then compare it with the public stories.
 - **Check:** you can name one decision each company made and the trade-off it accepted.

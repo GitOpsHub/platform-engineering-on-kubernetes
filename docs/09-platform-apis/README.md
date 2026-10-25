@@ -37,20 +37,29 @@ Every document in this section uses the same API contract, so examples compose:
 
 Group: `platform.mycompany.io`. Version: `v1alpha1`.
 
-## Code and Labs
+## Related Labs
+
+- [Lab 03: Platform API](../../labs/lab-03-platform-api/README.md) — a CRD and controller walkthrough
+- [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/README.md) — the `Tenant` API in use
+
+## Related Code
 
 | Area | Location |
 |------|----------|
-| REST contract | [`code/platform-api/openapi.yaml`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/platform-api/openapi.yaml) |
+| REST contract | [`code/platform-api/openapi.yaml`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/blob/main/code/platform-api/openapi.yaml) |
 | Tenant operator | [`code/tenant-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/tenant-operator/) |
 | Environment operator | [`code/environment-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/environment-operator/) |
 | Workload operator | [`code/workload-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/workload-operator/) |
 | CLI | [`code/platform-cli/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/platform-cli/) |
-| Labs | [Lab 03: Platform API](../../labs/lab-03-platform-api/README.md), [Lab 07: Multi-Tenancy](../../labs/lab-07-multi-tenancy/README.md) |
 
-## Related
+## Where This Leads
 
 - Previous section: [08 — Self-Service](../08-self-service/README.md)
 - Portal that consumes this API: [07 — Internal Developer Platform](../07-internal-developer-platform/README.md)
 - Platform-level outcomes: [Measuring Success](../14-platform-evolution/measuring-success.md)
-- Next section: [10 — Observability](../10-observability/metrics-stack.md)
+
+---
+
+## Next Section
+
+➡️ [10 — Observability](../10-observability/README.md)

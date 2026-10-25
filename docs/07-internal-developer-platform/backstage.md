@@ -834,7 +834,7 @@ spec:
 
 ## Hands-On Exercises
 
-### Exercise 1: Run Backstage with a platform template
+### Exercise 1: Run Backstage with a Platform Template
 
 **Goal:** Start a local Backstage, register org data and a template, and dry-run the template. This is the short version of [Lab 04: Service Catalog](../../labs/lab-04-service-catalog/README.md); use the lab for the full, scripted setup.
 

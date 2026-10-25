@@ -145,11 +145,11 @@ graph TB
 
 ## Running a Self-Assessment
 
-### Step 1: Gather the right people
+### Step 1: Gather the Right People
 
 Include platform engineers, a few *user* teams (stream-aligned teams of different sizes and tenure), security/compliance, and an engineering leader. A platform team assessing itself alone will overrate interfaces and underrate adoption.
 
-### Step 2: Score each aspect with evidence
+### Step 2: Score Each Aspect with Evidence
 
 Use a scorecard. Require **evidence** for each score — a link to a dashboard, survey, or repo.
 
@@ -209,11 +209,11 @@ A radar chart of the five aspects (current vs. target) is the most effective sin
 | Operations | 2 | 3 | ▲1 |
 | Measurement | 1 | 2 | ▲1 |
 
-### Step 4: Find the constraint
+### Step 4: Find the Constraint
 
 Ask: *which single gap, if closed, unlocks the most?* In the example above, **Measurement L1** is the constraint — without data, the team can't justify product investment (Investment L3) or prioritize which operations to automate (Operations L3).
 
-### Step 5: Turn gaps into a roadmap
+### Step 5: Turn Gaps into a Roadmap
 
 | Gap | Initiative | Outcome metric | Quarter |
 |-----|-----------|----------------|---------|
@@ -241,7 +241,7 @@ Re-assess every 6 months. Track the trend, not the absolute number.
 
 ## Hands-On Exercises
 
-### Exercise: Assess your (or a sample) platform
+### Exercise 1: Assess Your (or a Sample) Platform
 
 **Goal:** produce an evidence-based scorecard and a gap table that points at one constraint.
 
@@ -285,8 +285,12 @@ operations     2        3        1
 measurement    1        2        1
 ```
 
-Check: every row has a numeric `CURRENT` and `TARGET`. If `yq` prints `null`, the key name in your
-scorecard does not match the script (`level`, `target_next_2q`), so fix the YAML before you continue.
+**Check:**
+
+- Every row has a numeric `CURRENT` and `TARGET`.
+- No cell reads `null`. If `yq` prints `null`, the key name in your scorecard does not match the
+  script (`level`, `target_next_2q`), so fix the YAML before you continue.
+- Your one-paragraph proposal names an initiative, an outcome metric, an owner and a timeframe.
 
 **If you don't have a real platform to assess**, use the composite organization described in [Generic Enterprise](../15-case-studies/generic-enterprise.md) and score it from the narrative.
 
@@ -313,13 +317,13 @@ Common problems when using maturity models in practice:
 
 ## Further Reading
 
-### Primary sources
+### Primary Sources
 - CNCF TAG App Delivery — [Platforms White Paper](https://tag-app-delivery.cncf.io/whitepapers/platforms/)
 - CNCF TAG App Delivery — [Platform Engineering Maturity Model](https://tag-app-delivery.cncf.io/whitepapers/platform-eng-maturity-model/)
 - Matthew Skelton & Manuel Pais — *Team Topologies* (IT Revolution, 2019)
 - Nicole Forsgren, Jez Humble, Gene Kim — *Accelerate* (IT Revolution, 2018)
 
-### Related in this repo
+### Related in This Repo
 - [Platform Capabilities](../07-internal-developer-platform/platform-capabilities.md)
 - [Developer Experience](../08-self-service/developer-experience.md)
 

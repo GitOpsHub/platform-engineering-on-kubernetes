@@ -345,9 +345,9 @@ Common combinations in production:
 
 ---
 
-## Hands-On Exercise
+## Hands-On Exercises
 
-### Side-by-Side: Argo CD and Flux on One Kind Cluster
+### Exercise 1: Side-by-Side Argo CD and Flux on One Kind Cluster
 
 **Goal:** Feel the operational differences by deploying the same `podinfo` chart with both tools into separate namespaces.
 
@@ -432,15 +432,47 @@ kind delete cluster --name gitops-compare
 
 ## Troubleshooting
 
-| Symptom | Tool | Likely Cause | Fix |
-|---------|------|--------------|-----|
-| Two controllers fight (resource flaps) | Any | Same object owned by two tools | Pick one owner; remove from the other with prune disabled |
-| Resources deleted during migration | Any | Old object deleted with prune/cascade | Always suspend → set prune false → delete |
-| Argo CD shows `OutOfSync` for Helm hooks | Argo CD | Hooks rendered as regular resources or vice versa | Use Argo CD hook annotations, or `helm.skipHooks` where appropriate |
-| Flux `HelmRelease` stuck `upgrade retries exhausted` | Flux | Failed upgrade with remediation disabled or exhausted | Fix values; `flux reconcile hr X --force` or `flux suspend/resume` |
-| Fleet Bundle `ErrApplied` | Fleet | Rendering or install error on target | `kubectl get bundledeployments -A`; check `fleet-agent` logs on downstream cluster |
-| Argo CD controller OOMKilled | Argo CD | Too many clusters/resources per shard | Enable controller sharding; exclude noisy resource kinds via `resource.exclusions` |
-| Labels of the "other" tool left behind | Any | Migration leftovers | Strip tracking labels and annotations after migration |
+### Two controllers fight (resource flaps)
+
+**Tool:** Any  
+**Cause:** Same object owned by two tools  
+**Fix:** Pick one owner; remove from the other with prune disabled
+
+### Resources deleted during migration
+
+**Tool:** Any  
+**Cause:** Old object deleted with prune/cascade  
+**Fix:** Always suspend → set prune false → delete
+
+### Argo CD shows `OutOfSync` for Helm hooks
+
+**Tool:** Argo CD  
+**Cause:** Hooks rendered as regular resources or vice versa  
+**Fix:** Use Argo CD hook annotations, or `helm.skipHooks` where appropriate
+
+### Flux `HelmRelease` stuck `upgrade retries exhausted`
+
+**Tool:** Flux  
+**Cause:** Failed upgrade with remediation disabled or exhausted  
+**Fix:** Fix values; `flux reconcile hr X --force` or `flux suspend/resume`
+
+### Fleet Bundle `ErrApplied`
+
+**Tool:** Fleet  
+**Cause:** Rendering or install error on target  
+**Fix:** `kubectl get bundledeployments -A`; check `fleet-agent` logs on downstream cluster
+
+### Argo CD controller OOMKilled
+
+**Tool:** Argo CD  
+**Cause:** Too many clusters/resources per shard  
+**Fix:** Enable controller sharding; exclude noisy resource kinds via `resource.exclusions`
+
+### Labels of the "other" tool left behind
+
+**Tool:** Any  
+**Cause:** Migration leftovers  
+**Fix:** Strip tracking labels and annotations after migration
 
 ---
 

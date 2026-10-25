@@ -498,7 +498,9 @@ providers:
 
 ## Hands-On Exercises
 
-### Part 1: Dissect a Public Multi-Arch Image
+### Exercise 1: Dissect a Public Multi-Arch Image
+
+**Goal:** read an image index, its per-platform manifests and config, and verify that a digest is the SHA-256 of the manifest.
 
 ```bash
 IMG=ghcr.io/stefanprodan/podinfo:6.7.1
@@ -523,7 +525,26 @@ crane manifest --platform linux/amd64 "$IMG" | sha256sum
 crane digest --platform linux/amd64 "$IMG"     # same hex
 ```
 
-### Part 2: Push an Image and Attach Artifacts to a Local Registry
+Expected output (abbreviated; digests and sizes vary by image version):
+
+```text
+"application/vnd.oci.image.index.v1+json"
+[ { "architecture": "amd64", "os": "linux" }, { "architecture": "arm64", "os": "linux" }, ... ]
+sha256:<index-digest>
+sha256:<arm64-digest>
+sha256:<amd64-digest>
+<64-hex-chars>  -
+sha256:<amd64-digest>
+```
+
+**Check:**
+
+- Step 1 prints an index media type (`...image.index.v1+json` or the Docker manifest list type).
+- The `sha256sum` hex in step 5 equals the hex after `sha256:` printed by `crane digest`.
+
+### Exercise 2: Push an Image and Attach Artifacts to a Local Registry
+
+**Goal:** copy an image into a local registry and attach an SBOM and a test report as referrers.
 
 ```bash
 # 6. Start a local OCI registry (distribution supports the referrers API)
@@ -555,7 +576,32 @@ REF=$(oras discover --plain-http --format json \
 oras manifest fetch --plain-http "localhost:5001/podinfo@${REF}" | jq '{artifactType, config, subject}'
 ```
 
-### Part 3: Prove That Re-Pushing Changes Identity
+Expected output of steps 9 and 10 (digests vary):
+
+```text
+localhost:5001/podinfo@sha256:<digest>
+├── application/spdx+json
+│   └── sha256:<sbom-manifest-digest>
+└── application/vnd.mycompany.test-report+json
+    └── sha256:<report-manifest-digest>
+```
+
+```json
+{
+  "artifactType": "application/spdx+json",
+  "config": { "mediaType": "application/vnd.oci.empty.v1+json", "digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a", "size": 2 },
+  "subject": { "mediaType": "application/vnd.oci.image.index.v1+json", "digest": "sha256:<digest>", "size": <size> }
+}
+```
+
+**Check:**
+
+- `oras discover` lists both artifact types under the image digest.
+- The fetched manifest's `subject.digest` equals `$DIGEST`.
+
+### Exercise 3: Prove That Re-Pushing Changes Identity
+
+**Goal:** show that pulling and re-pushing an image can change its digest, which drops its referrers.
 
 ```bash
 # 11. Pull to the local Docker store and push back under a new tag
@@ -566,6 +612,18 @@ docker push localhost:5001/podinfo:repushed
 crane digest --insecure localhost:5001/podinfo:6.7.1
 crane digest --insecure localhost:5001/podinfo:repushed
 ```
+
+Expected output: two digest lines. They differ when the Docker store holds only your platform (the usual case); they match only if the containerd image store preserved the whole index.
+
+```text
+sha256:<original-digest>
+sha256:<repushed-digest>
+```
+
+**Check:**
+
+- Compare the two digests by eye or with `diff <(crane digest --insecure localhost:5001/podinfo:6.7.1) <(crane digest --insecure localhost:5001/podinfo:repushed)`.
+- `oras discover --plain-http localhost:5001/podinfo:repushed` shows no referrers if the digests differ.
 
 **Questions to answer:**
 1. Did the digest change? (Hint: the original was a multi-platform index; `docker pull` stored only your platform, unless Docker's containerd image store is enabled.)

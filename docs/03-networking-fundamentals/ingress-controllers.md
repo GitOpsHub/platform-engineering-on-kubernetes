@@ -541,7 +541,9 @@ For exposing *platform* APIs to consumers, see [API Gateway](../09-platform-apis
 
 ## Hands-On Exercises
 
-### Lab: Envoy Gateway With a Weighted Canary
+### Exercise 1: Envoy Gateway With a Weighted Canary
+
+**Goal:** route 80/20 traffic between two versions through a shared Gateway, and show that an unlabelled namespace cannot attach a route.
 
 ```bash
 # 1. Install Gateway API CRDs (standard channel). The Envoy Gateway chart also ships CRDs;
@@ -653,6 +655,22 @@ kubectl delete namespace team-demo rogue platform-gateways
 helm uninstall eg -n envoy-gateway-system
 ```
 
+Expected output (abbreviated; addresses and counts vary):
+
+```text
+NAME     CLASS   ADDRESS   PROGRAMMED   AGE
+lab-gw   envoy   <addr>    True         <age>      # PROGRAMMED stays False without a LoadBalancer; see Troubleshooting
+     ~40 hello from v1
+     ~10 hello from v2
+{"lastTransitionTime":"<time>","message":"...","reason":"NotAllowedByListeners","status":"False","type":"Accepted"}
+```
+
+**Check:**
+
+- The `echo` HTTPRoute shows `Accepted` `True` under `status.parents`.
+- The 50-request loop splits roughly 80/20 between `v1` and `v2` (exact counts vary).
+- The `rogue` route reports `Accepted=False` with reason `NotAllowedByListeners`.
+
 ### Stretch Goals
 1. Shift the weights to 0/100 and observe instant cut-over without Pod restarts.
 2. Add an HTTPS listener with a self-signed cert and a `RequestRedirect` route on the HTTP listener.
@@ -671,11 +689,9 @@ kubectl get svc -A -l gateway.envoyproxy.io/owning-gateway-name=shared-edge
 ```
 
 ### Route Not Attached (`Accepted=False`)
-| Reason | Fix |
-|--------|-----|
-| `NotAllowedByListeners` | Label the namespace / check `allowedRoutes.kinds` |
-| `NoMatchingListenerHostname` | Route hostname must intersect the listener hostname |
-| `NoMatchingParent` | Wrong `sectionName` or `port` in `parentRefs` |
+- **`NotAllowedByListeners`**: Fix: Label the namespace / check `allowedRoutes.kinds`.
+- **`NoMatchingListenerHostname`**: Fix: Route hostname must intersect the listener hostname.
+- **`NoMatchingParent`**: Fix: Wrong `sectionName` or `port` in `parentRefs`.
 
 ### 404 / 503 From the Proxy
 - 404: no route matched — check `Host` header and path match type.

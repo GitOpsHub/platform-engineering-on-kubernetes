@@ -8,7 +8,9 @@
 - Operate silences, maintenance windows, and a dead man's switch safely
 
 ## Prerequisites
-- [Metrics Stack](./metrics-stack.md): kube-prometheus-stack installed
+- [Metrics Stack](./metrics-stack.md): the kube-prometheus-stack install from that page is required
+  (namespace `monitoring`, `fullnameOverride: kps`, so the Alertmanager service is
+  `kps-alertmanager`). Lab 06 disables Alertmanager, so it does not satisfy this prerequisite.
 - [Logging Stack](./logging-stack.md): Loki ruler alerts use the same Alertmanager
 - A Slack workspace and/or PagerDuty (or Opsgenie) service for receivers
 - `amtool` and `promtool` (bundled with the Alertmanager and Prometheus releases)
@@ -419,7 +421,6 @@ kind: ClusterPolicy
 metadata:
   name: prometheusrule-alert-contract
 spec:
-  validationFailureAction: Enforce
   background: true
   rules:
     - name: severity-required
@@ -428,6 +429,7 @@ spec:
           - resources:
               kinds: [monitoring.coreos.com/v1/PrometheusRule]
       validate:
+        failureAction: Enforce
         message: "Every alert must set labels.severity to critical, warning or info."
         foreach:
           - list: "request.object.spec.groups[].rules[?alert][]"
@@ -443,6 +445,7 @@ spec:
           - resources:
               kinds: [monitoring.coreos.com/v1/PrometheusRule]
       validate:
+        failureAction: Enforce
         message: "Critical alerts must have annotations.runbook_url."
         foreach:
           - list: "request.object.spec.groups[].rules[?alert && labels.severity == 'critical'][]"
@@ -539,10 +542,12 @@ spec:
 
 ### Exercise 1: Route, inhibit, and silence
 
-Goal: prove that routing sends alerts to the right receiver, that a critical alert inhibits its
+**Goal:** prove that routing sends alerts to the right receiver, that a critical alert inhibits its
 warning twin, and that a silence stops notifications.
 
-Before you start, set `KPS_VERSION` to the kube-prometheus-stack chart version from
+Before you start, make sure the [Metrics Stack](./metrics-stack.md) install is running in the
+`monitoring` namespace (these steps use `svc/kps-alertmanager`; Lab 06 has no Alertmanager). Set
+`KPS_VERSION` to the kube-prometheus-stack chart version from
 [Metrics Stack](./metrics-stack.md) (`helm list -n monitoring` shows it as `CHART`), and install
 `amtool` and `yq`.
 
@@ -607,10 +612,13 @@ echo
       1 "severity":"critical"
 ```
 
-Check: `amtool --alertmanager.url=http://localhost:9093 silence query` lists the silence as
-`active`, and `kubectl -n monitoring logs echo` shows no new `DiskFilling` notification after
-`repeat_interval` (5 minutes). Clean up with
-`kubectl -n monitoring delete pod,svc echo; kill %1`.
+**Check:**
+
+- `amtool --alertmanager.url=http://localhost:9093 silence query` lists the silence as `active`.
+- `kubectl -n monitoring logs echo` shows no new `DiskFilling` notification after
+  `repeat_interval` (5 minutes).
+
+Clean up with `kubectl -n monitoring delete pod,svc echo; kill %1`.
 
 **Stretch goals:**
 1. Create an `AlertmanagerConfig` in namespace `demo`. In the Alertmanager UI status page, check that the operator injected `namespace="demo"`.
@@ -621,15 +629,48 @@ Check: `amtool --alertmanager.url=http://localhost:9093 silence query` lists the
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| Alert firing in Prometheus but no notification | Matched by `null` route, inhibited, silenced, or `group_wait` not elapsed | `amtool config routes test`; check the UI for inhibited/silenced state |
-| Duplicate notifications | Alertmanager replicas not clustered (gossip port 9094 blocked) | Check `alertmanager_cluster_members`; allow 9094 TCP/UDP between pods |
-| Tenant `AlertmanagerConfig` ignored | Missing selector label, or validation failure | `kubectl -n monitoring logs deploy/kps-operator \| grep -i alertmanagerconfig` |
-| Notifications too frequent | Low `group_interval`/`repeat_interval`; flapping `expr` | Raise the intervals; add `for:` and `keep_firing_for:` |
-| Alerts resolve then re-fire | Series disappear on pod restart (cause-based alert) | Aggregate away pod labels; alert on symptoms |
-| `template: ... function not defined` | Go template error in a receiver | Test templates with `amtool template render` |
-| PagerDuty 400 errors | Wrong key type (Events v2 `routing_key` vs `service_key`) | Use `routing_key` for Events API v2 integrations |
+### Alert firing in Prometheus but no notification
+
+**Cause:** Matched by `null` route, inhibited, silenced, or `group_wait` not elapsed
+
+**Fix:** `amtool config routes test`; check the UI for inhibited/silenced state
+
+### Duplicate notifications
+
+**Cause:** Alertmanager replicas not clustered (gossip port 9094 blocked)
+
+**Fix:** Check `alertmanager_cluster_members`; allow 9094 TCP/UDP between pods
+
+### Tenant `AlertmanagerConfig` ignored
+
+**Cause:** Missing selector label, or validation failure
+
+**Fix:** `kubectl -n monitoring logs deploy/kps-operator | grep -i alertmanagerconfig`
+
+### Notifications too frequent
+
+**Cause:** Low `group_interval`/`repeat_interval`; flapping `expr`
+
+**Fix:** Raise the intervals; add `for:` and `keep_firing_for:`
+
+### Alerts resolve then re-fire
+
+**Cause:** Series disappear on pod restart (cause-based alert)
+
+**Fix:** Aggregate away pod labels; alert on symptoms
+
+### `template: ... function not defined`
+
+**Cause:** Go template error in a receiver
+
+**Fix:** Test templates with `amtool template render`
+
+### PagerDuty 400 errors
+
+**Cause:** Wrong key type (Events v2 `routing_key` vs `service_key`)
+
+**Fix:** Use `routing_key` for Events API v2 integrations
+
 
 ```bash
 # Effective config as loaded by Alertmanager
@@ -672,5 +713,5 @@ curl -s localhost:9093/metrics | grep -E 'alertmanager_notifications(_failed)?_t
 
 1. **Read**: [SLOs & SLIs](../11-reliability/slos-slis.md). Generate burn-rate alerts automatically.
 2. **Read**: [Chaos Engineering](../11-reliability/chaos-engineering.md). Check that alerts fire when things break.
-3. **Practice**: [Lab 06: Observability Stack](../../labs/lab-06-observability-stack/)
+3. **Practice**: [Lab 06: Observability Stack](../../labs/lab-06-observability-stack/) covers metrics, logs, and traces. It disables Alertmanager, so use the Metrics Stack install for the alerting exercise.
 4. **Explore**: [Compliance](../12-security-compliance/compliance.md). Route security findings through the same pipeline.

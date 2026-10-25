@@ -329,7 +329,7 @@ Moving from Operational to Scalable usually means changing the *interaction mode
 
 ## Hands-On Exercises
 
-### Exercise: Map your organization
+### Exercise 1: Map Your Organization
 
 **Goal:** classify every team, name each interaction mode, and write one support boundary.
 
@@ -345,8 +345,15 @@ Tie your output to the [Platform Capabilities](../07-internal-developer-platform
 
 Save the mapping as `docs/team-map.md` in your own working repo, not in this one.
 
-Check: run `grep -ci unclear docs/team-map.md`. The count should fall each time you revise the map.
-Every team must have a type, and every weekly interaction must have an intended mode.
+Expected output: `docs/team-map.md` in your working repo, with one row per team (type and
+justification), one row per weekly interaction (current and intended mode), the request
+classification, and the support boundary table.
+
+**Check:**
+
+- `grep -ci unclear docs/team-map.md` falls each time you revise the map.
+- Every team has a type, and every weekly interaction has an intended mode.
+- Every "could be self-service" request maps to a capability and an interface.
 
 **Discussion questions:**
 - Which team is doing the most unplanned work? Who asked them to do it?
@@ -372,12 +379,12 @@ Every team must have a type, and every weekly interaction must have an intended 
 
 ## Further Reading
 
-### Primary sources
+### Primary Sources
 - Matthew Skelton & Manuel Pais — *Team Topologies: Organizing Business and Technology Teams for Fast Flow* (IT Revolution, 2019). Companion site: [teamtopologies.com](https://teamtopologies.com/)
 - Matthew Skelton & Manuel Pais — the Thinnest Viable Platform concept is introduced in the book's platform chapter; the authors' articles and talks are collected at [teamtopologies.com](https://teamtopologies.com/)
 - CNCF TAG App Delivery — [Platforms White Paper](https://tag-app-delivery.cncf.io/whitepapers/platforms/)
 
-### Related in this repo
+### Related in This Repo
 - [Maturity Model](./maturity-model.md)
 - [Platform as a Product](./platform-product.md)
 - [Measuring Success](./measuring-success.md)

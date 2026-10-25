@@ -60,13 +60,13 @@ graph LR
     end
 ```
 
-### Cell-based architecture in brief
+### Cell-Based Architecture in Brief
 
 A **cell** is a complete, independent copy of a service stack (often a whole cluster plus its data stores) serving a partition of traffic. Failures and bad deploys are contained to one cell. Cells pair naturally with [progressive fleet rollouts](./multi-cluster-gitops.md#progressive-rollouts-across-the-fleet): deploy to cell 1, bake, then the rest. AWS has written extensively on cell-based architecture (see Further Reading); the pattern is cloud-agnostic.
 
 ---
 
-## Express Intent Once: a Platform-Level Placement API
+## Express Intent Once: A Platform-Level Placement API
 
 Developers shouldn't write Karmada policies or ApplicationSet selectors. Let them declare *intent* in the platform's `Workload` API, and have the platform translate it. A sketch extending the repo's `Workload` CRD (see [`code/workload-operator/`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/workload-operator/)):
 
@@ -148,7 +148,7 @@ spec:
 
 ## Implementing Placement with Karmada
 
-### Active-active: duplicate in each selected cluster
+### Active-Active: Duplicate in Each Selected Cluster
 
 ```yaml
 # karmada/active-active.yaml
@@ -180,7 +180,7 @@ spec:
       replicaSchedulingType: Duplicated   # Every selected cluster runs spec.replicas
 ```
 
-### Divided with static weights (e.g. 70/30 during a migration)
+### Divided with Static Weights (e.g. 70/30 During a Migration)
 
 ```yaml
     replicaScheduling:
@@ -198,7 +198,7 @@ spec:
 
 Shifting weights over time is a clean way to **migrate workloads between clusters** (e.g. during a cluster rebuild or cloud move): 0/100 → 30/70 → 70/30 → 100/0, with traffic following the replicas if both clusters sit behind the same global endpoint.
 
-### Divided by available capacity
+### Divided by Available Capacity
 
 ```yaml
     replicaScheduling:
@@ -210,7 +210,7 @@ Shifting weights over time is a clean way to **migrate workloads between cluster
 
 Karmada estimates how many replicas fit per cluster from the cluster's resource summary; for more accurate estimates it offers an optional `karmada-scheduler-estimator` per member cluster that considers node-level fit.
 
-### Spread across failure domains
+### Spread Across Failure Domains
 
 ```yaml
     spreadConstraints:
@@ -222,7 +222,7 @@ Karmada estimates how many replicas fit per cluster from the cluster's resource 
         maxGroups: 4
 ```
 
-### Cluster failover
+### Cluster Failover
 
 Karmada can evict and reschedule workloads when a member cluster becomes unhealthy. Cluster-level failover is controlled by feature gates on the Karmada controller manager (e.g. `Failover`), and taints applied to unhealthy `Cluster` objects. Application-level failover can be configured per policy:
 
@@ -243,7 +243,7 @@ spec:
 
 ---
 
-## Implementing Placement without a Federation Scheduler
+## Implementing Placement Without a Federation Scheduler
 
 Many platforms skip Layer-3 schedulers entirely and implement placement in GitOps. The ApplicationSet cluster generator effectively *is* a static scheduler:
 
@@ -314,7 +314,7 @@ graph TB
 | CDN / edge proxy | Edge routes to origins with health checks | Fast | Good for HTTP; adds an edge layer |
 | Client-side / mesh | Mesh or client libraries pick endpoints | Fast | East-west primarily |
 
-### Managing DNS from the cluster with ExternalDNS
+### Managing DNS from the Cluster with ExternalDNS
 
 ExternalDNS can publish each cluster's Gateway with routing-policy annotations (provider-specific). Example for AWS Route 53 weighted records using Gateway API `HTTPRoute`:
 
@@ -343,7 +343,7 @@ spec:
 
 Each cluster's ExternalDNS must use a distinct `--txt-owner-id` so they don't fight over the same record. Pair records with provider health checks so a failed cluster is withdrawn automatically.
 
-### Multi-cluster Gateway implementations
+### Multi-Cluster Gateway Implementations
 
 Gateway API (`gateway.networking.k8s.io/v1`) defines single-cluster semantics; several implementations extend it across clusters — for example GKE's multi-cluster Gateway classes (`gke-l7-global-external-managed-mc`) that route to `ServiceImport` backends from the MCS API, and mesh-based implementations. These are implementation-specific; check your provider's documentation.
 
@@ -380,7 +380,10 @@ Rules of thumb:
 
 ## Hands-On Exercises
 
-### Lab: Migrate a workload between clusters by shifting weights, then simulate failover
+### Exercise 1: Migrate a Workload Between Clusters by Shifting Weights, Then Simulate Failover
+
+**Goal:** move a Deployment from `member-a` to `member-b` by changing placement weights, then stop
+`member-b` and observe how Karmada reacts.
 
 **Prerequisites:** the Karmada environment from the [Cluster Federation lab](./cluster-federation.md#hands-on-exercises) (members `member-a`, `member-b`).
 
@@ -410,9 +413,18 @@ spec:
 EOF
 kubectl --kubeconfig $KARMADA apply -f web-pp.yaml
 
-# 2. Shift 50/50, then 0/100 — watch replicas move
+# 2. Shift 50/50, wait for the rollout, then check both members
 sed -i.bak 's/weight: 0/weight: 1/' web-pp.yaml && kubectl --kubeconfig $KARMADA apply -f web-pp.yaml
-watch -n2 "kubectl --kubeconfig member-a.kubeconfig get deploy web; kubectl --kubeconfig member-b.kubeconfig get deploy web"
+sleep 15
+kubectl --kubeconfig member-a.kubeconfig get deploy web
+kubectl --kubeconfig member-b.kubeconfig get deploy web
+
+# 2b. Shift 0/100: drop member-a's weight to 0 and give member-b all of it
+sed -i.bak '/member-a\]/ s/weight: 1/weight: 0/' web-pp.yaml
+kubectl --kubeconfig $KARMADA apply -f web-pp.yaml
+sleep 15
+kubectl --kubeconfig member-a.kubeconfig get deploy web
+kubectl --kubeconfig member-b.kubeconfig get deploy web
 
 # 3. Inspect the scheduling decision
 kubectl --kubeconfig $KARMADA get resourcebinding web-deployment -o jsonpath='{.spec.clusters}'; echo
@@ -420,8 +432,28 @@ kubectl --kubeconfig $KARMADA get resourcebinding web-deployment -o jsonpath='{.
 # 4. Simulate cluster failure: stop member-b's control-plane container (CAPD names containers after the cluster)
 docker ps --format '{{.Names}}' | grep member-b
 docker stop <member-b-control-plane-container>
-kubectl --kubeconfig $KARMADA get clusters -w     # member-b should become NotReady
 ```
+
+Wait about a minute, then check the member status. Repeat the command until `member-b` shows
+`READY` `False` (to watch continuously, run it with `-w` in a separate terminal and press Ctrl+C
+when done):
+
+```bash
+kubectl --kubeconfig $KARMADA get clusters
+```
+
+Expected output:
+
+- After the 50/50 shift, `member-a` and `member-b` each show `3/3` for `web`.
+- After the 0/100 shift, `member-a` shows `0/0` (or no Deployment) and `member-b` shows `6/6`.
+- The `ResourceBinding` in step 3 lists the cluster and replica count of each decision.
+- After the stop, `member-b` reports `READY` `False`.
+
+**Check:**
+
+- `member-b` runs all 6 replicas before you stop its container.
+- The `ResourceBinding` `.spec.clusters` reflects the same split as the member Deployments.
+- `kubectl --kubeconfig $KARMADA get clusters` shows `member-b` as not ready after the stop.
 
 **Observe and discuss:**
 1. What happened to the replicas assigned to `member-b`? Does it depend on whether cluster failover is enabled in your Karmada version?

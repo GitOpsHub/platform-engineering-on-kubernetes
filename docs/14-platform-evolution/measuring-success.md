@@ -442,7 +442,10 @@ A number without an explanation invites the wrong conclusion.
 
 ## Hands-On Exercises
 
-### Exercise: Build a minimum viable metrics set
+### Exercise 1: Build a Minimum Viable Metrics Set
+
+**Goal:** produce a one-page metrics set for one team and one service, with working collection for
+at least two metrics and a baseline you can defend.
 
 **Time:** two to three hours. **Materials:** a Kubernetes cluster with Prometheus (Lab 06 provides one; see [Lab 06: Observability Stack](../../labs/lab-06-observability-stack/)), a GitOps controller, a document for definitions.
 
@@ -452,6 +455,17 @@ A number without an explanation invites the wrong conclusion.
 4. **Survey.** Write the five-question version of the survey above. Run it with at least three colleagues (or your study group) and report the distribution.
 5. **Adoption.** Count the workloads in your sample cluster that were created through the platform versus applied directly. Explain how you distinguished them.
 6. **Decide.** Write a paragraph stating one decision your data supports and one it does not.
+
+Expected output: a document with the four DORA definitions, the deployment-frequency query and its
+result, one platform SLI/SLO pair (with the PromQL expression or a recorded gap), the survey
+distribution, the platform-versus-direct workload counts, and the decision paragraph.
+
+**Check:**
+
+- Every DORA definition names its start and end events.
+- The deployment-frequency query returns a value that increases after each of your three changes.
+- The SLO has a target, a window and a PromQL expression, or an explicit note that the metric is missing.
+- The decision paragraph names one decision the data does not support.
 
 **Discussion questions:**
 - Which of the four DORA metrics would be hardest to collect in your organization? Why?
@@ -478,7 +492,7 @@ A number without an explanation invites the wrong conclusion.
 
 ## Further Reading
 
-### Primary sources
+### Primary Sources
 - Nicole Forsgren, Jez Humble, Gene Kim — *Accelerate: The Science of Lean Software and DevOps* (IT Revolution, 2018)
 - DORA — [dora.dev](https://dora.dev/) — research reports and metric definitions
 - Nicole Forsgren, Margaret-Anne Storey, Chandra Maddila, Thomas Zimmermann, Brian Houck, Jenna Butler — *The SPACE of Developer Productivity*, ACM Queue (2021)
@@ -486,7 +500,7 @@ A number without an explanation invites the wrong conclusion.
 - CNCF TAG App Delivery — [Platforms White Paper](https://tag-app-delivery.cncf.io/whitepapers/platforms/)
 - CNCF TAG App Delivery — [Platform Engineering Maturity Model](https://tag-app-delivery.cncf.io/whitepapers/platform-eng-maturity-model/)
 
-### Related in this repo
+### Related in This Repo
 - [Maturity Model](./maturity-model.md)
 - [SLOs and SLIs](../11-reliability/slos-slis.md)
 - [Alerting](../10-observability/alerting.md)

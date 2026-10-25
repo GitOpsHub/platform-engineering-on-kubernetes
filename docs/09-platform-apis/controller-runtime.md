@@ -102,6 +102,9 @@ Run `make manifests generate` after every change to the types or markers. CI sho
 
 Types are the source for the CRD schema, the deep-copy functions, and the Go client. Markers in comments drive generation (see [Kubernetes CRDs](kubernetes-crds.md)).
 
+!!! note "Design sketch"
+    The types below are a sketch of the target contract. The real types in [`code/environment-operator/api/v1alpha1/environment_types.go`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/blob/main/code/environment-operator/api/v1alpha1/environment_types.go) differ: `TTL` is a `*metav1.Duration`, `template` defaults to `baseline` and `cluster` is optional, the type constants are named `EnvironmentTypeDev` and so on, and the phases are `Pending`, `Ready`, `Failed`, `Expired` and `Terminating` (no enum marker).
+
 ```go
 // api/v1alpha1/environment_types.go (sketch matching the contract)
 package v1alpha1
@@ -148,7 +151,7 @@ type EnvironmentSpec struct {
 // EnvironmentStatus is the observed state. Only the controller writes this.
 type EnvironmentStatus struct {
 	// Phase is a summary derived from Conditions.
-	// +kubebuilder:validation:Enum=Pending;Provisioning;Ready;Expiring;Deleting;Failed
+	// +kubebuilder:validation:Enum=Pending;Ready;Failed;Expired;Terminating
 	// +optional
 	Phase string `json:"phase,omitempty"`
 
@@ -652,7 +655,7 @@ func TestPreviewExpiresAtTTL(t *testing.T) {
 			Tenant:   "payments",
 			Type:     platformv1alpha1.TypePreview,
 			TTL:      "5m",
-			Template: "standard-web",
+			Template: "baseline",
 			Cluster:  "dev-eu-1",
 		},
 	}
@@ -727,11 +730,11 @@ What envtest does **not** do: run pods, schedule workloads, or check kubelet beh
 
 ## Hands-On Exercises
 
-### Exercise 1: Add a finalizer and a TTL, and prove both with envtest
+### Exercise 1: Add a Finalizer and a TTL, and Prove Both with envtest
 
 **Goal:** Build a small `Environment` controller with a finalizer and TTL, and test both without waiting on the clock.
 
-**Before you start:** Go 1.22 or later, [Kubebuilder v4](https://book.kubebuilder.io/quick-start), and `setup-envtest` (`go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest`). The finished reference is [`code/environment-operator`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/environment-operator/).
+**Before you start:** Go 1.26 or later (the modules in `code/` declare `go 1.26.0`), [Kubebuilder v4](https://book.kubebuilder.io/quick-start), and `setup-envtest` (`go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest`). The closest reference is [`code/environment-operator`](https://github.com/GitOpsHub/platform-engineering-on-kubernetes/tree/main/code/environment-operator/): its reconciler has the finalizer and TTL, and its tests in `internal/controller/environment_controller_test.go` use the controller-runtime fake client rather than envtest. Its `cmd/` entry point is not in the repository yet, so `make run` and `make build` fail there.
 
 1. **Scaffold.** Create a Kubebuilder project with an `Environment` kind as shown above, then generate the manifests:
 

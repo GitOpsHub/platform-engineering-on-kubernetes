@@ -267,7 +267,6 @@ kind: ClusterPolicy
 metadata:
   name: require-labels
 spec:
-  validationFailureAction: Enforce
   background: true
   rules:
     - name: check-labels
@@ -280,6 +279,7 @@ spec:
                 - Service
                 - Ingress
       validate:
+        failureAction: Enforce
         message: "Resources must have required labels"
         pattern:
           metadata:
@@ -361,7 +361,6 @@ kind: ClusterPolicy
 metadata:
   name: verify-image-signatures
 spec:
-  validationFailureAction: Enforce
   background: true
   rules:
     - name: verify-cosign
@@ -372,11 +371,13 @@ spec:
                 - Pod
       verifyImages:
         - image: "ghcr.io/myorg/*"
+          failureAction: Enforce
           key: |
             -----BEGIN PUBLIC KEY-----
             ...
             -----END PUBLIC KEY-----
         - image: "gcr.io/my-project/*"
+          failureAction: Enforce
           attestations:
             - type: cosign.sigstore.dev/attestation/slsa
               conditions:
@@ -572,6 +573,18 @@ kubectl apply -f resource.yaml --dry-run=server
 
 ---
 
+## Best Practices
+
+1. **Start with Audit Mode**: Use `failureAction: Audit` on each rule's `validate` block (or `verifyImages` entry) first
+2. **Test Thoroughly**: Unit test all policies before enforcing
+3. **Use Namespace Selectors**: Exclude system namespaces
+4. **Gradual Rollout**: Apply to non-production first
+5. **Monitor Violations**: Alert on policy violations
+6. **Document Exceptions**: Process for policy exceptions
+7. **Version Policies**: Store in Git with version control
+
+---
+
 ## Hands-On Exercises
 
 These exercises use the policies in [Lab 05: Policy Engine](../../labs/lab-05-policy-engine/README.md).
@@ -617,27 +630,35 @@ Check: the final run ends with all cases `ok` and exit code 0 (`echo $?`).
 
 ### Exercise 3: Write a Kyverno mutation instead of a denial
 
-Goal: replace a rejection with a default so tenants are not blocked.
+**Goal:** replace a rejection with a default so tenants are not blocked.
 
-1. Copy `labs/lab-05-policy-engine/kyverno-policies/require-labels.yaml` and compare it with
-   `add-default-labels.yaml` in the same directory.
-2. Change the copy from `validate` to `mutate` so it adds a default `team` label.
-3. Run `kyverno test labs/lab-05-policy-engine/kyverno-policies/tests/`.
+1. Copy `labs/lab-05-policy-engine/kyverno-policies/require-labels.yaml` to
+   `/tmp/add-team-label.yaml` and compare it with `add-default-labels.yaml` in the same
+   directory.
+2. In the copy, rename the policy to `add-team-label`, change the rule from `validate` to
+   `mutate` with a `patchStrategicMerge` that adds `+(platform.mycompany.io/team): unassigned`
+   under `metadata.labels`, and remove the `failureAction` and `message` fields.
+3. Apply the copy to the lab's test resources without touching a cluster:
 
-Expected output: a results table with every row `Pass`. Check: the mutated resource in the test
-output carries the `team` label. Then explain why mutation is harder to audit than validation.
+   ```bash
+   kyverno apply /tmp/add-team-label.yaml \
+     --resource labs/lab-05-policy-engine/kyverno-policies/tests/resources.yaml
+   ```
 
----
+Expected output: Kyverno reports the policy applied to the Pods in the file and prints each
+mutated resource. The `missing-team-label` Pod now carries the default label:
 
-## Best Practices
+```text
+labels:
+  platform.mycompany.io/team: unassigned
+```
 
-1. **Start with Audit Mode**: Use `validationFailureAction: Audit` first
-2. **Test Thoroughly**: Unit test all policies before enforcing
-3. **Use Namespace Selectors**: Exclude system namespaces
-4. **Gradual Rollout**: Apply to non-production first
-5. **Monitor Violations**: Alert on policy violations
-6. **Document Exceptions**: Process for policy exceptions
-7. **Version Policies**: Store in Git with version control
+**Check:**
+
+- The `missing-team-label` Pod in the output has `platform.mycompany.io/team: unassigned`.
+- The `compliant-pod` output keeps `platform.mycompany.io/team: payments`, because the `+( )`
+  anchor only adds a missing field.
+- You can explain why mutation is harder to audit than validation.
 
 ---
 
@@ -687,3 +708,11 @@ kubectl get events --field-selector reason=FailedAdmission
 - [Kyverno Documentation](https://kyverno.io/docs/)
 - [Kubernetes CEL](https://kubernetes.io/docs/reference/using-api/cel/)
 - [Policy Testing](https://github.com/kyverno/kyverno/tree/main/docs/writing-policies/testing)
+
+---
+
+## Next Steps
+
+1. **Read**: [Pod Security](./pod-security.md). Enforce Pod Security Standards with admission.
+2. **Read**: [Supply Chain Security](./supply-chain.md). Verify signed images at admission time.
+3. **Practice**: [Lab 05 - Policy Engine](../../labs/lab-05-policy-engine/)
