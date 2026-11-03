@@ -148,6 +148,19 @@ make -C code/platform-cli lint
 4. Documentation updated for new features
 5. Changelog updated for significant changes
 
+### Automated Review with Claude
+
+Two GitHub Actions workflows use [Claude Code](https://github.com/anthropics/claude-code-action)
+to help with reviews. Both authenticate with the `CLAUDE_CODE_OAUTH_TOKEN` repository secret.
+
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| `.github/workflows/claude-code-review.yml` | A PR is opened, updated, reopened, or marked ready for review | Reviews the diff and posts inline comments on the PR |
+| `.github/workflows/claude.yml` | A comment, review, or issue that mentions `@claude` | Answers questions or makes the requested change in the PR or issue thread |
+
+Treat Claude's review comments like any other reviewer's: resolve or reply to each one. They do
+not replace the human approval in step 2.
+
 ## Style Guides
 
 ### Markdown
